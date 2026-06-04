@@ -5,6 +5,7 @@
 
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "EditorUtilityLibrary.h"
+#include "Engine/Blueprint.h"
 #include "Framework/Notifications/NotificationManager.h"
 #include "Widgets/Notifications/SNotificationList.h"
 
@@ -29,26 +30,77 @@ namespace
 			Notification->SetCompletionState(State);
 		}
 	}
+
+	/**
+	 * Prefix map for classes from optional plugins that cannot be referenced
+	 * via StaticClass() without creating a hard module dependency.
+	 *
+	 * Keyed by native class name (FName). These names are stable across UE
+	 * versions — Epic cannot rename them without breaking backward compatibility
+	 * for thousands of existing projects.
+	 */
+	const TMap<FName, FString>& GetOptionalPluginPrefixes()
+	{
+		static const TMap<FName, FString> OptionalPrefixes = {
+			// Gameplay Ability System — requires the GameplayAbilities plugin.
+			// Listed here to avoid a hard dependency that prevents editor launch
+			// on projects where the plugin is disabled.
+			{FName(TEXT("GameplayAbility")), TEXT("GA_")}, {FName(TEXT("GameplayEffect")), TEXT("GE_")},
+			{FName(TEXT("GameplayCueNotify_Static")), TEXT("GC_")},
+			{FName(TEXT("GameplayCueNotify_Actor")), TEXT("GC_")},
+		};
+
+		return OptionalPrefixes;
+	}
 }
 
 // ----------------------------------------------------------------
 // FindPrefixForClass
 // ----------------------------------------------------------------
 
-const FString* UBertaAssetAuditor::FindPrefixForClass(UClass* AssetClass)
+const FString* UBertaAssetAuditor::FindPrefixForClass(UClass* AssetClass,
+                                                      UObject* Asset)
 {
 	const TMap<UClass*, FString>& PrefixMap = UBertaAssetNamingUtils::GetPrefixMap();
+	const TMap<FName, FString>& OptionalPrefixes = GetOptionalPluginPrefixes();
 
-	// Walk up the hierarchy to find the nearest registered prefix.
-	// This correctly handles Blueprint subclasses of known types (e.g. a BP
-	// subclassing UDataAsset matches UDataAsset's "DA_" entry).
+	// For Blueprint assets, the asset class is always UBlueprint (or a subclass like
+	// UAnimBlueprint). The *meaningful* class for prefix resolution is the native parent
+	// that the Blueprint derives from — stored in UBlueprint::ParentClass.
+	//
+	// Example: a Blueprint of GameMode has AssetClass = UBlueprint, but
+	// ParentClass walks through AGameModeBase, which carries the "GM_" prefix.
+	//
+	// This path also covers GAS Blueprints (GA_, GE_) without requiring the
+	// GameplayAbilities module — we compare by class name string instead of StaticClass().
+	if (const UBlueprint* const BP = Cast<UBlueprint>(Asset))
+	{
+		UClass* ParentClass = BP->ParentClass;
+
+		while (ParentClass)
+		{
+			// Check the main prefix map first (framework classes: GameMode, PlayerController, etc.).
+			if (const FString* Found = PrefixMap.Find(ParentClass))
+			{
+				return Found;
+			}
+
+			// Check the optional plugin map by class name to avoid hard dependencies.
+			if (const FString* Found = OptionalPrefixes.Find(ParentClass->GetFName()))
+			{
+				return Found;
+			}
+
+			ParentClass = ParentClass->GetSuperClass();
+		}
+	}
+
+	// Non-Blueprint assets: walk the asset's own class hierarchy directly.
 	UClass* CurrentClass = AssetClass;
 
 	while (CurrentClass)
 	{
-		const FString* Found = PrefixMap.Find(CurrentClass);
-
-		if (Found)
+		if (const FString* Found = PrefixMap.Find(CurrentClass))
 		{
 			return Found;
 		}
@@ -67,7 +119,8 @@ void UBertaAssetAuditor::ResolveAssetScope(TArray<FAssetData>& OutAssets)
 {
 	OutAssets.Reset();
 
-	// Prefer the current Content Browser selection — gives the user fine-grained control.
+	// Priority 1: individually selected assets in the Content Browser.
+	// This gives the user the most fine-grained control — process exactly what is selected.
 	const TArray<FAssetData> SelectedAssets = UEditorUtilityLibrary::GetSelectedAssetData();
 
 	if (!SelectedAssets.IsEmpty())
@@ -82,21 +135,43 @@ void UBertaAssetAuditor::ResolveAssetScope(TArray<FAssetData>& OutAssets)
 		return;
 	}
 
-	// No selection — fall back to a full /Game/ scan via the Asset Registry.
-	// Assets are not loaded into memory; only their metadata is queried.
 	const FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(
 		TEXT("AssetRegistry"));
 
 	FARFilter Filter;
-	Filter.PackagePaths.Add(TEXT("/Game"));
 	Filter.bRecursivePaths = true;
+
+	// Priority 2: the folder active in the Content Browser directory tree.
+	// GetCurrentContentBrowserPath returns the path the user navigated to on the
+	// left panel — this is what "run on this folder" means in practice.
+	FString ActiveFolderPath;
+	const bool bHasActivePath = UEditorUtilityLibrary::GetCurrentContentBrowserPath(ActiveFolderPath);
+
+	if (bHasActivePath && !ActiveFolderPath.IsEmpty())
+	{
+		Filter.PackagePaths.Add(FName(*ActiveFolderPath));
+
+		UE_LOG(LogBertaDevKitEditor,
+		       Log,
+		       TEXT("[UBertaAssetAuditor::ResolveAssetScope] Scanning active folder: %s"),
+		       *ActiveFolderPath);
+	}
+	else
+	{
+		// Priority 3: no selection and no active folder — full /Game/ scan as last resort.
+		Filter.PackagePaths.Add(FName(TEXT("/Game")));
+
+		UE_LOG(LogBertaDevKitEditor,
+		       Log,
+		       TEXT("[UBertaAssetAuditor::ResolveAssetScope] No folder active — falling back to full /Game/ scan."));
+	}
 
 	AssetRegistryModule.Get().GetAssets(Filter,
 	                                    OutAssets);
 
 	UE_LOG(LogBertaDevKitEditor,
 	       Log,
-	       TEXT("[UBertaAssetAuditor::ResolveAssetScope] Full scan — found %d asset(s) under /Game/."),
+	       TEXT("[UBertaAssetAuditor::ResolveAssetScope] Found %d asset(s) in scope."),
 	       OutAssets.Num());
 }
 
@@ -118,17 +193,21 @@ void UBertaAssetAuditor::RunAudit()
 	for (const FAssetData& AssetData : Assets)
 	{
 		UClass* AssetClass = AssetData.GetClass();
+
 		if (!AssetClass)
 		{
 			// Class not loaded — skip silently, not a violation.
 			continue;
 		}
 
-		const FString* FoundPrefix = FindPrefixForClass(AssetClass);
+		// Pass nullptr as Asset — RunAudit does not load assets into memory.
+		// FindPrefixForClass handles the null Asset case by skipping the Blueprint
+		// ParentClass walk and falling through to the direct class hierarchy walk.
+		const FString* FoundPrefix = FindPrefixForClass(AssetClass,
+		                                                nullptr);
 
 		if (!FoundPrefix || FoundPrefix->IsEmpty())
 		{
-			// Unknown class — log at Verbose and skip. Not a violation.
 			UE_LOG(LogBertaDevKitEditor,
 			       Verbose,
 			       TEXT("[UBertaAssetAuditor::RunAudit] Unknown class, skipping: %s (%s)"),
@@ -196,12 +275,28 @@ void UBertaAssetAuditor::RunAuditAndFix()
 	for (const FAssetData& AssetData : Assets)
 	{
 		UClass* AssetClass = AssetData.GetClass();
+
 		if (!AssetClass)
 		{
 			continue;
 		}
 
-		const FString* FoundPrefix = FindPrefixForClass(AssetClass);
+		// Load the asset first — FindPrefixForClass needs the UBlueprint object
+		// to inspect ParentClass for framework and optional-plugin Blueprints.
+		UObject* const LoadedAsset = AssetData.GetAsset();
+
+		if (!IsValid(LoadedAsset))
+		{
+			UE_LOG(LogBertaDevKitEditor,
+			       Warning,
+			       TEXT("[UBertaAssetAuditor::RunAuditAndFix] Failed to load asset: %s"),
+			       *AssetData.AssetName.ToString());
+			++SkippedCount;
+			continue;
+		}
+
+		const FString* FoundPrefix = FindPrefixForClass(AssetClass,
+		                                                LoadedAsset);
 
 		if (!FoundPrefix || FoundPrefix->IsEmpty())
 		{
@@ -219,20 +314,6 @@ void UBertaAssetAuditor::RunAuditAndFix()
 			continue;
 		}
 
-		// Load the asset into memory only when we know it needs fixing.
-		// Avoids loading the entire project for a full /Game/ scan.
-		UObject* const LoadedAsset = AssetData.GetAsset();
-
-		if (!IsValid(LoadedAsset))
-		{
-			UE_LOG(LogBertaDevKitEditor,
-			       Warning,
-			       TEXT("[UBertaAssetAuditor::RunAuditAndFix] Failed to load asset for fixing: %s"),
-			       *AssetData.AssetName.ToString());
-			++SkippedCount;
-			continue;
-		}
-
 		const EBertaRenameResult Result = UBertaAssetNamingUtils::RenameAssetWithPrefix(LoadedAsset);
 
 		if (Result == EBertaRenameResult::Renamed)
@@ -245,7 +326,7 @@ void UBertaAssetAuditor::RunAuditAndFix()
 		}
 		else
 		{
-			// Should not happen — we pre-checked the prefix above.
+			// Should not happen — we pre-checked the prefix and class above.
 			// Log as warning to catch any edge cases.
 			UE_LOG(LogBertaDevKitEditor,
 			       Warning,
@@ -267,7 +348,6 @@ void UBertaAssetAuditor::RunAuditAndFix()
 	                                             FText::AsNumber(RenamedCount),
 	                                             FText::AsNumber(SkippedCount));
 
-	// Show failure state if any assets could not be loaded and processed.
 	const SNotificationItem::ECompletionState NotificationState = SkippedCount > 0
 		                                                              ? SNotificationItem::CS_Fail
 		                                                              : SNotificationItem::CS_Success;

@@ -7,9 +7,10 @@
 /**
  * Scans assets in the project and reports or fixes naming convention violations.
  *
- * Operates on the current Content Browser selection if any assets are selected;
- * otherwise scans all assets under /Game/ recursively via the Asset Registry
- * without loading them into memory.
+ * Scope resolution priority:
+ *   1. Individually selected assets in the Content Browser.
+ *   2. The folder currently active in the Content Browser directory tree.
+ *   3. Full recursive scan under /Game/ as a last resort.
  *
  * @note This class is never instantiated — all entry points are static.
  */
@@ -35,21 +36,30 @@ public:
 
 private:
 	/**
-	 * Collects the asset scope: returns selected assets from the Content Browser
-	 * if any are selected, otherwise returns all assets under /Game/ via Asset Registry.
+	 * Collects the asset scope using the following priority:
+	 *   1. Selected assets — returned immediately if any are selected.
+	 *   2. Active Content Browser folder — scanned recursively via Asset Registry.
+	 *   3. Full /Game/ scan — used only when neither of the above yields a scope.
 	 *
 	 * @param OutAssets  Populated with the resolved asset scope.
 	 */
 	static void ResolveAssetScope(TArray<FAssetData>& OutAssets);
 
 	/**
-	 * Walks the class hierarchy of AssetClass to find the nearest prefix registered
-	 * in UBertaAssetNamingUtils::GetPrefixMap(). Returns nullptr if none is found.
+	 * Resolves the expected name prefix for a given asset.
 	 *
-	 * Extracted to avoid duplicating the walk logic between RunAudit and RunAuditAndFix.
+	 * For Blueprint assets, walks the native parent class hierarchy (via UBlueprint::ParentClass)
+	 * to correctly identify framework subclasses (e.g. GameMode, PlayerController) and
+	 * optional-plugin classes (e.g. GameplayAbility, GameplayEffect) without requiring
+	 * a hard module dependency on GameplayAbilities.
 	 *
-	 * @param AssetClass  The class to start the walk from. Must not be null.
+	 * For non-Blueprint assets, walks the asset's own class hierarchy.
+	 *
+	 * @param AssetClass  The class of the asset as returned by FAssetData::GetClass(). Must not be null.
+	 * @param Asset       The asset UObject. Used to inspect UBlueprint::ParentClass when applicable.
+	 *                    May be null for audit-only paths where the asset is not loaded.
 	 * @return            Pointer to the registered prefix string, or nullptr if unknown.
 	 */
-	static const FString* FindPrefixForClass(UClass* AssetClass);
+	static const FString* FindPrefixForClass(UClass* AssetClass,
+	                                         UObject* Asset);
 };

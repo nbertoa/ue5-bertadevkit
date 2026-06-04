@@ -40,6 +40,10 @@ public:
 	 * Returns the canonical map of UClass to expected name prefix.
 	 * Stored as a static local — built once, reused across all callers.
 	 *
+	 * Classes from optional plugins (e.g. GameplayAbilities) are intentionally
+	 * excluded to avoid hard module dependencies. Their prefixes are resolved
+	 * by UBertaAssetAuditor::FindPrefixForClass via class name string comparison.
+	 *
 	 * @return Const reference to the prefix map. Never invalid.
 	 */
 	static const TMap<UClass*, FString>& GetPrefixMap();
