@@ -12,6 +12,8 @@
  *   2. The folder currently active in the Content Browser directory tree.
  *   3. Full recursive scan under /Game/ as a last resort.
  *
+ * All prefix resolution is delegated to UBertaAssetNamingUtils.
+ *
  * @note This class is never instantiated — all entry points are static.
  */
 UCLASS()
@@ -25,14 +27,13 @@ public:
 	 * Displays an FNotificationInfo with the total violation count on completion.
 	 * Does not modify any assets.
 	 */
-	static void RunAudit();
+	static void AuditAssetNaming();
 
 	/**
-	 * Scans assets for naming violations and renames each violator using
-	 * UBertaAssetNamingUtils::RenameAssetWithPrefix().
-	 * Reports renamed and failed counts via LogBertaDevKitEditor and FNotificationInfo.
+	 * Scans assets for naming violations and renames each violator.
+	 * Reports renamed and skipped counts via LogBertaDevKitEditor and FNotificationInfo.
 	 */
-	static void RunAuditAndFix();
+	static void FixAssetNaming();
 
 private:
 	/**
@@ -44,35 +45,4 @@ private:
 	 * @param OutAssets  Populated with the resolved asset scope.
 	 */
 	static void ResolveAssetScope(TArray<FAssetData>& OutAssets);
-
-	/**
-	 * Resolves the expected name prefix for a given asset.
-	 *
-	 * For Blueprint assets, walks the native parent class hierarchy (via UBlueprint::ParentClass)
-	 * to correctly identify framework subclasses (e.g. GameMode, PlayerController) and
-	 * optional-plugin classes (e.g. GameplayAbility, GameplayEffect) without requiring
-	 * a hard module dependency on GameplayAbilities.
-	 *
-	 * For non-Blueprint assets, walks the asset's own class hierarchy.
-	 *
-	 * @param AssetClass  The class of the asset as returned by FAssetData::GetClass(). Must not be null.
-	 * @param Asset       The asset UObject. Used to inspect UBlueprint::ParentClass when applicable.
-	 *                    May be null for audit-only paths where the asset is not loaded.
-	 * @return            Pointer to the registered prefix string, or nullptr if unknown.
-	 */
-	static const FString* FindPrefixForClass(UClass* AssetClass,
-	                                         UObject* Asset);
-
-	/**
-	 * Resolves the expected prefix for a Blueprint asset without loading it into memory.
-	 * Reads the "ParentClass" Asset Registry tag and walks the class hierarchy via
-	 * ExtractClassNameFromTag, checking both the main prefix map and the optional
-	 * plugin map (GAS, etc.) by class name string.
-	 *
-	 * Falls back to "BP_" if the tag is absent or the parent class is not registered.
-	 *
-	 * @param AssetData  The asset metadata from the Asset Registry.
-	 * @return           Pointer to the resolved prefix string. Never null.
-	 */
-	static const FString* ResolveBlueprintPrefixFromTag(const FAssetData& AssetData);
 };

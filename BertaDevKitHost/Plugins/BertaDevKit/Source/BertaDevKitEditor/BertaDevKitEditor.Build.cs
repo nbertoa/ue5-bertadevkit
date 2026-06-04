@@ -31,6 +31,7 @@ public class BertaDevKitEditor : ModuleRules
 			"ToolMenus", // UToolMenus, FToolMenuEntry
 			"WorkspaceMenuStructure", // WorkspaceMenu — tab spawner category registration
 			"StructUtils", // UUserDefinedStruct (UE 5.6+)
+			"EnhancedInput",
 		});
 	}
 }

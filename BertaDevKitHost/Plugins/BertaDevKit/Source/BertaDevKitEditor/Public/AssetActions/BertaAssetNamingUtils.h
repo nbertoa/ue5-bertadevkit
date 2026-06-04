@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AssetRegistry/AssetData.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
 
 #include "BertaAssetNamingUtils.generated.h"
@@ -42,14 +43,58 @@ public:
 	 *
 	 * Classes from optional plugins (e.g. GameplayAbilities) are intentionally
 	 * excluded to avoid hard module dependencies. Their prefixes are resolved
-	 * by UBertaAssetAuditor::FindPrefixForClass via class name string comparison.
+	 * via GetOptionalPluginPrefixes() using class name string comparison.
 	 *
 	 * @return Const reference to the prefix map. Never invalid.
 	 */
 	static const TMap<UClass*, FString>& GetPrefixMap();
 
 	/**
-	 * Applies the correct prefix to a single asset, based on GetPrefixMap().
+	 * Returns the prefix map for classes from optional plugins that cannot be
+	 * referenced via StaticClass() without a hard module dependency.
+	 *
+	 * Keyed by native class name (FName). These names are stable across UE versions —
+	 * Epic cannot rename them without breaking backward compatibility for thousands
+	 * of existing projects.
+	 *
+	 * @return Const reference to the optional prefix map. Never invalid.
+	 */
+	static const TMap<FName, FString>& GetOptionalPluginPrefixes();
+
+	/**
+	 * Resolves the expected name prefix for a given asset.
+	 *
+	 * For Blueprint assets, walks the native parent class hierarchy
+	 * (via UBlueprint::ParentClass) to correctly identify framework subclasses
+	 * (e.g. GameMode, PlayerController) and optional-plugin classes
+	 * (e.g. GameplayAbility, GameplayEffect) without requiring a hard module
+	 * dependency on GameplayAbilities.
+	 *
+	 * For non-Blueprint assets, walks the asset's own class hierarchy.
+	 *
+	 * @param AssetClass  The class of the asset as returned by FAssetData::GetClass(). Must not be null.
+	 * @param Asset       The asset UObject. Used to inspect UBlueprint::ParentClass when applicable.
+	 *                    May be null for non-Blueprint assets.
+	 * @return            Pointer to the registered prefix string, or nullptr if unknown.
+	 */
+	static const FString* FindPrefixForClass(UClass* AssetClass,
+	                                         UObject* Asset);
+
+	/**
+	 * Resolves the expected prefix for a Blueprint asset without loading it into memory.
+	 *
+	 * Reads the "ParentClass" Asset Registry tag and walks the class hierarchy,
+	 * checking both the main prefix map and the optional plugin map (GAS, etc.)
+	 * by class name string. Falls back to "BP_" if the tag is absent or the
+	 * parent class is not registered.
+	 *
+	 * @param AssetData  The asset metadata from the Asset Registry.
+	 * @return           Pointer to the resolved prefix string. Never null.
+	 */
+	static const FString* ResolveBlueprintPrefixFromTag(const FAssetData& AssetData);
+
+	/**
+	 * Applies the correct prefix to a single asset using FindPrefixForClass().
 	 * Handles UMaterialInstanceConstant stripping internally (removes "M_" and "_Inst"
 	 * before applying "MI_").
 	 *

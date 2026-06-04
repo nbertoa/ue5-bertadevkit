@@ -139,7 +139,7 @@ void FBertaEditorToolbar::OnRunAssetAuditClicked()
 	       Log,
 	       TEXT("[FBertaEditorToolbar::OnRunAssetAuditClicked] User triggered Run Asset Audit."));
 
-	UBertaAssetAuditor::RunAudit();
+	UBertaAssetAuditor::AuditAssetNaming();
 }
 
 void FBertaEditorToolbar::OnFixAssetNamingClicked()
@@ -148,7 +148,7 @@ void FBertaEditorToolbar::OnFixAssetNamingClicked()
 	       Log,
 	       TEXT("[FBertaEditorToolbar::OnFixAssetNamingClicked] User triggered Fix Asset Naming."));
 
-	UBertaAssetAuditor::RunAuditAndFix();
+	UBertaAssetAuditor::FixAssetNaming();
 }
 
 void FBertaEditorToolbar::OnRunWorldValidationClicked()
