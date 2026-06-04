@@ -62,4 +62,17 @@ private:
 	 */
 	static const FString* FindPrefixForClass(UClass* AssetClass,
 	                                         UObject* Asset);
+
+	/**
+	 * Resolves the expected prefix for a Blueprint asset without loading it into memory.
+	 * Reads the "ParentClass" Asset Registry tag and walks the class hierarchy via
+	 * ExtractClassNameFromTag, checking both the main prefix map and the optional
+	 * plugin map (GAS, etc.) by class name string.
+	 *
+	 * Falls back to "BP_" if the tag is absent or the parent class is not registered.
+	 *
+	 * @param AssetData  The asset metadata from the Asset Registry.
+	 * @return           Pointer to the resolved prefix string. Never null.
+	 */
+	static const FString* ResolveBlueprintPrefixFromTag(const FAssetData& AssetData);
 };

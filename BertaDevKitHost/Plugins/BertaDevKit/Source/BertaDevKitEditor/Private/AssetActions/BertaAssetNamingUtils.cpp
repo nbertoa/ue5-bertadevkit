@@ -2,6 +2,11 @@
 
 #include "Log/BertaDevKitEditorLog.h"
 
+#include "AIController.h"
+#include "BehaviorTree/BlackboardData.h"
+#include "BehaviorTree/BTDecorator.h"
+#include "BehaviorTree/BTService.h"
+#include "BehaviorTree/BTTaskNode.h"
 #include "EditorUtilityLibrary.h"
 #include "Animation/AimOffsetBlendSpace.h"
 #include "Animation/AimOffsetBlendSpace1D.h"
@@ -20,6 +25,9 @@
 #include "Engine/TextureCube.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Engine/UserDefinedEnum.h"
+#include "Engine/BlueprintGeneratedClass.h"
+#include "EnvironmentQuery/EnvQueryContext.h"
+#include "EnvironmentQuery/EnvQuery.h"
 #include "GameFramework/GameModeBase.h"
 #include "GameFramework/GameMode.h"
 #include "GameFramework/PlayerController.h"
@@ -53,6 +61,7 @@ const TMap<UClass*, FString>& UBertaAssetNamingUtils::GetPrefixMap()
 		// Blueprints — specific subclasses must appear before UBlueprint so that
 		// the hierarchy walk in FindPrefixForClass matches the most derived type first.
 		{UAnimBlueprint::StaticClass(), TEXT("ABP_")}, {UUserWidget::StaticClass(), TEXT("WBP_")},
+		{UBlueprintGeneratedClass::StaticClass(), TEXT("BPI_")}, {UEnvQueryContext::StaticClass(), TEXT("EQSC_")},
 		{UBlueprint::StaticClass(), TEXT("BP_")},
 
 		// Meshes
@@ -92,6 +101,14 @@ const TMap<UClass*, FString>& UBertaAssetNamingUtils::GetPrefixMap()
 		{AGameModeBase::StaticClass(), TEXT("GM_")}, {AGameMode::StaticClass(), TEXT("GM_")},
 		{APlayerController::StaticClass(), TEXT("PC_")}, {ACharacter::StaticClass(), TEXT("CH_")},
 		{APawn::StaticClass(), TEXT("P_")},
+
+		// AI
+		{UBlackboardData::StaticClass(), TEXT("BB_")}, {AAIController::StaticClass(), TEXT("AIC_")},
+		{UBTDecorator::StaticClass(), TEXT("BTD_")}, {UBTService::StaticClass(), TEXT("BTS_")},
+		{UBTTaskNode::StaticClass(), TEXT("BTT_")},
+
+		// EQS
+		{UEnvQuery::StaticClass(), TEXT("EQS_")},
 	};
 
 	return PrefixMap;

@@ -7,6 +7,7 @@
 #include "EditorUtilityLibrary.h"
 #include "Engine/Blueprint.h"
 #include "Framework/Notifications/NotificationManager.h"
+#include "Materials/MaterialInstanceConstant.h"
 #include "Widgets/Notifications/SNotificationList.h"
 
 // ----------------------------------------------------------------
@@ -48,9 +49,40 @@ namespace
 			{FName(TEXT("GameplayAbility")), TEXT("GA_")}, {FName(TEXT("GameplayEffect")), TEXT("GE_")},
 			{FName(TEXT("GameplayCueNotify_Static")), TEXT("GC_")},
 			{FName(TEXT("GameplayCueNotify_Actor")), TEXT("GC_")},
+			{FName(TEXT("GameplayAbilityBlueprint")), TEXT("GA_")},
+			{FName(TEXT("GameplayEffectBlueprint")), TEXT("GE_")},
 		};
 
 		return OptionalPrefixes;
+	}
+
+	/**
+	 * Extracts the native class name from an Asset Registry "ParentClass" tag value.
+	 *
+	 * Expected format: /Script/CoreUObject.Class'/Script/Module.ClassName'
+	 * Returns the ClassName portion after the last '.', or NAME_None if the
+	 * format is unexpected.
+	 */
+	FName ExtractClassNameFromTag(const FString& TagValue)
+	{
+		// Find the last '.' — the class name follows it.
+		int32 DotIndex = INDEX_NONE;
+		if (!TagValue.FindLastChar(TEXT('.'),
+		                           DotIndex))
+		{
+			return NAME_None;
+		}
+
+		// Extract everything after the last '.' and strip the closing '\''.
+		FString ClassName = TagValue.RightChop(DotIndex + 1);
+		ClassName.RemoveFromEnd(TEXT("'"));
+
+		if (ClassName.IsEmpty())
+		{
+			return NAME_None;
+		}
+
+		return FName(*ClassName);
 	}
 }
 
@@ -64,28 +96,20 @@ const FString* UBertaAssetAuditor::FindPrefixForClass(UClass* AssetClass,
 	const TMap<UClass*, FString>& PrefixMap = UBertaAssetNamingUtils::GetPrefixMap();
 	const TMap<FName, FString>& OptionalPrefixes = GetOptionalPluginPrefixes();
 
-	// For Blueprint assets, the asset class is always UBlueprint (or a subclass like
-	// UAnimBlueprint). The *meaningful* class for prefix resolution is the native parent
-	// that the Blueprint derives from — stored in UBlueprint::ParentClass.
-	//
-	// Example: a Blueprint of GameMode has AssetClass = UBlueprint, but
-	// ParentClass walks through AGameModeBase, which carries the "GM_" prefix.
-	//
-	// This path also covers GAS Blueprints (GA_, GE_) without requiring the
-	// GameplayAbilities module — we compare by class name string instead of StaticClass().
+	// Path A: asset is loaded and is a Blueprint — walk UBlueprint::ParentClass directly.
+	// The meaningful class for prefix resolution is the native parent, not the asset
+	// class itself (which is always UBlueprint or a subclass like UAnimBlueprint).
 	if (const UBlueprint* const BP = Cast<UBlueprint>(Asset))
 	{
 		UClass* ParentClass = BP->ParentClass;
 
 		while (ParentClass)
 		{
-			// Check the main prefix map first (framework classes: GameMode, PlayerController, etc.).
 			if (const FString* Found = PrefixMap.Find(ParentClass))
 			{
 				return Found;
 			}
 
-			// Check the optional plugin map by class name to avoid hard dependencies.
 			if (const FString* Found = OptionalPrefixes.Find(ParentClass->GetFName()))
 			{
 				return Found;
@@ -93,6 +117,9 @@ const FString* UBertaAssetAuditor::FindPrefixForClass(UClass* AssetClass,
 
 			ParentClass = ParentClass->GetSuperClass();
 		}
+
+		// Blueprint with no registered parent — unknown.
+		return nullptr;
 	}
 
 	// Non-Blueprint assets: walk the asset's own class hierarchy directly.
@@ -109,6 +136,97 @@ const FString* UBertaAssetAuditor::FindPrefixForClass(UClass* AssetClass,
 	}
 
 	return nullptr;
+}
+
+// ----------------------------------------------------------------
+// ResolveBlueprintPrefixFromTag
+// ----------------------------------------------------------------
+
+const FString* UBertaAssetAuditor::ResolveBlueprintPrefixFromTag(const FAssetData& AssetData)
+{
+	const TMap<UClass*, FString>& PrefixMap = UBertaAssetNamingUtils::GetPrefixMap();
+	const TMap<FName, FString>& OptionalPrefixes = GetOptionalPluginPrefixes();
+
+	UE_LOG(LogBertaDevKitEditor,
+	       Warning,
+	       TEXT("[DEBUG] ResolveBlueprintPrefixFromTag — Asset: %s"),
+	       *AssetData.AssetName.ToString());
+
+	// If the asset class itself has a direct entry in the prefix map
+	// (e.g. UAnimBlueprint → "ABP_"), use it immediately without parsing the tag.
+	// This avoids misrouting AnimBlueprints through the ParentClass walk,
+	// which would resolve to the animation class rather than UAnimBlueprint.
+	UClass* const AssetClass = AssetData.GetClass();
+	if (AssetClass)
+	{
+		// For UBlueprint specifically, skip the direct map lookup and proceed to the
+		// ParentClass tag walk — the meaningful prefix lives in the native parent hierarchy,
+		// not in the asset class itself.
+		// Specific Blueprint subclasses (UAnimBlueprint, UGameplayAbilityBlueprint, etc.)
+		// are still resolved here via the direct lookup.
+		const bool bIsGenericBlueprint = (AssetClass == UBlueprint::StaticClass());
+
+		if (!bIsGenericBlueprint)
+		{
+			if (const FString* Found = PrefixMap.Find(AssetClass))
+			{
+				return Found;
+			}
+
+			if (const FString* Found = OptionalPrefixes.Find(AssetClass->GetFName()))
+			{
+				return Found;
+			}
+		}
+	}
+
+	// Read the "ParentClass" tag stored by the Asset Registry.
+	// This tag is populated for all Blueprint assets without loading them into memory.
+	// Format: /Script/CoreUObject.Class'/Script/Module.ClassName'
+	FString ParentClassTag;
+	AssetData.GetTagValue(TEXT("ParentClass"),
+	                      ParentClassTag);
+
+	if (ParentClassTag.IsEmpty())
+	{
+		// No tag — fall back to generic BP_ prefix.
+		return PrefixMap.Find(UBlueprint::StaticClass());
+	}
+
+	const FName ParentClassName = ExtractClassNameFromTag(ParentClassTag);
+
+	if (ParentClassName == NAME_None)
+	{
+		return PrefixMap.Find(UBlueprint::StaticClass());
+	}
+
+	// Check the optional plugin map first (GAS, etc.) — keyed by class name string.
+	if (const FString* Found = OptionalPrefixes.Find(ParentClassName))
+	{
+		return Found;
+	}
+
+	// Try to resolve the actual UClass and walk the main prefix map.
+	// This covers framework classes (AGameModeBase, APlayerController, etc.)
+	// that are always available without optional plugins.
+	if (UClass* const ParentClass = FindFirstObject<UClass>(*ParentClassName.ToString(),
+	                                                        EFindFirstObjectOptions::None))
+	{
+		UClass* Current = ParentClass;
+
+		while (Current)
+		{
+			if (const FString* Found = PrefixMap.Find(Current))
+			{
+				return Found;
+			}
+
+			Current = Current->GetSuperClass();
+		}
+	}
+
+	// Parent class not registered — fall back to generic BP_ prefix.
+	return PrefixMap.Find(UBlueprint::StaticClass());
 }
 
 // ----------------------------------------------------------------
@@ -200,11 +318,21 @@ void UBertaAssetAuditor::RunAudit()
 			continue;
 		}
 
-		// Pass nullptr as Asset — RunAudit does not load assets into memory.
-		// FindPrefixForClass handles the null Asset case by skipping the Blueprint
-		// ParentClass walk and falling through to the direct class hierarchy walk.
-		const FString* FoundPrefix = FindPrefixForClass(AssetClass,
-		                                                nullptr);
+		// For Blueprint assets, resolve the prefix via the Asset Registry tag to
+		// avoid loading the asset into memory during a dry audit.
+		const FString* FoundPrefix = nullptr;
+
+		if (AssetClass == UBlueprint::StaticClass() || AssetClass->IsChildOf(UBlueprint::StaticClass()))
+		{
+			FoundPrefix = ResolveBlueprintPrefixFromTag(AssetData);
+		}
+		else
+		{
+			// Non-Blueprint: walk the asset class hierarchy directly.
+			// Asset is not needed — pass nullptr.
+			FoundPrefix = FindPrefixForClass(AssetClass,
+			                                 nullptr);
+		}
 
 		if (!FoundPrefix || FoundPrefix->IsEmpty())
 		{
@@ -295,8 +423,29 @@ void UBertaAssetAuditor::RunAuditAndFix()
 			continue;
 		}
 
-		const FString* FoundPrefix = FindPrefixForClass(AssetClass,
-		                                                LoadedAsset);
+		// Use FindPrefixForClass for loaded Blueprint assets so the ParentClass walk
+		// is used — same path as RunAudit. For generic Blueprints where ParentClass
+		// walk fails, fall back to ResolveBlueprintPrefixFromTag.
+		const FString* FoundPrefix = nullptr;
+
+		if (AssetClass == UBlueprint::StaticClass() || AssetClass->IsChildOf(UBlueprint::StaticClass()))
+		{
+			FoundPrefix = FindPrefixForClass(AssetClass,
+			                                 LoadedAsset);
+
+			// FindPrefixForClass returns nullptr when the ParentClass walk finds no match.
+			// Fall back to the tag-based resolver which covers cases where ParentClass
+			// is not yet loaded but the Asset Registry tag is available.
+			if (!FoundPrefix)
+			{
+				FoundPrefix = ResolveBlueprintPrefixFromTag(AssetData);
+			}
+		}
+		else
+		{
+			FoundPrefix = FindPrefixForClass(AssetClass,
+			                                 nullptr);
+		}
 
 		if (!FoundPrefix || FoundPrefix->IsEmpty())
 		{
@@ -314,26 +463,28 @@ void UBertaAssetAuditor::RunAuditAndFix()
 			continue;
 		}
 
-		const EBertaRenameResult Result = UBertaAssetNamingUtils::RenameAssetWithPrefix(LoadedAsset);
+		// Rename using the resolved prefix directly — bypasses RenameAssetWithPrefix's
+		// own class walk, which does not have access to ParentClass context.
+		FString CleanName = AssetData.AssetName.ToString();
 
-		if (Result == EBertaRenameResult::Renamed)
+		// Material instances auto-named by the engine may carry "M_" and "_Inst".
+		if (LoadedAsset->IsA<UMaterialInstanceConstant>())
 		{
-			UE_LOG(LogBertaDevKitEditor,
-			       Log,
-			       TEXT("[UBertaAssetAuditor::RunAuditAndFix] Fixed: %s"),
-			       *AssetData.AssetName.ToString());
-			++RenamedCount;
+			CleanName.RemoveFromStart(TEXT("M_"));
+			CleanName.RemoveFromEnd(TEXT("_Inst"));
 		}
-		else
-		{
-			// Should not happen — we pre-checked the prefix and class above.
-			// Log as warning to catch any edge cases.
-			UE_LOG(LogBertaDevKitEditor,
-			       Warning,
-			       TEXT("[UBertaAssetAuditor::RunAuditAndFix] Unexpected result for: %s"),
-			       *AssetData.AssetName.ToString());
-			++SkippedCount;
-		}
+
+		const FString NewName = *FoundPrefix + CleanName;
+		UEditorUtilityLibrary::RenameAsset(LoadedAsset,
+		                                   NewName);
+
+		UE_LOG(LogBertaDevKitEditor,
+		       Log,
+		       TEXT("[UBertaAssetAuditor::RunAuditAndFix] Fixed: %s → %s"),
+		       *AssetData.AssetName.ToString(),
+		       *NewName);
+
+		++RenamedCount;
 	}
 
 	UE_LOG(LogBertaDevKitEditor,
