@@ -269,6 +269,12 @@ void UBertaAssetAuditor::FixAssetNaming()
 			CleanName.RemoveFromEnd(TEXT("_Inst"));
 		}
 
+		// Animation montages may carry a "_Montage" suffix — strip before applying "AM_".
+		if (LoadedAsset->IsA<UAnimMontage>())
+		{
+			CleanName.RemoveFromEnd(TEXT("_Montage"));
+		}
+
 		const FString NewName = *FoundPrefix + CleanName;
 		UEditorUtilityLibrary::RenameAsset(LoadedAsset,
 		                                   NewName);

@@ -350,6 +350,13 @@ EBertaRenameResult UBertaAssetNamingUtils::RenameAssetWithPrefix(UObject* const 
 		CleanName.RemoveFromEnd(TEXT("_Inst"));
 	}
 
+	// Animation montages auto-named by the engine or imported may carry a "_Montage" suffix.
+	// Strip it before applying "AM_" to produce a clean final name.
+	if (Asset->IsA<UAnimMontage>())
+	{
+		CleanName.RemoveFromEnd(TEXT("_Montage"));
+	}
+
 	const FString NewName = *FoundPrefix + CleanName;
 	UEditorUtilityLibrary::RenameAsset(Asset,
 	                                   NewName);

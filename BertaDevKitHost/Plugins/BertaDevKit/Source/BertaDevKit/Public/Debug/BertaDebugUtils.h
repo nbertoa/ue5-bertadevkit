@@ -59,7 +59,7 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable,
 		Category = "BertaDevKit|Debug",
-		meta = (DevelopmentOnly, DisplayName = "Log"))
+		meta = (DevelopmentOnly, DisplayName = "Log", AdvancedDisplay = "Duration, Key"))
 	static void PrintLog(const FString& Message,
 	                     bool bEnabled = true,
 	                     EBertaLogVerbosity Verbosity = EBertaLogVerbosity::Log,
@@ -82,7 +82,7 @@ public:
 	UFUNCTION(BlueprintCallable,
 		Category = "BertaDevKit|Debug",
 		meta = (DevelopmentOnly, DisplayName = "Log With Context", DefaultToSelf = "WorldContext", HidePin =
-			"WorldContext"))
+			"WorldContext", AdvancedDisplay = "Duration"))
 	static void PrintLogWithContext(const UObject* WorldContext,
 	                                const FString& Message,
 	                                bool bEnabled = true,
@@ -112,7 +112,7 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable,
 		Category = "BertaDevKit|Debug",
-		meta = (DevelopmentOnly, DisplayName = "Log To Category"))
+		meta = (DevelopmentOnly, DisplayName = "Log To Category", AdvancedDisplay = "Duration, Key"))
 	static void PrintLogToNamedCategory(const FString& CategoryName,
 	                                    const FString& Message,
 	                                    bool bEnabled = true,
@@ -143,7 +143,7 @@ public:
 	UFUNCTION(BlueprintCallable,
 		Category = "BertaDevKit|Debug",
 		meta = (DevelopmentOnly, DisplayName = "Log To Category With Context", DefaultToSelf = "WorldContext", HidePin =
-			"WorldContext"))
+			"WorldContext", AdvancedDisplay = "Duration"))
 	static void PrintLogToNamedCategoryWithContext(const UObject* WorldContext,
 	                                               const FString& CategoryName,
 	                                               const FString& Message,
