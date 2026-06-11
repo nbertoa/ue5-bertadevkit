@@ -1,3 +1,4 @@
+```markdown
 # BertaDevKit — Unreal Engine 5.6 C++ Plugin
 
 A personal C++ utility plugin for Unreal Engine 5.6, built to consolidate reusable development tools across projects. The plugin is structured as two modules — a Runtime module with gameplay utilities and debug systems, and an Editor module with asset management and world validation tools — all configurable from Project Settings without touching code.
@@ -13,7 +14,7 @@ A personal C++ utility plugin for Unreal Engine 5.6, built to consolidate reusab
 | **IDE** | JetBrains Rider |
 | **Coding Standard** | Epic Games C++ Coding Standard |
 | **Runtime Dependencies** | Core, CoreUObject, Engine, DeveloperSettings |
-| **Editor Dependencies** | UnrealEd, AssetTools, Blutility, EditorScriptingUtilities, Niagara, UMG, AIModule, Foliage, Landscape, PhysicsCore, Slate, SlateCore, ToolMenus, StructUtils |
+| **Editor Dependencies** | UnrealEd, AssetTools, Blutility, EditorScriptingUtilities, Niagara, UMG, AIModule, Foliage, Landscape, PhysicsCore, Slate, SlateCore, ToolMenus, StructUtils, EnhancedInput |
 
 ---
 
@@ -39,7 +40,7 @@ BertaDevKit/
     └── BertaDevKitEditor/            ← Editor module
         └── Public/
             ├── AssetActions/
-            │   ├── BertaAssetNamingActions  # Content Browser prefix renaming
+            │   ├── BertaAssetNamingActions  # Content Browser context menu entry point
             │   ├── BertaAssetNamingUtils    # Prefix map + rename logic
             │   └── BertaAssetAuditor        # Naming convention audit + auto-fix
             ├── Toolbar/
@@ -74,7 +75,7 @@ Access anywhere via `UBertaDevKitSettings::Get()`, which wraps `GetDefault<>` an
 - `PrintLogToNamedCategory` — routes to an arbitrary named log category via `FMsg::Logf`.
 - `PrintLogToNamedCategoryWithContext` — combines the above two.
 
-Output routing is controlled by `EBertaLogOutput` (`PrintAndLog`, `PrintOnly`, `LogOnly`). Color and verbosity are controlled by `EBertaLogVerbosity` (`Log` → Cyan, `Warning` → Yellow, `Error` → Red). A `default:` with `ensureMsgf` catches unhandled enum values at development time.
+Output routing is controlled by `EBertaLogOutput` (`PrintAndLog`, `PrintOnly`, `LogOnly`). Color and verbosity are controlled by `EBertaLogVerbosity` (`Log` → Cyan, `Warning` → Yellow, `Error` → Red). A `default:` with `ensureMsgf` catches unhandled enum values at development time. `Duration` and `Key` parameters are exposed under `AdvancedDisplay` in Blueprint nodes to keep the default pin surface minimal.
 
 ---
 
@@ -136,15 +137,24 @@ Registration is **lazy**: the `RenderStats` callback binds to `FCoreDelegates::O
 
 ### Asset Naming Actions (`UBertaAssetNamingActions`)
 
-`UAssetActionUtility` exposing an `AddPrefixes` function to the Content Browser right-click context menu under **Scripted Asset Actions**. Delegates all rename logic to `UBertaAssetNamingUtils::RenameAssetWithPrefix`. Reports `Renamed`, `AlreadyCorrect`, and `UnknownClass` outcomes per asset via `LogBertaDevKitEditor`.
+`UAssetActionUtility` marked `Abstract`, exposing two functions to the Content Browser right-click context menu under **Scripted Asset Actions** via a derived BP asset in `BertaDevKit/Content/`. All logic is delegated to `UBertaAssetAuditor`.
+
+- **Audit Asset Naming** — scans assets in scope and reports naming violations to the Output Log without modifying anything.
+- **Fix Asset Naming** — scans assets in scope and renames violators to match naming conventions.
 
 ---
 
 ### Asset Naming Utils (`UBertaAssetNamingUtils`)
 
-Sole owner of the `TMap<UClass*, FString>` prefix map, exposed via `GetPrefixMap()` as a static local — built once on first call, reused for the editor session lifetime. Consumed by both `UBertaAssetNamingActions` and `UBertaAssetAuditor`.
+Sole owner of all prefix resolution logic, consumed by both `UBertaAssetNamingActions` and `UBertaAssetAuditor`. Exposes four static methods:
 
-`RenameAssetWithPrefix` walks the class hierarchy with `GetSuperClass()` to handle Blueprint subclasses of known types correctly (e.g. a BP subclassing `UDataAsset` matches the `DA_` entry). `UMaterialInstanceConstant` assets strip engine-generated `M_` and `_Inst` before applying `MI_`.
+- `GetPrefixMap()` — static local `TMap<UClass*, FString>`, built once on first call.
+- `GetOptionalPluginPrefixes()` — static local `TMap<FName, FString>` keyed by class name string, covering classes from optional plugins (GAS) without hard module dependencies.
+- `FindPrefixForClass(UClass*, UObject*)` — for loaded Blueprint assets, walks `UBlueprint::ParentClass` to resolve framework and GAS subclasses correctly. For non-Blueprint assets, walks the asset's own class hierarchy.
+- `ResolveBlueprintPrefixFromTag(FAssetData)` — resolves prefix for unloaded Blueprint assets by parsing the `ParentClass` Asset Registry tag, avoiding loading assets into memory during audit passes.
+- `RenameAssetWithPrefix(UObject*)` — applies the resolved prefix, stripping engine-generated suffixes for `UMaterialInstanceConstant` (`M_`, `_Inst`) and `UAnimMontage` (`_Montage`).
+
+Classes from optional plugins (e.g. `GameplayAbilities`) are resolved via `GetOptionalPluginPrefixes()` by class name string comparison, avoiding hard module dependencies that would prevent the editor from launching on projects where those plugins are disabled.
 
 **Supported prefixes:**
 
@@ -174,12 +184,35 @@ Sole owner of the `TMap<UClass*, FString>` prefix map, exposed via `GetPrefixMap
 | `UPhysicsAsset` | `PA_` |
 | `UUserDefinedEnum` | `E_` |
 | `UUserDefinedStruct` | `F_` |
+| `AGameModeBase`, `AGameMode` | `GM_` |
+| `APlayerController` | `PC_` |
+| `ACharacter` | `CH_` |
+| `APawn` | `P_` |
+| `UBlackboardData` | `BB_` |
+| `AAIController` | `AIC_` |
+| `UBTDecorator` | `BTD_` |
+| `UBTService` | `BTS_` |
+| `UBTTaskNode` | `BTT_` |
+| `UEnvQuery` | `EQS_` |
+| `UEnvQueryContext` | `EQSC_` |
+| `UInputAction` | `IA_` |
+| `UInputMappingContext` | `IMC_` |
+| `UGameplayAbility` *(optional)* | `GA_` |
+| `UGameplayEffect` *(optional)* | `GE_` |
+| `UGameplayCueNotify_Static` *(optional)* | `GC_` |
+| `UGameplayCueNotify_Actor` *(optional)* | `GC_` |
 
 ---
 
 ### Asset Auditor (`UBertaAssetAuditor`)
 
-Static-interface `UObject` with two entry points: `RunAudit` (reports violations without modifying assets) and `RunAuditAndFix` (renames violators). Both delegate scope resolution to `ResolveAssetScope`, which uses the Content Browser selection when assets are selected, or falls back to a full `/Game/` scan via the Asset Registry without loading assets into memory. `GetAsset()` is called only on confirmed violators in `RunAuditAndFix`. A private `FindPrefixForClass` helper centralizes the hierarchy walk to avoid duplication between the two entry points. Results are reported to `LogBertaDevKitEditor` and summarized via `FNotificationInfo` with `CS_Success` / `CS_Fail` completion state.
+Static-interface `UObject` with two entry points: `AuditAssetNaming` (reports violations without modifying assets) and `FixAssetNaming` (renames violators). Both delegate scope resolution to `ResolveAssetScope`, which uses the following priority:
+
+1. **Selected assets** — if any assets are individually selected in the Content Browser.
+2. **Active folder** — the folder currently navigated to in the Content Browser directory tree, scanned recursively via the Asset Registry.
+3. **Full `/Game/` scan** — fallback when neither of the above yields a scope.
+
+`AuditAssetNaming` resolves prefixes via `ResolveBlueprintPrefixFromTag` for Blueprint assets (no memory load) and `FindPrefixForClass` for non-Blueprint assets. `FixAssetNaming` loads each violating asset and uses `FindPrefixForClass` with the loaded `UBlueprint` object for accurate `ParentClass` walking, falling back to `ResolveBlueprintPrefixFromTag` when the walk yields no match. Results are reported to `LogBertaDevKitEditor` and summarized via `FNotificationInfo` with `CS_Success` / `CS_Fail` completion state.
 
 ---
 
@@ -187,11 +220,11 @@ Static-interface `UObject` with two entry points: `RunAudit` (reports violations
 
 Non-UObject `F` class owned by `FBertaDevKitEditorModule` via `TUniquePtr`. Registers three entries under `LevelEditor.MainMenu.Tools` in a **BertaDevKit** section:
 
-- **Run Asset Audit** → `UBertaAssetAuditor::RunAudit()`
-- **Fix Asset Naming** → `UBertaAssetAuditor::RunAuditAndFix()`
+- **Run Asset Audit** → `UBertaAssetAuditor::AuditAssetNaming()`
+- **Fix Asset Naming** → `UBertaAssetAuditor::FixAssetNaming()`
 - **Run World Validation** → `UBertaWorldValidation::RunValidation()`
 
-Registration is deferred to `FCoreDelegates::OnPostEngineInit` via a named member callback because `UToolMenus` is not guaranteed to exist at `StartupModule` time. `UToolMenus::RegisterOwner` is called before extending the menu so that `UnregisterOwner` in `ShutdownModule` correctly cleans up all entries on hot-reload and plugin unload.
+Registration is deferred to `FCoreDelegates::OnPostEngineInit` via a named member callback because `UToolMenus` is not guaranteed to exist at `StartupModule` time. Each entry's `Owner` field is set to `FToolMenuOwner("BertaDevKit")` so that `UnregisterOwner` in `ShutdownModule` correctly cleans up all entries on hot-reload and plugin unload.
 
 ---
 
@@ -226,7 +259,7 @@ Static-interface `UObject` with a single entry point: `RunValidation`. Iterates 
 4. Enable the plugin in **Edit → Plugins → BertaDevKit**.
 5. Configure systems under **Project Settings → Plugins → BertaDevKit**.
 
-> **Note:** If your project uses the Editor module and has GAS assets, the `GameplayAbilities` plugin must be enabled in your `.uproject`.
+> **Note:** If your project uses the Editor module and has GAS assets, the `GameplayAbilities` plugin must be enabled in your `.uproject`. The plugin itself does not require `GameplayAbilities` — GAS class prefixes are resolved via class name string comparison to avoid hard module dependencies.
 
 ---
 
@@ -251,3 +284,4 @@ This project is released under the [MIT License](LICENSE).
 **Nicolás Bertoa** — Unreal Engine developer with 14+ years of professional experience, focused on C++ and gameplay systems.
 
 🌐 [Portfolio](https://nbertoa.wordpress.com) | 🎬 [Demo Reels](https://nbertoa.wordpress.com/demo-reels/)
+```
