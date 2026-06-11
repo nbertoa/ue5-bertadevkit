@@ -1,4 +1,3 @@
-```markdown
 # BertaDevKit — Unreal Engine 5.6 C++ Plugin
 
 A personal C++ utility plugin for Unreal Engine 5.6, built to consolidate reusable development tools across projects. The plugin is structured as two modules — a Runtime module with gameplay utilities and debug systems, and an Editor module with asset management and world validation tools — all configurable from Project Settings without touching code.
@@ -146,7 +145,7 @@ Registration is **lazy**: the `RenderStats` callback binds to `FCoreDelegates::O
 
 ### Asset Naming Utils (`UBertaAssetNamingUtils`)
 
-Sole owner of all prefix resolution logic, consumed by both `UBertaAssetNamingActions` and `UBertaAssetAuditor`. Exposes four static methods:
+Sole owner of all prefix resolution logic, consumed by both `UBertaAssetNamingActions` and `UBertaAssetAuditor`. Exposes five static methods:
 
 - `GetPrefixMap()` — static local `TMap<UClass*, FString>`, built once on first call.
 - `GetOptionalPluginPrefixes()` — static local `TMap<FName, FString>` keyed by class name string, covering classes from optional plugins (GAS) without hard module dependencies.
@@ -284,4 +283,3 @@ This project is released under the [MIT License](LICENSE).
 **Nicolás Bertoa** — Unreal Engine developer with 14+ years of professional experience, focused on C++ and gameplay systems.
 
 🌐 [Portfolio](https://nbertoa.wordpress.com) | 🎬 [Demo Reels](https://nbertoa.wordpress.com/demo-reels/)
-```
