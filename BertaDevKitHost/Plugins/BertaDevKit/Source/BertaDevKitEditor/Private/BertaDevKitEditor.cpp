@@ -19,9 +19,7 @@ void FBertaDevKitEditorModule::StartupModule()
 
 	UE_LOG(LogBertaDevKitEditor,
 	       Log,
-	       TEXT(
-		       "[FBertaDevKitEditorModule::StartupModule] Module started. Toolbar registration deferred to OnPostEngineInit."
-	       ));
+	       TEXT( "[FBertaDevKitEditorModule::StartupModule] Module started. Toolbar registration deferred to OnPostEngineInit." ));
 }
 
 void FBertaDevKitEditorModule::ShutdownModule()

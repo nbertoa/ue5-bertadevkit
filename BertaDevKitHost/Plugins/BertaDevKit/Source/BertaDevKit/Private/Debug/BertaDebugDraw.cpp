@@ -39,9 +39,7 @@ float UBertaDebugDraw::ResolveLifeTime(const float Duration)
 	// DrawDebug* uses -1.0f as the sentinel for "draw forever".
 	// We expose Duration <= 0.0f as the public contract for persistence
 	// so callers never need to know about the -1.0f convention.
-	return (Duration <= 0.0f)
-		       ? -1.0f
-		       : Duration;
+	return (Duration <= 0.0f) ? -1.0f : Duration;
 }
 
 FColor UBertaDebugDraw::ToFColor(const FLinearColor& LinearColor)

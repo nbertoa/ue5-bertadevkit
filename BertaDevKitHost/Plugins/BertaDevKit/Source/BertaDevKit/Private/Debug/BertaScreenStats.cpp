@@ -166,15 +166,9 @@ void UBertaScreenStats::SetBool(const FName Name,
 {
 	// Auto-color gives immediate visual feedback: green = healthy, red = problem.
 	// The pattern is common enough in debug UIs that it should be the default.
-	const FLinearColor ResolvedColor = bAutoColor
-		                                   ? (Value
-			                                      ? FLinearColor::Green
-			                                      : FLinearColor::Red)
-		                                   : Color;
+	const FLinearColor ResolvedColor = bAutoColor ? (Value ? FLinearColor::Green : FLinearColor::Red) : Color;
 
-	const FString Formatted = Value
-		                          ? TEXT("true")
-		                          : TEXT("false");
+	const FString Formatted = Value ? TEXT("true") : TEXT("false");
 
 	SetEntry(Name,
 	         Formatted,

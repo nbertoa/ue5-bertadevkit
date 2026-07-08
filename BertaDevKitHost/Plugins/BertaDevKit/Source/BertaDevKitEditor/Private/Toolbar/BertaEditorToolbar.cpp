@@ -81,7 +81,7 @@ void FBertaEditorToolbar::Register()
 		                                                     RunAssetAuditTooltip,
 		                                                     FSlateIcon(),
 		                                                     FUIAction(FExecuteAction::CreateRaw(this,
-			                                                     &FBertaEditorToolbar::OnRunAssetAuditClicked)));
+		                                                                                         &FBertaEditorToolbar::OnRunAssetAuditClicked)));
 		Entry.Owner = FToolMenuOwner(BertaOwnerName);
 		Section.AddEntry(Entry);
 	}
@@ -93,7 +93,7 @@ void FBertaEditorToolbar::Register()
 		                                                     FixAssetNamingTooltip,
 		                                                     FSlateIcon(),
 		                                                     FUIAction(FExecuteAction::CreateRaw(this,
-			                                                     &FBertaEditorToolbar::OnFixAssetNamingClicked)));
+		                                                                                         &FBertaEditorToolbar::OnFixAssetNamingClicked)));
 		Entry.Owner = FToolMenuOwner(BertaOwnerName);
 		Section.AddEntry(Entry);
 	}
@@ -105,7 +105,7 @@ void FBertaEditorToolbar::Register()
 		                                                     WorldValidationTooltip,
 		                                                     FSlateIcon(),
 		                                                     FUIAction(FExecuteAction::CreateRaw(this,
-			                                                     &FBertaEditorToolbar::OnRunWorldValidationClicked)));
+		                                                                                         &FBertaEditorToolbar::OnRunWorldValidationClicked)));
 		Entry.Owner = FToolMenuOwner(BertaOwnerName);
 		Section.AddEntry(Entry);
 	}

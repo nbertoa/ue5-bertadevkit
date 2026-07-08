@@ -81,8 +81,7 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable,
 		Category = "BertaDevKit|Debug",
-		meta = (DevelopmentOnly, DisplayName = "Log With Context", DefaultToSelf = "WorldContext", HidePin =
-			"WorldContext", AdvancedDisplay = "Duration"))
+		meta = (DevelopmentOnly, DisplayName = "Log With Context", DefaultToSelf = "WorldContext", HidePin = "WorldContext", AdvancedDisplay = "Duration"))
 	static void PrintLogWithContext(const UObject* WorldContext,
 	                                const FString& Message,
 	                                bool bEnabled = true,
@@ -142,8 +141,7 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable,
 		Category = "BertaDevKit|Debug",
-		meta = (DevelopmentOnly, DisplayName = "Log To Category With Context", DefaultToSelf = "WorldContext", HidePin =
-			"WorldContext", AdvancedDisplay = "Duration"))
+		meta = (DevelopmentOnly, DisplayName = "Log To Category With Context", DefaultToSelf = "WorldContext", HidePin = "WorldContext", AdvancedDisplay = "Duration"))
 	static void PrintLogToNamedCategoryWithContext(const UObject* WorldContext,
 	                                               const FString& CategoryName,
 	                                               const FString& Message,

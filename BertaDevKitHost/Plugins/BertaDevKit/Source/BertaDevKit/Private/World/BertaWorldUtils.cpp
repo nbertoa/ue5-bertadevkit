@@ -342,8 +342,7 @@ FVector UBertaWorldUtils::GetPlayerCameraLocation(const UObject* WorldContextObj
 	{
 		UE_LOG(LogBertaDevKit,
 		       Warning,
-		       TEXT("[BertaWorldUtils::GetPlayerCameraLocation] "
-			       "PlayerController or CameraManager not available for index %d. Returning ZeroVector."),
+		       TEXT("[BertaWorldUtils::GetPlayerCameraLocation] " "PlayerController or CameraManager not available for index %d. Returning ZeroVector."),
 		       PlayerIndex);
 		return FVector::ZeroVector;
 	}
@@ -361,8 +360,7 @@ FVector UBertaWorldUtils::GetPlayerCameraDirection(const UObject* WorldContextOb
 	{
 		UE_LOG(LogBertaDevKit,
 		       Warning,
-		       TEXT("[BertaWorldUtils::GetPlayerCameraDirection] "
-			       "PlayerController or CameraManager not available for index %d. Returning ForwardVector."),
+		       TEXT("[BertaWorldUtils::GetPlayerCameraDirection] " "PlayerController or CameraManager not available for index %d. Returning ForwardVector."),
 		       PlayerIndex);
 		return FVector::ForwardVector;
 	}

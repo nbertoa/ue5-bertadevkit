@@ -20,10 +20,14 @@ namespace
 	{
 		switch (Mobility)
 		{
-		case EComponentMobility::Static: return TEXT("Static");
-		case EComponentMobility::Stationary: return TEXT("Stationary");
-		case EComponentMobility::Movable: return TEXT("Movable");
-		default: return TEXT("Unknown");
+			case EComponentMobility::Static:
+				return TEXT("Static");
+			case EComponentMobility::Stationary:
+				return TEXT("Stationary");
+			case EComponentMobility::Movable:
+				return TEXT("Movable");
+			default:
+				return TEXT("Unknown");
 		}
 	}
 }
@@ -128,14 +132,12 @@ void UBertaWorldValidation::RunValidation()
 
 	// ── Editor notification ───────────────────────────────────────────────────
 
-	const FText NotificationText = ViolationCount > 0
-		                               ? FText::Format(NSLOCTEXT("BertaWorldValidation",
-		                                                         "ViolationsFound",
-		                                                         "World Validation: {0} actor(s) with violations. See Output Log."),
-		                                               FText::AsNumber(ViolationCount))
-		                               : NSLOCTEXT("BertaWorldValidation",
-		                                           "AllPassed",
-		                                           "World Validation: All checks passed.");
+	const FText NotificationText = ViolationCount > 0 ? FText::Format(NSLOCTEXT("BertaWorldValidation",
+	                                                                            "ViolationsFound",
+	                                                                            "World Validation: {0} actor(s) with violations. See Output Log."),
+	                                                                  FText::AsNumber(ViolationCount)) : NSLOCTEXT("BertaWorldValidation",
+	                                                                                                               "AllPassed",
+	                                                                                                               "World Validation: All checks passed.");
 
 	FNotificationInfo Info(NotificationText);
 	Info.ExpireDuration = 5.0f;
@@ -144,9 +146,7 @@ void UBertaWorldValidation::RunValidation()
 	TSharedPtr<SNotificationItem> Notification = FSlateNotificationManager::Get().AddNotification(Info);
 	if (Notification.IsValid())
 	{
-		Notification->SetCompletionState(ViolationCount > 0
-			                                 ? SNotificationItem::CS_Fail
-			                                 : SNotificationItem::CS_Success);
+		Notification->SetCompletionState(ViolationCount > 0 ? SNotificationItem::CS_Fail : SNotificationItem::CS_Success);
 	}
 }
 
@@ -192,8 +192,7 @@ bool UBertaWorldValidation::ValidateWorldBounds(const AActor* Actor,
 	const FVector Location = Actor->GetActorLocation();
 
 	// Check each axis independently so that a violation on any one axis is flagged.
-	const bool bOutOfBounds = FMath::Abs(Location.X) > BoundsThreshold || FMath::Abs(Location.Y) > BoundsThreshold ||
-			FMath::Abs(Location.Z) > BoundsThreshold;
+	const bool bOutOfBounds = FMath::Abs(Location.X) > BoundsThreshold || FMath::Abs(Location.Y) > BoundsThreshold || FMath::Abs(Location.Z) > BoundsThreshold;
 
 	if (!bOutOfBounds)
 	{

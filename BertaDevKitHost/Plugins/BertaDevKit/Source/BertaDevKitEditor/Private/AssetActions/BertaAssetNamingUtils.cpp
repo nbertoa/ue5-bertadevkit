@@ -98,56 +98,196 @@ const TMap<UClass*, FString>& UBertaAssetNamingUtils::GetPrefixMap()
 	static const TMap<UClass*, FString> PrefixMap = {
 		// Blueprints — specific subclasses must appear before UBlueprint so that
 		// the hierarchy walk in FindPrefixForClass matches the most derived type first.
-		{UAnimBlueprint::StaticClass(), TEXT("ABP_")}, {UUserWidget::StaticClass(), TEXT("WBP_")},
-		{UBlueprint::StaticClass(), TEXT("BP_")},
+		{
+			UAnimBlueprint::StaticClass(),
+			TEXT("ABP_")
+		},
+		{
+			UUserWidget::StaticClass(),
+			TEXT("WBP_")
+		},
+		{
+			UBlueprint::StaticClass(),
+			TEXT("BP_")
+		},
 
 		// Meshes
-		{UStaticMesh::StaticClass(), TEXT("SM_")}, {USkeletalMesh::StaticClass(), TEXT("SKM_")},
+		{
+			UStaticMesh::StaticClass(),
+			TEXT("SM_")
+		},
+		{
+			USkeletalMesh::StaticClass(),
+			TEXT("SKM_")
+		},
 
 		// Materials
-		{UMaterial::StaticClass(), TEXT("M_")}, {UMaterialInstanceConstant::StaticClass(), TEXT("MI_")},
-		{UMaterialParameterCollection::StaticClass(), TEXT("MPC_")},
+		{
+			UMaterial::StaticClass(),
+			TEXT("M_")
+		},
+		{
+			UMaterialInstanceConstant::StaticClass(),
+			TEXT("MI_")
+		},
+		{
+			UMaterialParameterCollection::StaticClass(),
+			TEXT("MPC_")
+		},
 
 		// Textures
-		{UTexture2D::StaticClass(), TEXT("T_")}, {UTextureCube::StaticClass(), TEXT("T_")},
-		{UTextureRenderTarget2D::StaticClass(), TEXT("RT_")},
+		{
+			UTexture2D::StaticClass(),
+			TEXT("T_")
+		},
+		{
+			UTextureCube::StaticClass(),
+			TEXT("T_")
+		},
+		{
+			UTextureRenderTarget2D::StaticClass(),
+			TEXT("RT_")
+		},
 
 		// Animation — AimOffset is a BlendSpace subclass; must appear before BlendSpace.
-		{UAimOffsetBlendSpace::StaticClass(), TEXT("AO_")}, {UAimOffsetBlendSpace1D::StaticClass(), TEXT("AO_")},
-		{UAnimSequence::StaticClass(), TEXT("AS_")}, {UAnimMontage::StaticClass(), TEXT("AM_")},
-		{UBlendSpace::StaticClass(), TEXT("BS_")}, {UBlendSpace1D::StaticClass(), TEXT("BS_")},
+		{
+			UAimOffsetBlendSpace::StaticClass(),
+			TEXT("AO_")
+		},
+		{
+			UAimOffsetBlendSpace1D::StaticClass(),
+			TEXT("AO_")
+		},
+		{
+			UAnimSequence::StaticClass(),
+			TEXT("AS_")
+		},
+		{
+			UAnimMontage::StaticClass(),
+			TEXT("AM_")
+		},
+		{
+			UBlendSpace::StaticClass(),
+			TEXT("BS_")
+		},
+		{
+			UBlendSpace1D::StaticClass(),
+			TEXT("BS_")
+		},
 
 		// VFX
-		{UParticleSystem::StaticClass(), TEXT("PS_")}, {UNiagaraSystem::StaticClass(), TEXT("NS_")},
-		{UNiagaraEmitter::StaticClass(), TEXT("NE_")},
+		{
+			UParticleSystem::StaticClass(),
+			TEXT("PS_")
+		},
+		{
+			UNiagaraSystem::StaticClass(),
+			TEXT("NS_")
+		},
+		{
+			UNiagaraEmitter::StaticClass(),
+			TEXT("NE_")
+		},
 
 		// Audio
-		{USoundWave::StaticClass(), TEXT("SW_")}, {USoundCue::StaticClass(), TEXT("SC_")},
+		{
+			USoundWave::StaticClass(),
+			TEXT("SW_")
+		},
+		{
+			USoundCue::StaticClass(),
+			TEXT("SC_")
+		},
 
 		// Data
-		{UDataTable::StaticClass(), TEXT("DT_")}, {UDataAsset::StaticClass(), TEXT("DA_")},
+		{
+			UDataTable::StaticClass(),
+			TEXT("DT_")
+		},
+		{
+			UDataAsset::StaticClass(),
+			TEXT("DA_")
+		},
 
 		// Physics
-		{UPhysicsAsset::StaticClass(), TEXT("PA_")},
+		{
+			UPhysicsAsset::StaticClass(),
+			TEXT("PA_")
+		},
 
 		// User-defined types
-		{UUserDefinedEnum::StaticClass(), TEXT("E_")}, {UUserDefinedStruct::StaticClass(), TEXT("F_")},
+		{
+			UUserDefinedEnum::StaticClass(),
+			TEXT("E_")
+		},
+		{
+			UUserDefinedStruct::StaticClass(),
+			TEXT("F_")
+		},
 
 		// Framework Blueprint parent classes — resolved via UBlueprint::ParentClass walk.
-		{AGameModeBase::StaticClass(), TEXT("GM_")}, {AGameMode::StaticClass(), TEXT("GM_")},
-		{APlayerController::StaticClass(), TEXT("PC_")}, {ACharacter::StaticClass(), TEXT("CH_")},
-		{APawn::StaticClass(), TEXT("P_")},
+		{
+			AGameModeBase::StaticClass(),
+			TEXT("GM_")
+		},
+		{
+			AGameMode::StaticClass(),
+			TEXT("GM_")
+		},
+		{
+			APlayerController::StaticClass(),
+			TEXT("PC_")
+		},
+		{
+			ACharacter::StaticClass(),
+			TEXT("CH_")
+		},
+		{
+			APawn::StaticClass(),
+			TEXT("P_")
+		},
 
 		// AI
-		{UBlackboardData::StaticClass(), TEXT("BB_")}, {AAIController::StaticClass(), TEXT("AIC_")},
-		{UBTDecorator::StaticClass(), TEXT("BTD_")}, {UBTService::StaticClass(), TEXT("BTS_")},
-		{UBTTaskNode::StaticClass(), TEXT("BTT_")},
+		{
+			UBlackboardData::StaticClass(),
+			TEXT("BB_")
+		},
+		{
+			AAIController::StaticClass(),
+			TEXT("AIC_")
+		},
+		{
+			UBTDecorator::StaticClass(),
+			TEXT("BTD_")
+		},
+		{
+			UBTService::StaticClass(),
+			TEXT("BTS_")
+		},
+		{
+			UBTTaskNode::StaticClass(),
+			TEXT("BTT_")
+		},
 
 		// EQS
-		{UEnvQuery::StaticClass(), TEXT("EQS_")}, {UEnvQueryContext::StaticClass(), TEXT("EQSC_")},
+		{
+			UEnvQuery::StaticClass(),
+			TEXT("EQS_")
+		},
+		{
+			UEnvQueryContext::StaticClass(),
+			TEXT("EQSC_")
+		},
 
 		// Input
-		{UInputAction::StaticClass(), TEXT("IA_")}, {UInputMappingContext::StaticClass(), TEXT("IMC_")},
+		{
+			UInputAction::StaticClass(),
+			TEXT("IA_")
+		},
+		{
+			UInputMappingContext::StaticClass(),
+			TEXT("IMC_")
+		},
 	};
 
 	return PrefixMap;
@@ -165,9 +305,30 @@ const TMap<FName, FString>& UBertaAssetNamingUtils::GetOptionalPluginPrefixes()
 	// without breaking backward compatibility for thousands of projects.
 	static const TMap<FName, FString> OptionalPrefixes = {
 		// Gameplay Ability System
-		{FName(TEXT("GameplayAbility")), TEXT("GA_")}, {FName(TEXT("GameplayEffect")), TEXT("GE_")},
-		{FName(TEXT("GameplayCueNotify_Static")), TEXT("GC_")}, {FName(TEXT("GameplayCueNotify_Actor")), TEXT("GC_")},
-		{FName(TEXT("GameplayAbilityBlueprint")), TEXT("GA_")}, {FName(TEXT("GameplayEffectBlueprint")), TEXT("GE_")},
+		{
+			FName(TEXT("GameplayAbility")),
+			TEXT("GA_")
+		},
+		{
+			FName(TEXT("GameplayEffect")),
+			TEXT("GE_")
+		},
+		{
+			FName(TEXT("GameplayCueNotify_Static")),
+			TEXT("GC_")
+		},
+		{
+			FName(TEXT("GameplayCueNotify_Actor")),
+			TEXT("GC_")
+		},
+		{
+			FName(TEXT("GameplayAbilityBlueprint")),
+			TEXT("GA_")
+		},
+		{
+			FName(TEXT("GameplayEffectBlueprint")),
+			TEXT("GE_")
+		},
 	};
 
 	return OptionalPrefixes;

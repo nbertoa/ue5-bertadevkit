@@ -39,8 +39,7 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable,
 		Category = "BertaDevKit|World|Queries",
-		meta = (WorldContext = "WorldContextObject", DeterminesOutputType = "ActorClass", DynamicOutputParam =
-			"OutActors"))
+		meta = (WorldContext = "WorldContextObject", DeterminesOutputType = "ActorClass", DynamicOutputParam = "OutActors"))
 	static void GetActorsInRadius(const UObject* WorldContextObject,
 	                              FVector Origin,
 	                              float Radius,
@@ -96,8 +95,7 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable,
 		Category = "BertaDevKit|World|Queries",
-		meta = (WorldContext = "WorldContextObject", DeterminesOutputType = "ActorClass", DynamicOutputParam =
-			"OutActors"))
+		meta = (WorldContext = "WorldContextObject", DeterminesOutputType = "ActorClass", DynamicOutputParam = "OutActors"))
 	static void GetAllActorsOfClass(const UObject* WorldContextObject,
 	                                TSubclassOf<AActor> ActorClass,
 	                                FName RequiredTag,

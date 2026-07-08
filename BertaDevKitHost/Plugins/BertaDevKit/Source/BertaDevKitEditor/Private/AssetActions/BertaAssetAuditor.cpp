@@ -56,8 +56,7 @@ void UBertaAssetAuditor::ResolveAssetScope(TArray<FAssetData>& OutAssets)
 		return;
 	}
 
-	const FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(
-		TEXT("AssetRegistry"));
+	const FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
 
 	FARFilter Filter;
 	Filter.bRecursivePaths = true;
@@ -149,9 +148,7 @@ void UBertaAssetAuditor::AuditAssetNaming()
 		{
 			UE_LOG(LogBertaDevKitEditor,
 			       Warning,
-			       TEXT(
-				       "[UBertaAssetAuditor::AuditAssetNaming] VIOLATION — Asset: %s | Class: %s | Expected prefix: %s | Path: %s"
-			       ),
+			       TEXT( "[UBertaAssetAuditor::AuditAssetNaming] VIOLATION — Asset: %s | Class: %s | Expected prefix: %s | Path: %s" ),
 			       *AssetName,
 			       *AssetClass->GetName(),
 			       **FoundPrefix,
@@ -166,18 +163,14 @@ void UBertaAssetAuditor::AuditAssetNaming()
 	       TEXT("[UBertaAssetAuditor::AuditAssetNaming] Audit complete — %d violation(s) found."),
 	       ViolationCount);
 
-	const FText NotificationText = ViolationCount > 0
-		                               ? FText::Format(NSLOCTEXT("BertaDevKit",
-		                                                         "AuditViolations",
-		                                                         "Asset Audit: {0} violation(s) found. See Output Log."),
-		                                               FText::AsNumber(ViolationCount))
-		                               : NSLOCTEXT("BertaDevKit",
-		                                           "AuditClean",
-		                                           "Asset Audit: No violations found.");
+	const FText NotificationText = ViolationCount > 0 ? FText::Format(NSLOCTEXT("BertaDevKit",
+	                                                                            "AuditViolations",
+	                                                                            "Asset Audit: {0} violation(s) found. See Output Log."),
+	                                                                  FText::AsNumber(ViolationCount)) : NSLOCTEXT("BertaDevKit",
+	                                                                                                               "AuditClean",
+	                                                                                                               "Asset Audit: No violations found.");
 
-	const SNotificationItem::ECompletionState NotificationState = ViolationCount > 0
-		                                                              ? SNotificationItem::CS_Fail
-		                                                              : SNotificationItem::CS_Success;
+	const SNotificationItem::ECompletionState NotificationState = ViolationCount > 0 ? SNotificationItem::CS_Fail : SNotificationItem::CS_Success;
 
 	ShowNotification(NotificationText,
 	                 NotificationState);
@@ -300,9 +293,7 @@ void UBertaAssetAuditor::FixAssetNaming()
 	                                             FText::AsNumber(RenamedCount),
 	                                             FText::AsNumber(SkippedCount));
 
-	const SNotificationItem::ECompletionState NotificationState = SkippedCount > 0
-		                                                              ? SNotificationItem::CS_Fail
-		                                                              : SNotificationItem::CS_Success;
+	const SNotificationItem::ECompletionState NotificationState = SkippedCount > 0 ? SNotificationItem::CS_Fail : SNotificationItem::CS_Success;
 
 	ShowNotification(NotificationText,
 	                 NotificationState);

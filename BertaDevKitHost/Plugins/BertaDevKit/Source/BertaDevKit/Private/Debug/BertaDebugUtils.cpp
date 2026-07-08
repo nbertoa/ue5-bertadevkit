@@ -147,9 +147,7 @@ FString UBertaDebugUtils::BuildContextMessage(const UObject* WorldContext,
 {
 	// If WorldContext is invalid, fall back to a visible "NULL" label rather than
 	// silently dropping caller information — a visible NULL is easier to debug.
-	const FString ContextName = IsValid(WorldContext)
-		                            ? WorldContext->GetName()
-		                            : TEXT("NULL");
+	const FString ContextName = IsValid(WorldContext) ? WorldContext->GetName() : TEXT("NULL");
 
 	return FString::Printf(TEXT("[%s] %s"),
 	                       *ContextName,
@@ -160,9 +158,12 @@ FColor UBertaDebugUtils::GetColorForVerbosity(const EBertaLogVerbosity Verbosity
 {
 	switch (Verbosity)
 	{
-	case EBertaLogVerbosity::Warning: return FColor::Yellow;
-	case EBertaLogVerbosity::Error: return FColor::Red;
-	default: return FColor::Cyan;
+		case EBertaLogVerbosity::Warning:
+			return FColor::Yellow;
+		case EBertaLogVerbosity::Error:
+			return FColor::Red;
+		default:
+			return FColor::Cyan;
 	}
 }
 
@@ -188,39 +189,39 @@ void UBertaDebugUtils::LogToOutput(const FName& CategoryName,
 {
 	switch (Verbosity)
 	{
-	case EBertaLogVerbosity::Log:
-		FMsg::Logf(__FILE__,
-		           __LINE__,
-		           CategoryName,
-		           ELogVerbosity::Log,
-		           TEXT("%s"),
-		           *Message);
-		break;
+		case EBertaLogVerbosity::Log:
+			FMsg::Logf(__FILE__,
+			           __LINE__,
+			           CategoryName,
+			           ELogVerbosity::Log,
+			           TEXT("%s"),
+			           *Message);
+			break;
 
-	case EBertaLogVerbosity::Warning:
-		FMsg::Logf(__FILE__,
-		           __LINE__,
-		           CategoryName,
-		           ELogVerbosity::Warning,
-		           TEXT("%s"),
-		           *Message);
-		break;
+		case EBertaLogVerbosity::Warning:
+			FMsg::Logf(__FILE__,
+			           __LINE__,
+			           CategoryName,
+			           ELogVerbosity::Warning,
+			           TEXT("%s"),
+			           *Message);
+			break;
 
-	case EBertaLogVerbosity::Error:
-		FMsg::Logf(__FILE__,
-		           __LINE__,
-		           CategoryName,
-		           ELogVerbosity::Error,
-		           TEXT("%s"),
-		           *Message);
-		break;
+		case EBertaLogVerbosity::Error:
+			FMsg::Logf(__FILE__,
+			           __LINE__,
+			           CategoryName,
+			           ELogVerbosity::Error,
+			           TEXT("%s"),
+			           *Message);
+			break;
 
-	default:
-		// A new EBertaLogVerbosity value was added without updating this switch.
-		// Fail loudly in development so the gap is caught immediately.
-		ensureMsgf(false,
-		           TEXT("LogToOutput: unhandled EBertaLogVerbosity value %d — add a case for it."),
-		           static_cast<int32>(Verbosity));
-		break;
+		default:
+			// A new EBertaLogVerbosity value was added without updating this switch.
+			// Fail loudly in development so the gap is caught immediately.
+			ensureMsgf(false,
+			           TEXT("LogToOutput: unhandled EBertaLogVerbosity value %d — add a case for it."),
+			           static_cast<int32>(Verbosity));
+			break;
 	}
 }

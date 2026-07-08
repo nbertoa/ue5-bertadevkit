@@ -48,8 +48,7 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable,
 		Category = "Berta|Debug|Draw",
-		meta = (WorldContext = "WorldContextObject", DevelopmentOnly, DisplayName = "Draw Debug Sphere", AdvancedDisplay
-			= "Segments, Thickness"))
+		meta = (WorldContext = "WorldContextObject", DevelopmentOnly, DisplayName = "Draw Debug Sphere", AdvancedDisplay = "Segments, Thickness"))
 	static void DrawSphere(const UObject* WorldContextObject,
 	                       bool bEnabled = true,
 	                       FVector Center = FVector::ZeroVector,
@@ -77,8 +76,7 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable,
 		Category = "Berta|Debug|Draw",
-		meta = (DevelopmentOnly, DisplayName = "Draw Debug Sphere From Component", AdvancedDisplay =
-			"Segments, Thickness"))
+		meta = (DevelopmentOnly, DisplayName = "Draw Debug Sphere From Component", AdvancedDisplay = "Segments, Thickness"))
 	static void DrawSphereFromComponent(const USphereComponent* SphereComponent,
 	                                    bool bEnabled = true,
 	                                    FLinearColor Color = FLinearColor::Red,
@@ -104,8 +102,7 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable,
 		Category = "Berta|Debug|Draw",
-		meta = (WorldContext = "WorldContextObject", DevelopmentOnly, DisplayName = "Draw Debug Line", AdvancedDisplay =
-			"Thickness"))
+		meta = (WorldContext = "WorldContextObject", DevelopmentOnly, DisplayName = "Draw Debug Line", AdvancedDisplay = "Thickness"))
 	static void DrawLine(const UObject* WorldContextObject,
 	                     bool bEnabled = true,
 	                     FVector Start = FVector::ZeroVector,
@@ -135,8 +132,7 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable,
 		Category = "Berta|Debug|Draw",
-		meta = (WorldContext = "WorldContextObject", DevelopmentOnly, DisplayName = "Draw Debug Box", AdvancedDisplay =
-			"Thickness"))
+		meta = (WorldContext = "WorldContextObject", DevelopmentOnly, DisplayName = "Draw Debug Box", AdvancedDisplay = "Thickness"))
 	static void DrawBox(const UObject* WorldContextObject,
 	                    bool bEnabled = true,
 	                    FVector Center = FVector::ZeroVector,
@@ -191,8 +187,7 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable,
 		Category = "Berta|Debug|Draw",
-		meta = (WorldContext = "WorldContextObject", DevelopmentOnly, DisplayName = "Draw Debug Capsule",
-			AdvancedDisplay = "Thickness"))
+		meta = (WorldContext = "WorldContextObject", DevelopmentOnly, DisplayName = "Draw Debug Capsule", AdvancedDisplay = "Thickness"))
 	static void DrawCapsule(const UObject* WorldContextObject,
 	                        bool bEnabled = true,
 	                        FVector Center = FVector::ZeroVector,
@@ -244,8 +239,7 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable,
 		Category = "Berta|Debug|Draw",
-		meta = (WorldContext = "WorldContextObject", DevelopmentOnly, DisplayName = "Draw Debug Point", AdvancedDisplay
-			= "Size"))
+		meta = (WorldContext = "WorldContextObject", DevelopmentOnly, DisplayName = "Draw Debug Point", AdvancedDisplay = "Size"))
 	static void DrawPoint(const UObject* WorldContextObject,
 	                      bool bEnabled = true,
 	                      FVector Location = FVector::ZeroVector,
@@ -273,8 +267,7 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable,
 		Category = "Berta|Debug|Draw",
-		meta = (WorldContext = "WorldContextObject", DevelopmentOnly, DisplayName = "Draw Debug Arrow", AdvancedDisplay
-			= "Thickness"))
+		meta = (WorldContext = "WorldContextObject", DevelopmentOnly, DisplayName = "Draw Debug Arrow", AdvancedDisplay = "Thickness"))
 	static void DrawArrow(const UObject* WorldContextObject,
 	                      bool bEnabled = true,
 	                      FVector Start = FVector::ZeroVector,
@@ -304,8 +297,7 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable,
 		Category = "Berta|Debug|Draw",
-		meta = (WorldContext = "WorldContextObject", DevelopmentOnly, DisplayName = "Draw Debug String", AdvancedDisplay
-			= "FontScale"))
+		meta = (WorldContext = "WorldContextObject", DevelopmentOnly, DisplayName = "Draw Debug String", AdvancedDisplay = "FontScale"))
 	static void DrawString(const UObject* WorldContextObject,
 	                       bool bEnabled = true,
 	                       FVector Location = FVector::ZeroVector,
@@ -334,8 +326,7 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable,
 		Category = "Berta|Debug|Draw",
-		meta = (WorldContext = "WorldContextObject", DevelopmentOnly, DisplayName = "Draw Debug Coordinate System",
-			AdvancedDisplay = "Thickness"))
+		meta = (WorldContext = "WorldContextObject", DevelopmentOnly, DisplayName = "Draw Debug Coordinate System", AdvancedDisplay = "Thickness"))
 	static void DrawCoordinateSystem(const UObject* WorldContextObject,
 	                                 bool bEnabled = true,
 	                                 FVector Location = FVector::ZeroVector,
