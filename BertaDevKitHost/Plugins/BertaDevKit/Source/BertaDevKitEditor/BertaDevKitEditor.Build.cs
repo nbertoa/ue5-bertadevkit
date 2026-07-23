@@ -18,6 +18,7 @@ public class BertaDevKitEditor : ModuleRules
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
+			"AssetRegistry", // AssetRegistryModule
 			"UnrealEd", // UEditorUtilityLibrary, UEditorAssetLibrary
 			"EditorScriptingUtilities", // UEditorAssetLibrary
 			"Niagara", // UNiagaraSystem, UNiagaraEmitter

@@ -484,18 +484,14 @@ void UBertaDebugDraw::DrawCoordinateSystem(const UObject* WorldContextObject,
 	}
 
 	const float ResolvedLifeTime = ResolveLifeTime(Duration);
+	const bool bPersistent = (ResolvedLifeTime < 0.0f);
 
-	// DrawDebugCoordinateSystem has a known engine bug: when bPersistentLines = true
-	// it ignores LifeTime entirely and the lines never clear, even with
-	// FlushPersistentDebugLines. Passing false and relying on LifeTime = -1.0f
-	// for persistence is the correct workaround.
 	// Axis colors are hardcoded by the engine: red = X, green = Y, blue = Z.
 	DrawDebugCoordinateSystem(World,
 	                          Location,
 	                          Rotation,
 	                          AxisLength,
-	                          /*bPersistentLines=*/
-	                          false,
+	                          bPersistent,
 	                          ResolvedLifeTime,
 	                          /*DepthPriority=*/
 	                          0,
