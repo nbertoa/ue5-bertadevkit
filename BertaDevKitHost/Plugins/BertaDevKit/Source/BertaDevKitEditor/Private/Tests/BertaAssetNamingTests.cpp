@@ -119,7 +119,10 @@ bool FBertaAssetNamingBatchTest::RunTest(const FString& Parameters)
 		});
 		TestFalse(TEXT("Invalid target path is rejected"), Result.IsSafe());
 		TestEqual(TEXT("Invalid target conflict count"), Result.Conflicts.Num(), 1);
-		TestEqual(TEXT("Invalid target conflict type"), Result.Conflicts[0].Type, EBertaAssetNamingBatchConflictType::InvalidTarget);
+		if (Result.Conflicts.Num() == 1)
+		{
+			TestEqual(TEXT("Invalid target conflict type"), Result.Conflicts[0].Type, EBertaAssetNamingBatchConflictType::InvalidTarget);
+		}
 	}
 
 	{
@@ -130,7 +133,11 @@ bool FBertaAssetNamingBatchTest::RunTest(const FString& Parameters)
 			return Candidate.TargetObjectPath == TEXT("/Game/AssetNamingBatch/Occupied/SM_Taken.SM_Taken");
 		});
 		TestFalse(TEXT("Occupied target is rejected"), Result.IsSafe());
-		TestEqual(TEXT("Occupied target conflict type"), Result.Conflicts[0].Type, EBertaAssetNamingBatchConflictType::OccupiedTarget);
+		TestEqual(TEXT("Occupied target conflict count"), Result.Conflicts.Num(), 1);
+		if (Result.Conflicts.Num() == 1)
+		{
+			TestEqual(TEXT("Occupied target conflict type"), Result.Conflicts[0].Type, EBertaAssetNamingBatchConflictType::OccupiedTarget);
+		}
 	}
 
 	{
@@ -145,7 +152,11 @@ bool FBertaAssetNamingBatchTest::RunTest(const FString& Parameters)
 			});
 		});
 		TestFalse(TEXT("Chained rename into a candidate source is rejected"), Result.IsSafe());
-		TestEqual(TEXT("Chained rename conflict type"), Result.Conflicts[0].Type, EBertaAssetNamingBatchConflictType::OccupiedTarget);
+		TestEqual(TEXT("Chained rename conflict count"), Result.Conflicts.Num(), 1);
+		if (Result.Conflicts.Num() == 1)
+		{
+			TestEqual(TEXT("Chained rename conflict type"), Result.Conflicts[0].Type, EBertaAssetNamingBatchConflictType::OccupiedTarget);
+		}
 	}
 
 	return true;

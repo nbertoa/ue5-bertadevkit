@@ -2,7 +2,6 @@
 
 #include "AssetToolsModule.h"
 #include "Misc/PackageName.h"
-#include "Misc/Paths.h"
 
 namespace
 {
@@ -39,7 +38,7 @@ bool BertaAssetNamingBatch::BuildCandidate(const FAssetData& AssetData, const FB
 	}
 
 	OutCandidate.TargetPackagePath = FPackageName::GetLongPackagePath(AssetData.PackageName.ToString());
-	OutCandidate.TargetPackageName = FPaths::Combine(OutCandidate.TargetPackagePath, Plan.TargetName);
+	OutCandidate.TargetPackageName = OutCandidate.TargetPackagePath + TEXT("/") + Plan.TargetName;
 	OutCandidate.TargetObjectPath = FString::Printf(TEXT("%s.%s"), *OutCandidate.TargetPackageName, *Plan.TargetName);
 	return true;
 }
@@ -116,16 +115,27 @@ bool BertaAssetNamingBatch::Execute(const TArray<FBertaAssetNamingBatchCandidate
 		return false;
 	}
 
+	for (int32 CandidateIndex = 0; CandidateIndex < Candidates.Num(); ++CandidateIndex)
+	{
+		UObject* Asset = LoadedAssets[CandidateIndex];
+		const FBertaAssetNamingBatchCandidate& Candidate = Candidates[CandidateIndex];
+		if (!ensureMsgf(IsValid(Asset), TEXT("Asset naming batch execution requires a valid loaded asset at index %d for source %s."), CandidateIndex, *Candidate.SourceObjectPath))
+		{
+			return false;
+		}
+
+		const FString CurrentObjectPath = Asset->GetPathName();
+		if (!ensureMsgf(CurrentObjectPath == Candidate.SourceObjectPath, TEXT("Asset naming batch source mismatch at index %d: expected %s, loaded asset is %s."), CandidateIndex, *Candidate.SourceObjectPath, *CurrentObjectPath))
+		{
+			return false;
+		}
+	}
+
 	TArray<FAssetRenameData> RenameData;
 	RenameData.Reserve(Candidates.Num());
 	for (int32 CandidateIndex = 0; CandidateIndex < Candidates.Num(); ++CandidateIndex)
 	{
 		UObject* Asset = LoadedAssets[CandidateIndex];
-		if (!ensureMsgf(IsValid(Asset), TEXT("Asset naming batch execution requires valid loaded assets.")))
-		{
-			return false;
-		}
-
 		const FBertaAssetNamingBatchCandidate& Candidate = Candidates[CandidateIndex];
 		RenameData.Emplace(Asset, Candidate.TargetPackagePath, Candidate.Plan.TargetName);
 	}
