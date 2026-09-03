@@ -59,16 +59,28 @@ bool FBertaAssetNamingCoreTest::RunTest(const FString& Parameters)
 {
 	TestPlan(*this, MakeAssetData(TEXT("Rock"), UStaticMesh::StaticClass()), EBertaAssetNamingStatus::NeedsRename, TEXT("SM_"), TEXT("SM_Rock"));
 	TestPlan(*this, MakeAssetData(TEXT("SM_Rock"), UStaticMesh::StaticClass()), EBertaAssetNamingStatus::AlreadyCorrect, TEXT("SM_"), TEXT("SM_Rock"));
+	TestPlan(*this, MakeAssetData(TEXT("M_Rock"), UStaticMesh::StaticClass()), EBertaAssetNamingStatus::NeedsRename, TEXT("SM_"), TEXT("SM_Rock"));
+	TestPlan(*this, MakeAssetData(TEXT("T_Rock"), UStaticMesh::StaticClass()), EBertaAssetNamingStatus::NeedsRename, TEXT("SM_"), TEXT("SM_Rock"));
+	TestPlan(*this, MakeAssetData(TEXT("BP_Rock"), UStaticMesh::StaticClass()), EBertaAssetNamingStatus::NeedsRename, TEXT("SM_"), TEXT("SM_Rock"));
+	TestPlan(*this, MakeAssetData(TEXT("XYZ_Rock"), UStaticMesh::StaticClass()), EBertaAssetNamingStatus::NeedsRename, TEXT("SM_"), TEXT("SM_XYZ_Rock"));
+	TestPlan(*this, MakeAssetData(TEXT("My_Rock"), UStaticMesh::StaticClass()), EBertaAssetNamingStatus::NeedsRename, TEXT("SM_"), TEXT("SM_My_Rock"));
+	TestPlan(*this, MakeAssetData(TEXT("M_T_Rock"), UStaticMesh::StaticClass()), EBertaAssetNamingStatus::NeedsRename, TEXT("SM_"), TEXT("SM_T_Rock"));
+	TestPlan(*this, MakeAssetData(TEXT("M_"), UStaticMesh::StaticClass()), EBertaAssetNamingStatus::NeedsRename, TEXT("SM_"), TEXT("SM_M_"));
 	TestPlan(*this, MakeAssetData(TEXT("Actor"), UBlueprint::StaticClass(), TEXT("Class'/Script/Engine.Actor'")), EBertaAssetNamingStatus::NeedsRename, TEXT("BP_"), TEXT("BP_Actor"));
+	TestPlan(*this, MakeAssetData(TEXT("CH_Foo"), UBlueprint::StaticClass(), TEXT("Class'/Script/Engine.Actor'")), EBertaAssetNamingStatus::NeedsRename, TEXT("BP_"), TEXT("BP_Foo"));
 	TestPlan(*this, MakeAssetData(TEXT("Character"), UBlueprint::StaticClass(), TEXT("Class'/Script/Engine.Character'")), EBertaAssetNamingStatus::NeedsRename, TEXT("CH_"), TEXT("CH_Character"));
+	TestPlan(*this, MakeAssetData(TEXT("BP_Hero"), UBlueprint::StaticClass(), TEXT("Class'/Script/Engine.Character'")), EBertaAssetNamingStatus::NeedsRename, TEXT("CH_"), TEXT("CH_Hero"));
 	TestPlan(*this, MakeAssetData(TEXT("ChildCharacter"), UBlueprint::StaticClass(), TEXT("Class'/Script/Engine.Character'")), EBertaAssetNamingStatus::NeedsRename, TEXT("CH_"), TEXT("CH_ChildCharacter"));
 	TestPlan(*this, MakeAssetData(TEXT("Widget"), UBlueprint::StaticClass(), TEXT("Class'/Script/UMG.UserWidget'")), EBertaAssetNamingStatus::NeedsRename, TEXT("WBP_"), TEXT("WBP_Widget"));
 	TestPlan(*this, MakeAssetData(TEXT("Anim"), UAnimBlueprint::StaticClass()), EBertaAssetNamingStatus::NeedsRename, TEXT("ABP_"), TEXT("ABP_Anim"));
 	TestPlan(*this, MakeAssetData(TEXT("Ability"), UBlueprint::StaticClass(), TEXT("Class'/Script/GameplayAbilities.GameplayAbility'")), EBertaAssetNamingStatus::NeedsRename, TEXT("GA_"), TEXT("GA_Ability"));
+	TestPlan(*this, MakeAssetData(TEXT("GE_Fireball"), UBlueprint::StaticClass(), TEXT("Class'/Script/GameplayAbilities.GameplayAbility'")), EBertaAssetNamingStatus::NeedsRename, TEXT("GA_"), TEXT("GA_Fireball"));
 	TestPlan(*this, MakeAssetData(TEXT("AbilityBlueprint"), FTopLevelAssetPath(TEXT("/Script/GameplayAbilities"), TEXT("GameplayAbilityBlueprint"))), EBertaAssetNamingStatus::NeedsRename, TEXT("GA_"), TEXT("GA_AbilityBlueprint"));
 	TestPlan(*this, MakeAssetData(TEXT("M_Foo_Inst"), UMaterialInstanceConstant::StaticClass()), EBertaAssetNamingStatus::NeedsRename, TEXT("MI_"), TEXT("MI_Foo"));
+	TestPlan(*this, MakeAssetData(TEXT("T_Foo_Inst"), UMaterialInstanceConstant::StaticClass()), EBertaAssetNamingStatus::NeedsRename, TEXT("MI_"), TEXT("MI_Foo"));
 	TestPlan(*this, MakeAssetData(TEXT("MI_Foo"), UMaterialInstanceConstant::StaticClass()), EBertaAssetNamingStatus::AlreadyCorrect, TEXT("MI_"), TEXT("MI_Foo"));
 	TestPlan(*this, MakeAssetData(TEXT("Foo_Montage"), UAnimMontage::StaticClass()), EBertaAssetNamingStatus::NeedsRename, TEXT("AM_"), TEXT("AM_Foo"));
+	TestPlan(*this, MakeAssetData(TEXT("AS_Foo_Montage"), UAnimMontage::StaticClass()), EBertaAssetNamingStatus::NeedsRename, TEXT("AM_"), TEXT("AM_Foo"));
 	TestPlan(*this, MakeAssetData(TEXT("Unknown"), UObject::StaticClass()), EBertaAssetNamingStatus::UnknownClass, TEXT(""), TEXT(""));
 	return true;
 }

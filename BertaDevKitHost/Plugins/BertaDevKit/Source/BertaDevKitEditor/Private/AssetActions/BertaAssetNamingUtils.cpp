@@ -48,6 +48,26 @@ namespace
 {
 	const FString GenericBlueprintPrefix(TEXT("BP_"));
 
+	const FString* FindLeadingKnownPrefix(const FString& Name)
+	{
+		const FString* LongestMatch = nullptr;
+		auto FindLongestMatch = [&Name, &LongestMatch](const auto& Prefixes)
+		{
+			for (const auto& Pair : Prefixes)
+			{
+				const FString& Candidate = Pair.Value;
+				if (Name.StartsWith(Candidate) && (!LongestMatch || Candidate.Len() > LongestMatch->Len()))
+				{
+					LongestMatch = &Candidate;
+				}
+			}
+		};
+
+		FindLongestMatch(UBertaAssetNamingUtils::GetPrefixMap());
+		FindLongestMatch(UBertaAssetNamingUtils::GetOptionalPluginPrefixes());
+		return LongestMatch;
+	}
+
 	const FString* FindPrefixInHierarchy(UClass* Class)
 	{
 		const TMap<UClass*, FString>& Prefixes = UBertaAssetNamingUtils::GetPrefixMap();
@@ -147,6 +167,11 @@ namespace
 		else if (AssetClass && AssetClass->IsChildOf(UAnimMontage::StaticClass()))
 		{
 			NameToPrefix.RemoveFromEnd(TEXT("_Montage"));
+		}
+
+		if (const FString* KnownPrefix = FindLeadingKnownPrefix(NameToPrefix); KnownPrefix && NameToPrefix.Len() > KnownPrefix->Len())
+		{
+			NameToPrefix.RightChopInline(KnownPrefix->Len());
 		}
 
 		return Prefix + NameToPrefix;
