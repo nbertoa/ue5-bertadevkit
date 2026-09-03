@@ -212,27 +212,25 @@ bool UBertaWorldValidation::ValidateWorldBounds(const AActor* Actor,
 bool UBertaWorldValidation::ValidateLightMobility(const AActor* Actor,
                                                   const EComponentMobility::Type ExpectedMobility)
 {
-	// Only evaluate actors that own at least one light component.
-	const ULightComponentBase* LightComponent = Actor->FindComponentByClass<ULightComponentBase>();
-	if (!IsValid(LightComponent))
+	bool bFoundViolation = false;
+	TArray<ULightComponentBase*> LightComponents;
+	Actor->GetComponents<ULightComponentBase>(LightComponents);
+
+	for (const ULightComponentBase* LightComponent : LightComponents)
 	{
-		return false;
+		if (!IsValid(LightComponent) || LightComponent->Mobility == ExpectedMobility)
+		{
+			continue;
+		}
+
+		UE_LOG(LogBertaDevKitEditor, Warning,
+		       TEXT("[BertaWorldValidation] Light mobility mismatch - Actor: '%s', Component: '%s', Expected: %s, Found: %s"),
+		       *Actor->GetActorLabel(), *LightComponent->GetName(),
+		       *MobilityToString(ExpectedMobility), *MobilityToString(LightComponent->Mobility));
+		bFoundViolation = true;
 	}
 
-	const EComponentMobility::Type ActualMobility = LightComponent->Mobility;
-	if (ActualMobility == ExpectedMobility)
-	{
-		return false;
-	}
-
-	UE_LOG(LogBertaDevKitEditor,
-	       Warning,
-	       TEXT("[BertaWorldValidation] Light mobility mismatch — Actor: '%s', Expected: %s, Found: %s"),
-	       *Actor->GetActorLabel(),
-	       *MobilityToString(ExpectedMobility),
-	       *MobilityToString(ActualMobility));
-
-	return true;
+	return bFoundViolation;
 }
 
 bool UBertaWorldValidation::ValidateActorScale(const AActor* Actor)

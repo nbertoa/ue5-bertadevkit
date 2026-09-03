@@ -11,6 +11,7 @@ public class BertaDevKitEditor : ModuleRules
 			"Core",
 			"CoreUObject",
 			"Engine",
+			"AssetRegistry", // FAssetData is part of the public API.
 			"AssetTools", // IAssetTools, FAssetToolsModule
 			"Blutility", // UAssetActionUtility
 			"BertaDevKit",
@@ -18,7 +19,6 @@ public class BertaDevKitEditor : ModuleRules
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
-			"AssetRegistry", // AssetRegistryModule
 			"UnrealEd", // UEditorUtilityLibrary, UEditorAssetLibrary
 			"EditorScriptingUtilities", // UEditorAssetLibrary
 			"Niagara", // UNiagaraSystem, UNiagaraEmitter

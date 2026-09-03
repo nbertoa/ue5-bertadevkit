@@ -2,6 +2,7 @@
 
 #include "Log/BertaDevKitEditorLog.h"
 
+#include "AssetToolsModule.h"
 #include "AIController.h"
 #include "BehaviorTree/BlackboardData.h"
 #include "BehaviorTree/BTDecorator.h"
@@ -38,6 +39,7 @@
 #include "Materials/Material.h"
 #include "Materials/MaterialInstanceConstant.h"
 #include "Materials/MaterialParameterCollection.h"
+#include "Misc/PackageName.h"
 #include "NiagaraEmitter.h"
 #include "NiagaraSystem.h"
 #include "Particles/ParticleSystem.h"
@@ -519,8 +521,17 @@ EBertaRenameResult UBertaAssetNamingUtils::RenameAssetWithPrefix(UObject* const 
 	}
 
 	const FString NewName = *FoundPrefix + CleanName;
-	UEditorUtilityLibrary::RenameAsset(Asset,
-	                                   NewName);
+	const FString PackagePath = FPackageName::GetLongPackagePath(Asset->GetOutermost()->GetName());
+	TArray<FAssetRenameData> RenameData;
+	RenameData.Emplace(Asset, PackagePath, NewName);
+
+	if (!FAssetToolsModule::GetModule().Get().RenameAssets(RenameData))
+	{
+		UE_LOG(LogBertaDevKitEditor, Error,
+		       TEXT("UBertaAssetNamingUtils::RenameAssetWithPrefix - failed to rename '%s' to '%s'."),
+		       *Asset->GetName(), *NewName);
+		return EBertaRenameResult::Failed;
+	}
 
 	return EBertaRenameResult::Renamed;
 }

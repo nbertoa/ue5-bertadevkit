@@ -1,5 +1,7 @@
 #pragma once
 
+#include "CoreMinimal.h"
+#include "Engine/EngineTypes.h"
 #include "BertaWorldValidation.generated.h"
 
 /**

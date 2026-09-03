@@ -215,7 +215,7 @@ public:
 	 *
 	 * @param TestAngle      The angle to test, in degrees.
 	 * @param CenterAngle    Center of the arc, in degrees.
-	 * @param HalfArcDeg     Half the arc width, in degrees. Must be in [0, 180].
+	 * @param HalfArcDeg     Half the arc width, in degrees. Values are clamped to [0, 180].
 	 * @return               True if TestAngle is within the arc.
 	 */
 	UFUNCTION(BlueprintCallable,

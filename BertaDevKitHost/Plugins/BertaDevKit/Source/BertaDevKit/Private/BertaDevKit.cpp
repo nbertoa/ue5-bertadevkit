@@ -1,5 +1,6 @@
 #include "BertaDevKit.h"
 
+#include "Debug/BertaScreenStats.h"
 #include "Modules/ModuleManager.h"
 
 void FBertaDevKitModule::StartupModule()
@@ -11,8 +12,7 @@ void FBertaDevKitModule::StartupModule()
 
 void FBertaDevKitModule::ShutdownModule()
 {
-	// Nothing to clean up yet.
-	// Future use: unregister anything registered in StartupModule.
+	UBertaScreenStats::Shutdown();
 }
 
 // Registers this module with the Unreal Engine module system.

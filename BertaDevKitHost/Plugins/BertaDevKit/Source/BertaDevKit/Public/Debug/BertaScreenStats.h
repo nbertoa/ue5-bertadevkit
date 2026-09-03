@@ -172,6 +172,9 @@ public:
 		meta = (DevelopmentOnly))
 	static void Clear();
 
+	/** Releases the frame delegate and transient entries before module unload. */
+	static void Shutdown();
+
 private:
 	/**
 	 * Internal setter used by all public Set* functions.
@@ -206,4 +209,7 @@ private:
 	 * Defined as a static local inside the .cpp to avoid static initialization order issues.
 	 */
 	static TMap<FName, FBertaStatEntry>& GetEntries();
+
+	/** Stores the OnBeginFrame registration so it can be removed on shutdown. */
+	static FDelegateHandle& GetRenderDelegateHandle();
 };

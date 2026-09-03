@@ -22,7 +22,10 @@ enum class EBertaRenameResult : uint8
 	AlreadyCorrect,
 
 	/** No prefix entry exists in the map for this asset's class — asset was skipped. */
-	UnknownClass
+	UnknownClass,
+
+	/** The AssetTools rename operation failed; the original asset was left unchanged. */
+	Failed
 };
 
 /**

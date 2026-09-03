@@ -18,6 +18,12 @@ TMap<FName, FBertaStatEntry>& UBertaScreenStats::GetEntries()
 	return Entries;
 }
 
+FDelegateHandle& UBertaScreenStats::GetRenderDelegateHandle()
+{
+	static FDelegateHandle Handle;
+	return Handle;
+}
+
 // --------------------------------------------------------------------
 // Registration
 // --------------------------------------------------------------------
@@ -28,9 +34,8 @@ void UBertaScreenStats::EnsureRegistered()
 	// This is safer than a class-level static member: initialization is guaranteed
 	// to occur on first call, avoiding the static initialization order fiasco.
 	// No locking needed — the editor and gameplay code that calls Set* is single-threaded.
-	static bool bIsRegistered = false;
-
-	if (bIsRegistered)
+	FDelegateHandle& RenderDelegateHandle = GetRenderDelegateHandle();
+	if (RenderDelegateHandle.IsValid())
 	{
 		return;
 	}
@@ -38,9 +43,7 @@ void UBertaScreenStats::EnsureRegistered()
 	// Bind to OnBeginFrame so RenderStats fires once per frame automatically.
 	// No need to unregister manually — this delegate fires for the lifetime
 	// of the Engine and the static function pointer is always valid.
-	FCoreDelegates::OnBeginFrame.AddStatic(&UBertaScreenStats::RenderStats);
-
-	bIsRegistered = true;
+	RenderDelegateHandle = FCoreDelegates::OnBeginFrame.AddStatic(&UBertaScreenStats::RenderStats);
 
 	UE_LOG(LogBertaDevKit,
 	       Log,
@@ -107,6 +110,11 @@ void UBertaScreenStats::SetEntry(const FName Name,
                                  const FString& FormattedValue,
                                  const FLinearColor Color)
 {
+	if (!UBertaDevKitSettings::Get()->bScreenStatsEnabled)
+	{
+		return;
+	}
+
 	// Lazy registration — only pay the delegate cost if the system is actually used.
 	EnsureRegistered();
 
@@ -234,4 +242,16 @@ void UBertaScreenStats::Remove(const FName Name)
 void UBertaScreenStats::Clear()
 {
 	GetEntries().Reset();
+}
+
+void UBertaScreenStats::Shutdown()
+{
+	FDelegateHandle& RenderDelegateHandle = GetRenderDelegateHandle();
+	if (RenderDelegateHandle.IsValid())
+	{
+		FCoreDelegates::OnBeginFrame.Remove(RenderDelegateHandle);
+		RenderDelegateHandle.Reset();
+	}
+
+	Clear();
 }

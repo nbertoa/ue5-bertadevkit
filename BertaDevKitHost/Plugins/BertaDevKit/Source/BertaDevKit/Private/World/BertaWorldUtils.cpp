@@ -78,6 +78,13 @@ void UBertaWorldUtils::GetActorsInRadius(const UObject* WorldContextObject,
 		return;
 	}
 
+	if (Radius < 0.0f)
+	{
+		UE_LOG(LogBertaDevKit, Warning,
+		       TEXT("[BertaWorldUtils::GetActorsInRadius] Radius is negative - returning empty array."));
+		return;
+	}
+
 	// Precompute squared radius to avoid a sqrt per actor during distance check.
 	const float RadiusSquared = Radius * Radius;
 
@@ -129,6 +136,13 @@ AActor* UBertaWorldUtils::GetClosestActorInRadius(const UObject* WorldContextObj
 		return nullptr;
 	}
 
+	if (Radius < 0.0f)
+	{
+		UE_LOG(LogBertaDevKit, Warning,
+		       TEXT("[BertaWorldUtils::GetClosestActorInRadius] Radius is negative - returning null."));
+		return nullptr;
+	}
+
 	AActor* ClosestActor = nullptr;
 	float ClosestDistanceSquared = Radius * Radius;
 
@@ -147,7 +161,7 @@ AActor* UBertaWorldUtils::GetClosestActorInRadius(const UObject* WorldContextObj
 
 		// Reject actors outside the current closest distance first.
 		// Strict less-than: on a tie, the first actor found wins.
-		if (DistanceSquared >= ClosestDistanceSquared)
+		if (DistanceSquared > ClosestDistanceSquared)
 		{
 			continue;
 		}

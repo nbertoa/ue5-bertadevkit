@@ -160,9 +160,12 @@ bool UBertaMathUtils::IsAngleInArc(const float TestAngle,
 	// Convert the problem to a 1D distance check on the circle.
 	// ShortestAngleDelta gives us the shortest path from center to test,
 	// so comparing its absolute value to the half-arc handles wrap-around correctly.
+	const float ClampedHalfArcDeg = FMath::Clamp(HalfArcDeg,
+	                                             0.0f,
+	                                             180.0f);
 	const float DeltaFromCenter = FMath::Abs(ShortestAngleDelta(CenterAngle,
 	                                                            TestAngle));
-	return DeltaFromCenter <= HalfArcDeg;
+	return DeltaFromCenter <= ClampedHalfArcDeg;
 }
 
 // -----------------------------------------------------------------------------
@@ -302,7 +305,11 @@ bool UBertaMathUtils::ProjectileImpactPoint(const FVector Origin,
 
 	float TimeOfImpact = -1.0f;
 
-	if (T1 >= 0.0f)
+	if (T1 >= 0.0f && T2 >= 0.0f)
+	{
+		TimeOfImpact = FMath::Min(T1, T2);
+	}
+	else if (T1 >= 0.0f)
 	{
 		TimeOfImpact = T1;
 	}
@@ -317,6 +324,12 @@ bool UBertaMathUtils::ProjectileImpactPoint(const FVector Origin,
 		return false;
 	}
 
-	OutImpactPoint = Origin + LaunchVelocity * TimeOfImpact;
+	const FVector HorizontalDisplacement = FVector(LaunchVelocity.X,
+	                                               LaunchVelocity.Y,
+	                                               0.0f) * TimeOfImpact;
+	const float VerticalDisplacement = LaunchVelocity.Z * TimeOfImpact + 0.5f * GravityZ * TimeOfImpact * TimeOfImpact;
+	OutImpactPoint = Origin + HorizontalDisplacement + FVector(0.0f,
+	                                                            0.0f,
+	                                                            VerticalDisplacement);
 	return true;
 }

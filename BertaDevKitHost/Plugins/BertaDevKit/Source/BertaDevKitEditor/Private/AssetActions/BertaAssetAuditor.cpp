@@ -4,10 +4,13 @@
 #include "Log/BertaDevKitEditorLog.h"
 
 #include "AssetRegistry/AssetRegistryModule.h"
+#include "AssetToolsModule.h"
 #include "EditorUtilityLibrary.h"
 #include "Engine/Blueprint.h"
+#include "Misc/MessageDialog.h"
 #include "Framework/Notifications/NotificationManager.h"
 #include "Materials/MaterialInstanceConstant.h"
+#include "Misc/PackageName.h"
 #include "Widgets/Notifications/SNotificationList.h"
 
 // ----------------------------------------------------------------
@@ -16,6 +19,12 @@
 
 namespace
 {
+	bool IsProjectAsset(const FAssetData& AssetData)
+	{
+		const FString PackagePath = AssetData.PackagePath.ToString();
+		return PackagePath == TEXT("/Game") || PackagePath.StartsWith(TEXT("/Game/"));
+	}
+
 	/** Builds and displays an FNotificationInfo toast with the given message. */
 	void ShowNotification(const FText& Message,
 	                      const SNotificationItem::ECompletionState State)
@@ -46,7 +55,13 @@ void UBertaAssetAuditor::ResolveAssetScope(TArray<FAssetData>& OutAssets)
 
 	if (!SelectedAssets.IsEmpty())
 	{
-		OutAssets = SelectedAssets;
+		for (const FAssetData& AssetData : SelectedAssets)
+		{
+			if (IsProjectAsset(AssetData))
+			{
+				OutAssets.Add(AssetData);
+			}
+		}
 
 		UE_LOG(LogBertaDevKitEditor,
 		       Log,
@@ -65,7 +80,7 @@ void UBertaAssetAuditor::ResolveAssetScope(TArray<FAssetData>& OutAssets)
 	FString ActiveFolderPath;
 	const bool bHasActivePath = UEditorUtilityLibrary::GetCurrentContentBrowserPath(ActiveFolderPath);
 
-	if (bHasActivePath && !ActiveFolderPath.IsEmpty())
+	if (bHasActivePath && (ActiveFolderPath == TEXT("/Game") || ActiveFolderPath.StartsWith(TEXT("/Game/"))))
 	{
 		Filter.PackagePaths.Add(FName(*ActiveFolderPath));
 
@@ -189,6 +204,24 @@ void UBertaAssetAuditor::FixAssetNaming()
 	TArray<FAssetData> Assets;
 	ResolveAssetScope(Assets);
 
+	if (Assets.IsEmpty())
+	{
+		ShowNotification(NSLOCTEXT("BertaDevKit", "NoProjectAssets", "Asset Fix: No project assets in scope."),
+		                 SNotificationItem::CS_None);
+		return;
+	}
+
+	const FText ConfirmationText = FText::Format(
+		NSLOCTEXT("BertaDevKit", "ConfirmAssetFix",
+		          "Rename up to {0} project asset(s) to match BertaDevKit naming rules? This updates references and cannot be undone as one operation."),
+		FText::AsNumber(Assets.Num()));
+	if (FMessageDialog::Open(EAppMsgType::YesNo, ConfirmationText) != EAppReturnType::Yes)
+	{
+		UE_LOG(LogBertaDevKitEditor, Log,
+		       TEXT("[UBertaAssetAuditor::FixAssetNaming] User cancelled asset rename."));
+		return;
+	}
+
 	int32 RenamedCount = 0;
 	int32 SkippedCount = 0;
 
@@ -269,8 +302,17 @@ void UBertaAssetAuditor::FixAssetNaming()
 		}
 
 		const FString NewName = *FoundPrefix + CleanName;
-		UEditorUtilityLibrary::RenameAsset(LoadedAsset,
-		                                   NewName);
+		const FString PackagePath = FPackageName::GetLongPackagePath(LoadedAsset->GetOutermost()->GetName());
+		TArray<FAssetRenameData> RenameData;
+		RenameData.Emplace(LoadedAsset, PackagePath, NewName);
+		if (!FAssetToolsModule::GetModule().Get().RenameAssets(RenameData))
+		{
+			UE_LOG(LogBertaDevKitEditor, Error,
+			       TEXT("[UBertaAssetAuditor::FixAssetNaming] Failed: %s -> %s"),
+			       *AssetData.AssetName.ToString(), *NewName);
+			++SkippedCount;
+			continue;
+		}
 
 		UE_LOG(LogBertaDevKitEditor,
 		       Log,
