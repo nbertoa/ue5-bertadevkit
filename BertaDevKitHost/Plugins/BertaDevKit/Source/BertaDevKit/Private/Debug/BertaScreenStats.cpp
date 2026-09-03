@@ -5,6 +5,16 @@
 #include "Engine/Engine.h"
 #include "Misc/CoreDelegates.h"
 
+namespace
+{
+	constexpr int32 MaxDecimalPlaces = 9;
+
+	int32 ClampDecimalPlaces(const int32 DecimalPlaces)
+	{
+		return FMath::Clamp(DecimalPlaces, 0, MaxDecimalPlaces);
+	}
+}
+
 // --------------------------------------------------------------------
 // Static Storage
 // --------------------------------------------------------------------
@@ -136,8 +146,7 @@ void UBertaScreenStats::SetFloat(const FName Name,
 	// FString::SanitizeFloat strips trailing zeros — not what we want here.
 	// Instead, use snprintf via FCString for runtime-dynamic precision,
 	// which bypasses the compile-time format string checker entirely.
-	const int32 ClampedDecimals = FMath::Max(0,
-	                                         DecimalPlaces);
+	const int32 ClampedDecimals = ClampDecimalPlaces(DecimalPlaces);
 
 	TCHAR Buffer[64];
 	FCString::Snprintf(Buffer,
@@ -190,8 +199,7 @@ void UBertaScreenStats::SetVector(const FName Name,
                                   const int32 DecimalPlaces,
                                   const FLinearColor Color)
 {
-	const int32 ClampedDecimals = FMath::Max(0,
-	                                         DecimalPlaces);
+	const int32 ClampedDecimals = ClampDecimalPlaces(DecimalPlaces);
 
 	TCHAR BufX[64];
 	TCHAR BufY[64];

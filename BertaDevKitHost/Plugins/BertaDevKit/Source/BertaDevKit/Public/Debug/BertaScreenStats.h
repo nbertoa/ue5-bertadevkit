@@ -60,12 +60,12 @@ public:
 	 *
 	 * @param Name          Unique identifier for this stat entry.
 	 * @param Value         Float value to display.
-	 * @param DecimalPlaces Number of decimal places shown (default: 2).
+	 * @param DecimalPlaces Number of decimal places shown, clamped to 0..9 (default: 2).
 	 * @param Color         Display color for this entry.
 	 */
 	UFUNCTION(BlueprintCallable,
 		Category = "BertaDevKit|ScreenStats",
-		meta = (DevelopmentOnly, AdvancedDisplay = "DecimalPlaces,Color"))
+		meta = (DevelopmentOnly, AdvancedDisplay = "DecimalPlaces,Color", ClampMin = "0", ClampMax = "9", UIMin = "0", UIMax = "9"))
 	static void SetFloat(FName Name,
 	                     float Value,
 	                     int32 DecimalPlaces = 2,
@@ -139,12 +139,12 @@ public:
 	 *
 	 * @param Name          Unique identifier for this stat entry.
 	 * @param Value         Vector value to display.
-	 * @param DecimalPlaces Number of decimal places per component (default: 1).
+	 * @param DecimalPlaces Number of decimal places per component, clamped to 0..9 (default: 1).
 	 * @param Color         Display color for this entry.
 	 */
 	UFUNCTION(BlueprintCallable,
 		Category = "BertaDevKit|ScreenStats",
-		meta = (DevelopmentOnly, AdvancedDisplay = "DecimalPlaces,Color"))
+		meta = (DevelopmentOnly, AdvancedDisplay = "DecimalPlaces,Color", ClampMin = "0", ClampMax = "9", UIMin = "0", UIMax = "9"))
 	static void SetVector(FName Name,
 	                      FVector Value,
 	                      int32 DecimalPlaces = 1,
