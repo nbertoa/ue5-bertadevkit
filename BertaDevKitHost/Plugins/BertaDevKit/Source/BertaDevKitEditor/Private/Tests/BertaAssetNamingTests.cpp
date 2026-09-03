@@ -1,6 +1,7 @@
 #include "AssetActions/BertaAssetNamingUtils.h"
 #include "AssetActions/BertaAssetNamingBatch.h"
 #include "AssetActions/BertaAssetNamingValidator.h"
+#include "ContentBrowser/BertaContentBrowserMenu.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -15,6 +16,7 @@
 #include "Misc/AutomationTest.h"
 #include "Misc/DataValidation.h"
 #include "Misc/PackageName.h"
+#include "ToolMenus.h"
 
 namespace
 {
@@ -32,6 +34,12 @@ namespace
 	FAssetData MakeAssetData(FName Name, const FTopLevelAssetPath& ClassPath)
 	{
 		return FAssetData(FName(TEXT("/Game/AssetNamingTests")), FName(TEXT("/Game")), Name, ClassPath);
+	}
+
+	FAssetData MakeAssetDataAtPackage(const TCHAR* PackageName, const TCHAR* AssetName)
+	{
+		const FString PackagePath = FPackageName::GetLongPackagePath(PackageName);
+		return FAssetData(FName(PackageName), FName(*PackagePath), FName(AssetName), UStaticMesh::StaticClass()->GetClassPathName());
 	}
 
 	void TestPlan(FAutomationTestBase& Test, const FAssetData& Asset, EBertaAssetNamingStatus Status, const TCHAR* Prefix, const TCHAR* Target)
@@ -101,6 +109,52 @@ bool FBertaAssetNamingCoreTest::RunTest(const FString& Parameters)
 	TestPlan(*this, MakeAssetData(TEXT("Foo_Montage"), UAnimMontage::StaticClass()), EBertaAssetNamingStatus::NeedsRename, TEXT("AM_"), TEXT("AM_Foo"));
 	TestPlan(*this, MakeAssetData(TEXT("AS_Foo_Montage"), UAnimMontage::StaticClass()), EBertaAssetNamingStatus::NeedsRename, TEXT("AM_"), TEXT("AM_Foo"));
 	TestPlan(*this, MakeAssetData(TEXT("Unknown"), UObject::StaticClass()), EBertaAssetNamingStatus::UnknownClass, TEXT(""), TEXT(""));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FBertaAssetNamingContentBrowserScopeTest, "BertaDevKit.AssetNaming.ContentBrowserScope", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FBertaAssetNamingContentBrowserScopeTest::RunTest(const FString& Parameters)
+{
+	if (UToolMenus::IsToolMenuUIEnabled())
+	{
+		UToolMenu* AssetContextMenu = UToolMenus::Get()->FindMenu(TEXT("ContentBrowser.AssetContextMenu"));
+		TestNotNull(TEXT("Asset context menu is registered"), AssetContextMenu);
+		if (AssetContextMenu)
+		{
+			TestNotNull(TEXT("Asset context menu contains BertaDevKit section"), AssetContextMenu->FindSection(TEXT("BertaDevKitAssetNaming")));
+		}
+
+		UToolMenu* FolderContextMenu = UToolMenus::Get()->FindMenu(TEXT("ContentBrowser.FolderContextMenu"));
+		TestNotNull(TEXT("Folder context menu is registered"), FolderContextMenu);
+		if (FolderContextMenu)
+		{
+			TestNotNull(TEXT("Folder context menu contains BertaDevKit section"), FolderContextMenu->FindSection(TEXT("BertaDevKitAssetNaming")));
+		}
+	}
+
+	const FAssetData RootAsset = MakeAssetDataAtPackage(TEXT("/Game/MenuScope/Root/RootAsset"), TEXT("RootAsset"));
+	const FAssetData ChildAsset = MakeAssetDataAtPackage(TEXT("/Game/MenuScope/Root/Child/ChildAsset"), TEXT("ChildAsset"));
+	const FAssetData UnrelatedAsset = MakeAssetDataAtPackage(TEXT("/Game/MenuScope/Other/OtherAsset"), TEXT("OtherAsset"));
+	const FAssetData EngineAsset = MakeAssetDataAtPackage(TEXT("/Engine/MenuScope/Root/EngineAsset"), TEXT("EngineAsset"));
+
+	{
+		TArray<FAssetData> ScopedAssets;
+		FBertaContentBrowserMenu::FilterProjectAssets({ RootAsset, EngineAsset }, ScopedAssets);
+		TestEqual(TEXT("Explicit asset scope excludes non-/Game assets"), ScopedAssets.Num(), 1);
+		if (ScopedAssets.Num() == 1)
+		{
+			TestEqual(TEXT("Explicit asset scope does not expand selection"), ScopedAssets[0].GetObjectPathString(), RootAsset.GetObjectPathString());
+		}
+	}
+
+	{
+		TArray<FAssetData> ScopedAssets;
+		FBertaContentBrowserMenu::FilterAssetsInProjectFolders({ TEXT("/Game/MenuScope/Root"), TEXT("/Game/MenuScope/Root/Child"), TEXT("/Engine/MenuScope/Root") }, { RootAsset, ChildAsset, ChildAsset, UnrelatedAsset, EngineAsset }, ScopedAssets);
+		TestEqual(TEXT("Recursive folder scope includes root and child assets once"), ScopedAssets.Num(), 2);
+		TestTrue(TEXT("Recursive folder scope includes root asset"), ScopedAssets.ContainsByPredicate([&RootAsset](const FAssetData& Asset) { return Asset.GetObjectPathString() == RootAsset.GetObjectPathString(); }));
+		TestTrue(TEXT("Recursive folder scope includes child asset"), ScopedAssets.ContainsByPredicate([&ChildAsset](const FAssetData& Asset) { return Asset.GetObjectPathString() == ChildAsset.GetObjectPathString(); }));
+	}
+
 	return true;
 }
 

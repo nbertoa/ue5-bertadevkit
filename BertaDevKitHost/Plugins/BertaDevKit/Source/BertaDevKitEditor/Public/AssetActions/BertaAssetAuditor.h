@@ -28,12 +28,14 @@ public:
 	 * Does not modify any assets.
 	 */
 	static void AuditAssetNaming();
+	static void AuditAssetNaming(const TArray<FAssetData>& Assets);
 
 	/**
 	 * Scans assets for naming violations and renames each violator.
 	 * Reports renamed and skipped counts via LogBertaDevKitEditor and FNotificationInfo.
 	 */
 	static void FixAssetNaming();
+	static void FixAssetNaming(const TArray<FAssetData>& Assets);
 
 private:
 	/**

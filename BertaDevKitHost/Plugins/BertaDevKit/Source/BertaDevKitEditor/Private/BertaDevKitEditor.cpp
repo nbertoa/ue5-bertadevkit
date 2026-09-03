@@ -1,5 +1,6 @@
 #include "BertaDevKitEditor.h"
 
+#include "ContentBrowser/BertaContentBrowserMenu.h"
 #include "Toolbar/BertaEditorToolbar.h"
 #include "Log/BertaDevKitEditorLog.h"
 
@@ -11,6 +12,7 @@ void FBertaDevKitEditorModule::StartupModule()
 	// Registration itself must wait for OnPostEngineInit because UToolMenus
 	// is not guaranteed to exist at this point in the startup sequence.
 	EditorToolbar = MakeUnique<FBertaEditorToolbar>();
+	ContentBrowserMenu = MakeUnique<FBertaContentBrowserMenu>();
 
 	// Bind to OnPostEngineInit using a named member callback — avoids a raw lambda
 	// and makes the call traceable in the debugger.
@@ -35,6 +37,12 @@ void FBertaDevKitEditorModule::ShutdownModule()
 		EditorToolbar.Reset();
 	}
 
+	if (ContentBrowserMenu)
+	{
+		ContentBrowserMenu->Unregister();
+		ContentBrowserMenu.Reset();
+	}
+
 	UE_LOG(LogBertaDevKitEditor,
 	       Log,
 	       TEXT("[FBertaDevKitEditorModule::ShutdownModule] Module shut down. Toolbar unregistered."));
@@ -47,6 +55,11 @@ void FBertaDevKitEditorModule::OnPostEngineInit()
 	if (EditorToolbar)
 	{
 		EditorToolbar->Register();
+	}
+
+	if (ContentBrowserMenu)
+	{
+		ContentBrowserMenu->Register();
 	}
 }
 

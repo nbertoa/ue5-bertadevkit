@@ -81,7 +81,11 @@ void UBertaAssetAuditor::AuditAssetNaming()
 {
 	TArray<FAssetData> Assets;
 	ResolveAssetScope(Assets);
+	AuditAssetNaming(Assets);
+}
 
+void UBertaAssetAuditor::AuditAssetNaming(const TArray<FAssetData>& Assets)
+{
 	int32 NeedsRename = 0;
 	int32 Unknown = 0;
 	for (const FAssetData& Asset : Assets)
@@ -106,6 +110,11 @@ void UBertaAssetAuditor::FixAssetNaming()
 {
 	TArray<FAssetData> Assets;
 	ResolveAssetScope(Assets);
+	FixAssetNaming(Assets);
+}
+
+void UBertaAssetAuditor::FixAssetNaming(const TArray<FAssetData>& Assets)
+{
 	TArray<TPair<FAssetData, FBertaAssetNamingPlan>> Candidates;
 	int32 Unknown = 0;
 	for (const FAssetData& Asset : Assets)

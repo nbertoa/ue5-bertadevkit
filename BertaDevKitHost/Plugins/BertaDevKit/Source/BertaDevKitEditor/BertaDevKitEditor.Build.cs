@@ -12,12 +12,12 @@ public class BertaDevKitEditor : ModuleRules
 			"CoreUObject",
 			"Engine",
 			"AssetRegistry", // FAssetData is part of the public API.
-			"Blutility", // UAssetActionUtility
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
 			"UnrealEd", // UEditorUtilityLibrary, UEditorAssetLibrary
+			"Blutility", // UEditorUtilityLibrary for the existing Tools menu scope fallback
 			"AssetTools", // FAssetToolsModule, FAssetRenameData
 			"BertaDevKit", // UBertaDevKitSettings
 			"Niagara", // UNiagaraSystem, UNiagaraEmitter
@@ -26,6 +26,7 @@ public class BertaDevKitEditor : ModuleRules
 			"Slate", // FSlateNotificationManager
 			"SlateCore", // FNotificationInfo, FNotificationEntry
 			"ToolMenus", // UToolMenus, FToolMenuEntry
+			"ContentBrowser", // UContentBrowserAssetContextMenuContext, UContentBrowserFolderContext
 			"EnhancedInput",
 			"DataValidation", // UEditorValidatorBase
 		});

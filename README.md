@@ -42,7 +42,7 @@ Debug-facing Blueprint APIs use Unreal's `DevelopmentOnly` metadata where approp
 | Editor Tools Menu      | Provides **Run Asset Audit**, **Fix Asset Naming**, and **Run World Validation** under the Unreal Editor Tools menu.                                         |
 | World Validation       | Checks the currently open level for configurable issues such as missing Static Mesh assets, world-bound violations, light mobility, and invalid actor scale. |
 
-Asset naming actions are also exposed through the plugin's Editor Utility asset for Content Browser workflows.
+Asset Naming is available through native Content Browser right-click actions for selected assets and folders.
 
 ## Architecture
 
