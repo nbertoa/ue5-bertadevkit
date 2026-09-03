@@ -39,6 +39,13 @@
       "TargetAllowList": [
         "Editor"
       ]
+    },
+    {
+      "Name": "DataValidation",
+      "Enabled": true,
+      "TargetAllowList": [
+        "Editor"
+      ]
     }
   ]
 }

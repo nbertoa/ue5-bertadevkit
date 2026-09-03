@@ -1,15 +1,19 @@
 #include "AssetActions/BertaAssetNamingUtils.h"
 #include "AssetActions/BertaAssetNamingBatch.h"
+#include "AssetActions/BertaAssetNamingValidator.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "Animation/AnimBlueprint.h"
 #include "Animation/AnimMontage.h"
 #include "Blueprint/BlueprintSupport.h"
+#include "Editor.h"
+#include "EditorValidatorSubsystem.h"
 #include "Engine/Blueprint.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceConstant.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/DataValidation.h"
 #include "Misc/PackageName.h"
 
 namespace
@@ -52,6 +56,21 @@ namespace
 		Test.TestTrue(FString::Printf(TEXT("Build batch candidate %s"), PackageName), BertaAssetNamingBatch::BuildCandidate(AssetData, Plan, Candidate, FailureReason));
 		return Candidate;
 	}
+
+	FAssetData MakeTransientAssetData(const TCHAR* PackageName, const TCHAR* AssetName, UClass* AssetClass, UObject*& OutAsset)
+	{
+		static int32 NextTestPackageId = 0;
+		const FString UniquePackageName = FString::Printf(TEXT("%s_%d"), PackageName, ++NextTestPackageId);
+		UPackage* Package = CreatePackage(*UniquePackageName);
+		OutAsset = NewObject<UObject>(Package, AssetClass, AssetName, RF_Transient);
+		return FAssetData(OutAsset);
+	}
+
+	EDataValidationResult ValidateAssetNaming(const FAssetData& AssetData, UObject* Asset, FDataValidationContext& OutContext)
+	{
+		UBertaAssetNamingValidator* Validator = NewObject<UBertaAssetNamingValidator>(GetTransientPackage());
+		return Validator->ValidateLoadedAsset(AssetData, Asset, OutContext);
+	}
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FBertaAssetNamingCoreTest, "BertaDevKit.AssetNaming.Core", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -82,6 +101,81 @@ bool FBertaAssetNamingCoreTest::RunTest(const FString& Parameters)
 	TestPlan(*this, MakeAssetData(TEXT("Foo_Montage"), UAnimMontage::StaticClass()), EBertaAssetNamingStatus::NeedsRename, TEXT("AM_"), TEXT("AM_Foo"));
 	TestPlan(*this, MakeAssetData(TEXT("AS_Foo_Montage"), UAnimMontage::StaticClass()), EBertaAssetNamingStatus::NeedsRename, TEXT("AM_"), TEXT("AM_Foo"));
 	TestPlan(*this, MakeAssetData(TEXT("Unknown"), UObject::StaticClass()), EBertaAssetNamingStatus::UnknownClass, TEXT(""), TEXT(""));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FBertaAssetNamingDataValidationTest, "BertaDevKit.AssetNaming.DataValidation", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FBertaAssetNamingDataValidationTest::RunTest(const FString& Parameters)
+{
+	if (UEditorValidatorSubsystem* ValidatorSubsystem = GEditor->GetEditorSubsystem<UEditorValidatorSubsystem>())
+	{
+		bool bFoundAssetNamingValidator = false;
+		ValidatorSubsystem->ForEachEnabledValidator([&bFoundAssetNamingValidator](UEditorValidatorBase* Validator)
+		{
+			bFoundAssetNamingValidator |= Validator->IsA<UBertaAssetNamingValidator>();
+			return !bFoundAssetNamingValidator;
+		});
+		TestTrue(TEXT("Asset Naming validator is auto-discovered"), bFoundAssetNamingValidator);
+	}
+	else
+	{
+		AddError(TEXT("Editor Validator Subsystem is unavailable."));
+	}
+
+	{
+		UObject* Asset = nullptr;
+		const FAssetData AssetData = MakeTransientAssetData(TEXT("/Game/BertaDevKitDataValidationTests/SM_Rock"), TEXT("SM_Rock"), UStaticMesh::StaticClass(), Asset);
+		FDataValidationContext Context(false, EDataValidationUsecase::Manual, {});
+		TestEqual(TEXT("Correct /Game Static Mesh is valid"), ValidateAssetNaming(AssetData, Asset, Context), EDataValidationResult::Valid);
+	}
+
+	{
+		UObject* Asset = nullptr;
+		const FAssetData AssetData = MakeTransientAssetData(TEXT("/Game/BertaDevKitDataValidationTests/Rock"), TEXT("Rock"), UStaticMesh::StaticClass(), Asset);
+		FDataValidationContext Context(false, EDataValidationUsecase::Manual, {});
+		TestEqual(TEXT("Unprefixed /Game Static Mesh is invalid"), ValidateAssetNaming(AssetData, Asset, Context), EDataValidationResult::Invalid);
+		TestTrue(TEXT("Unprefixed Static Mesh error names target"), Context.GetIssues().ContainsByPredicate([](const FDataValidationContext::FIssue& Issue)
+		{
+			return Issue.Message.ToString().Contains(TEXT("SM_Rock"));
+		}));
+	}
+
+	{
+		UObject* Asset = nullptr;
+		const FAssetData AssetData = MakeTransientAssetData(TEXT("/Game/BertaDevKitDataValidationTests/M_Rock"), TEXT("M_Rock"), UStaticMesh::StaticClass(), Asset);
+		FDataValidationContext Context(false, EDataValidationUsecase::Manual, {});
+		TestEqual(TEXT("Known wrong prefix is invalid"), ValidateAssetNaming(AssetData, Asset, Context), EDataValidationResult::Invalid);
+		TestTrue(TEXT("Known wrong prefix error uses canonical planner target"), Context.GetIssues().ContainsByPredicate([](const FDataValidationContext::FIssue& Issue)
+		{
+			return Issue.Message.ToString().Contains(TEXT("SM_Rock"));
+		}));
+	}
+
+	{
+		UObject* Asset = nullptr;
+		const FAssetData AssetData = MakeTransientAssetData(TEXT("/Engine/BertaDevKitDataValidationTests/Rock"), TEXT("Rock"), UStaticMesh::StaticClass(), Asset);
+		FDataValidationContext Context(false, EDataValidationUsecase::Manual, {});
+		TestEqual(TEXT("Known asset outside /Game is not validated"), ValidateAssetNaming(AssetData, Asset, Context), EDataValidationResult::NotValidated);
+	}
+
+	{
+		UObject* Asset = nullptr;
+		const FAssetData ConcreteAssetData = MakeTransientAssetData(TEXT("/Game/BertaDevKitDataValidationTests/Unknown"), TEXT("Unknown"), UStaticMesh::StaticClass(), Asset);
+		const FAssetData AssetData(ConcreteAssetData.PackageName, ConcreteAssetData.PackagePath, ConcreteAssetData.AssetName, UObject::StaticClass()->GetClassPathName());
+		FDataValidationContext Context(false, EDataValidationUsecase::Manual, {});
+		TestEqual(TEXT("Unknown /Game asset class is not validated"), ValidateAssetNaming(AssetData, Asset, Context), EDataValidationResult::NotValidated);
+	}
+
+	{
+		UObject* Asset = nullptr;
+		const FAssetData AssetData = MakeTransientAssetData(TEXT("/Game/BertaDevKitDataValidationTests/SaveRock"), TEXT("Rock"), UStaticMesh::StaticClass(), Asset);
+		FDataValidationContext SaveContext(false, EDataValidationUsecase::Save, {});
+		TestEqual(TEXT("Naming does not validate on save"), ValidateAssetNaming(AssetData, Asset, SaveContext), EDataValidationResult::NotValidated);
+
+		FDataValidationContext ManualContext(false, EDataValidationUsecase::Manual, {});
+		TestEqual(TEXT("Naming validates manually"), ValidateAssetNaming(AssetData, Asset, ManualContext), EDataValidationResult::Invalid);
+	}
+
 	return true;
 }
 

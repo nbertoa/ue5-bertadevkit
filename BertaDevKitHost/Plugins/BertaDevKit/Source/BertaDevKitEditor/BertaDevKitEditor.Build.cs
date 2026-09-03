@@ -27,6 +27,7 @@ public class BertaDevKitEditor : ModuleRules
 			"SlateCore", // FNotificationInfo, FNotificationEntry
 			"ToolMenus", // UToolMenus, FToolMenuEntry
 			"EnhancedInput",
+			"DataValidation", // UEditorValidatorBase
 		});
 	}
 }

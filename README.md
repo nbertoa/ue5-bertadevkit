@@ -37,7 +37,7 @@ Debug-facing Blueprint APIs use Unreal's `DevelopmentOnly` metadata where approp
 
 | System                 | Purpose                                                                                                                                                      |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Asset Naming           | Audits asset naming conventions and can rename violations using BertaDevKit prefix rules.                                                                    |
+| Asset Naming           | Audits asset naming conventions, reports violations through native UE Data Validation, and can rename them using BertaDevKit prefix rules.                    |
 | Asset Scope Resolution | Operates on selected assets first, then the active Content Browser folder, then `/Game` as fallback.                                                         |
 | Editor Tools Menu      | Provides **Run Asset Audit**, **Fix Asset Naming**, and **Run World Validation** under the Unreal Editor Tools menu.                                         |
 | World Validation       | Checks the currently open level for configurable issues such as missing Static Mesh assets, world-bound violations, light mobility, and invalid actor scale. |
@@ -137,7 +137,7 @@ For example:
 
 ### Tests
 
-Development Automation Tests currently include the `BertaDevKit.Math.*` suite.
+Development Automation Tests include the `BertaDevKit.Math.*` and `BertaDevKit.AssetNaming.*` suites.
 
 For editor and Blueprint-facing functionality, the host project contains:
 
