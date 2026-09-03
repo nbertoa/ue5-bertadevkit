@@ -12,25 +12,20 @@ public class BertaDevKitEditor : ModuleRules
 			"CoreUObject",
 			"Engine",
 			"AssetRegistry", // FAssetData is part of the public API.
-			"AssetTools", // IAssetTools, FAssetToolsModule
 			"Blutility", // UAssetActionUtility
-			"BertaDevKit",
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
 			"UnrealEd", // UEditorUtilityLibrary, UEditorAssetLibrary
-			"EditorScriptingUtilities", // UEditorAssetLibrary
+			"AssetTools", // FAssetToolsModule, FAssetRenameData
+			"BertaDevKit", // UBertaDevKitSettings
 			"Niagara", // UNiagaraSystem, UNiagaraEmitter
 			"UMG", // UUserWidget
 			"AIModule", // UBehaviorTree, UBlackboardData, UEnvQuery
-			"Foliage", // UFoliageType
-			"Landscape", // ULandscapeGrassType
-			"PhysicsCore", // UPhysicalMaterial
 			"Slate", // FSlateNotificationManager
 			"SlateCore", // FNotificationInfo, FNotificationEntry
 			"ToolMenus", // UToolMenus, FToolMenuEntry
-			"WorkspaceMenuStructure", // WorkspaceMenu — tab spawner category registration
 			"EnhancedInput",
 		});
 	}
