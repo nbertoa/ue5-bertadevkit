@@ -30,9 +30,7 @@ FDelegateHandle& UBertaScreenStats::GetRenderDelegateHandle()
 
 void UBertaScreenStats::EnsureRegistered()
 {
-	// Static local flag — initialized to false on first call, then never again.
-	// This is safer than a class-level static member: initialization is guaranteed
-	// to occur on first call, avoiding the static initialization order fiasco.
+	// The handle records this registration and is cleared by Shutdown().
 	// No locking needed — the editor and gameplay code that calls Set* is single-threaded.
 	FDelegateHandle& RenderDelegateHandle = GetRenderDelegateHandle();
 	if (RenderDelegateHandle.IsValid())
@@ -41,8 +39,7 @@ void UBertaScreenStats::EnsureRegistered()
 	}
 
 	// Bind to OnBeginFrame so RenderStats fires once per frame automatically.
-	// No need to unregister manually — this delegate fires for the lifetime
-	// of the Engine and the static function pointer is always valid.
+	// Shutdown removes this delegate before the Runtime module unloads.
 	RenderDelegateHandle = FCoreDelegates::OnBeginFrame.AddStatic(&UBertaScreenStats::RenderStats);
 
 	UE_LOG(LogBertaDevKit,
@@ -76,9 +73,8 @@ void UBertaScreenStats::RenderStats()
 		return;
 	}
 
-	// Each entry gets a unique stable key derived from its FName hash.
-	// AddOnScreenDebugMessage uses this key to overwrite the same line
-	// every frame instead of appending a new one.
+	// Each entry uses its FName identity as a process-local message key.
+	// Equal FNames produce the same key; stability across processes is not required.
 	for (const TPair<FName, FBertaStatEntry>& Pair : Entries)
 	{
 		const FName& EntryName = Pair.Key;
@@ -89,10 +85,7 @@ void UBertaScreenStats::RenderStats()
 		                                            *Entry.DisplayName,
 		                                            *Entry.Value);
 
-		// GetTypeHash on FName returns a stable uint32 — cast to int32 for the
-		// message key. Collisions are theoretically possible but negligible in
-		// practice for a small debug panel with named entries.
-		const int32 MessageKey = static_cast<int32>(GetTypeHash(EntryName));
+		const uint64 MessageKey = EntryName.ToUnstableInt();
 
 		GEngine->AddOnScreenDebugMessage(MessageKey,
 		                                 0.0f,

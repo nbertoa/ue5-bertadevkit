@@ -36,7 +36,8 @@ struct BERTADEVKIT_API FBertaStatEntry
  * updates the existing entry rather than adding a duplicate.
  *
  * All functions respect the master switch BertaDevKitSettings::bScreenStatsEnabled.
- * The panel is fully stripped in shipping builds via DevelopmentOnly.
+ * Blueprint nodes are marked DevelopmentOnly and intended for development-mode use.
+ * The C++ Runtime implementation remains present unless separately compile-gated.
  *
  * Usage:
  *   UBertaScreenStats::SetFloat("Player Speed", Velocity.Size());
@@ -189,9 +190,8 @@ private:
 	 * Called lazily on the first Set* call — avoids registering if the system
 	 * is never used in a given session.
 	 *
-	 * Uses a static local flag internally to prevent double-registration.
-	 * This is safer than a class-level static member because initialization
-	 * is guaranteed to occur on first call, avoiding static initialization order issues.
+	 * Uses a FDelegateHandle to prevent double-registration. Shutdown removes the
+	 * delegate from OnBeginFrame during the Runtime module's ShutdownModule().
 	 */
 	static void EnsureRegistered();
 
