@@ -22,6 +22,7 @@ public class BertaDevKitEditor : ModuleRules
 			"BertaDevKit", // UBertaDevKitSettings
 			"Niagara", // UNiagaraSystem, UNiagaraEmitter
 			"UMG", // UUserWidget
+			"UMGEditor", // UWidgetBlueprint
 			"AIModule", // UBehaviorTree, UBlackboardData, UEnvQuery
 			"Slate", // FSlateNotificationManager
 			"SlateCore", // FNotificationInfo, FNotificationEntry

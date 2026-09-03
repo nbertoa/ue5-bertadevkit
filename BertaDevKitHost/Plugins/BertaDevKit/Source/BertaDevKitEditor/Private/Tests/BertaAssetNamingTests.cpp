@@ -12,11 +12,14 @@
 #include "EditorValidatorSubsystem.h"
 #include "Engine/Blueprint.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/World.h"
+#include "Materials/MaterialFunction.h"
 #include "Materials/MaterialInstanceConstant.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/DataValidation.h"
 #include "Misc/PackageName.h"
 #include "ToolMenus.h"
+#include "WidgetBlueprint.h"
 
 namespace
 {
@@ -29,6 +32,13 @@ namespace
 		}
 
 		return FAssetData(FName(TEXT("/Game/AssetNamingTests")), FName(TEXT("/Game")), Name, Class->GetClassPathName(), MoveTemp(Tags));
+	}
+
+	FAssetData MakeBlueprintInterfaceAssetData(FName Name)
+	{
+		FAssetDataTagMap Tags;
+		Tags.Add(FBlueprintTags::BlueprintType, TEXT("BPType_Interface"));
+		return FAssetData(FName(TEXT("/Game/AssetNamingTests")), FName(TEXT("/Game")), Name, UBlueprint::StaticClass()->GetClassPathName(), MoveTemp(Tags));
 	}
 
 	FAssetData MakeAssetData(FName Name, const FTopLevelAssetPath& ClassPath)
@@ -99,6 +109,12 @@ bool FBertaAssetNamingCoreTest::RunTest(const FString& Parameters)
 	TestPlan(*this, MakeAssetData(TEXT("BP_Hero"), UBlueprint::StaticClass(), TEXT("Class'/Script/Engine.Character'")), EBertaAssetNamingStatus::NeedsRename, TEXT("CH_"), TEXT("CH_Hero"));
 	TestPlan(*this, MakeAssetData(TEXT("ChildCharacter"), UBlueprint::StaticClass(), TEXT("Class'/Script/Engine.Character'")), EBertaAssetNamingStatus::NeedsRename, TEXT("CH_"), TEXT("CH_ChildCharacter"));
 	TestPlan(*this, MakeAssetData(TEXT("Widget"), UBlueprint::StaticClass(), TEXT("Class'/Script/UMG.UserWidget'")), EBertaAssetNamingStatus::NeedsRename, TEXT("WBP_"), TEXT("WBP_Widget"));
+	TestPlan(*this, MakeBlueprintInterfaceAssetData(TEXT("BPI_Interaction")), EBertaAssetNamingStatus::AlreadyCorrect, TEXT("BPI_"), TEXT("BPI_Interaction"));
+	TestPlan(*this, MakeBlueprintInterfaceAssetData(TEXT("Interaction")), EBertaAssetNamingStatus::NeedsRename, TEXT("BPI_"), TEXT("BPI_Interaction"));
+	TestPlan(*this, MakeBlueprintInterfaceAssetData(TEXT("BP_Interaction")), EBertaAssetNamingStatus::NeedsRename, TEXT("BPI_"), TEXT("BPI_Interaction"));
+	TestPlan(*this, MakeAssetData(TEXT("WBP_Menu"), UWidgetBlueprint::StaticClass()), EBertaAssetNamingStatus::AlreadyCorrect, TEXT("WBP_"), TEXT("WBP_Menu"));
+	TestPlan(*this, MakeAssetData(TEXT("Menu"), UWidgetBlueprint::StaticClass()), EBertaAssetNamingStatus::NeedsRename, TEXT("WBP_"), TEXT("WBP_Menu"));
+	TestPlan(*this, MakeAssetData(TEXT("BP_Menu"), UWidgetBlueprint::StaticClass()), EBertaAssetNamingStatus::NeedsRename, TEXT("WBP_"), TEXT("WBP_Menu"));
 	TestPlan(*this, MakeAssetData(TEXT("Anim"), UAnimBlueprint::StaticClass()), EBertaAssetNamingStatus::NeedsRename, TEXT("ABP_"), TEXT("ABP_Anim"));
 	TestPlan(*this, MakeAssetData(TEXT("Ability"), UBlueprint::StaticClass(), TEXT("Class'/Script/GameplayAbilities.GameplayAbility'")), EBertaAssetNamingStatus::NeedsRename, TEXT("GA_"), TEXT("GA_Ability"));
 	TestPlan(*this, MakeAssetData(TEXT("GE_Fireball"), UBlueprint::StaticClass(), TEXT("Class'/Script/GameplayAbilities.GameplayAbility'")), EBertaAssetNamingStatus::NeedsRename, TEXT("GA_"), TEXT("GA_Fireball"));
@@ -106,9 +122,13 @@ bool FBertaAssetNamingCoreTest::RunTest(const FString& Parameters)
 	TestPlan(*this, MakeAssetData(TEXT("M_Foo_Inst"), UMaterialInstanceConstant::StaticClass()), EBertaAssetNamingStatus::NeedsRename, TEXT("MI_"), TEXT("MI_Foo"));
 	TestPlan(*this, MakeAssetData(TEXT("T_Foo_Inst"), UMaterialInstanceConstant::StaticClass()), EBertaAssetNamingStatus::NeedsRename, TEXT("MI_"), TEXT("MI_Foo"));
 	TestPlan(*this, MakeAssetData(TEXT("MI_Foo"), UMaterialInstanceConstant::StaticClass()), EBertaAssetNamingStatus::AlreadyCorrect, TEXT("MI_"), TEXT("MI_Foo"));
+	TestPlan(*this, MakeAssetData(TEXT("MF_ProcGrid"), UMaterialFunction::StaticClass()), EBertaAssetNamingStatus::AlreadyCorrect, TEXT("MF_"), TEXT("MF_ProcGrid"));
+	TestPlan(*this, MakeAssetData(TEXT("ProcGrid"), UMaterialFunction::StaticClass()), EBertaAssetNamingStatus::NeedsRename, TEXT("MF_"), TEXT("MF_ProcGrid"));
+	TestPlan(*this, MakeAssetData(TEXT("M_ProcGrid"), UMaterialFunction::StaticClass()), EBertaAssetNamingStatus::NeedsRename, TEXT("MF_"), TEXT("MF_ProcGrid"));
 	TestPlan(*this, MakeAssetData(TEXT("Foo_Montage"), UAnimMontage::StaticClass()), EBertaAssetNamingStatus::NeedsRename, TEXT("AM_"), TEXT("AM_Foo"));
 	TestPlan(*this, MakeAssetData(TEXT("AS_Foo_Montage"), UAnimMontage::StaticClass()), EBertaAssetNamingStatus::NeedsRename, TEXT("AM_"), TEXT("AM_Foo"));
 	TestPlan(*this, MakeAssetData(TEXT("Unknown"), UObject::StaticClass()), EBertaAssetNamingStatus::UnknownClass, TEXT(""), TEXT(""));
+	TestPlan(*this, MakeAssetData(TEXT("DebugMap"), UWorld::StaticClass()), EBertaAssetNamingStatus::UnknownClass, TEXT(""), TEXT(""));
 	return true;
 }
 

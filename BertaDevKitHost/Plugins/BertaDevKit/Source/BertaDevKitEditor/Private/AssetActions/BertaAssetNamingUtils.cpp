@@ -30,6 +30,7 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Materials/Material.h"
+#include "Materials/MaterialFunction.h"
 #include "Materials/MaterialInstanceConstant.h"
 #include "Materials/MaterialParameterCollection.h"
 #include "EnvironmentQuery/EnvQuery.h"
@@ -43,10 +44,13 @@
 #include "Sound/SoundCue.h"
 #include "Sound/SoundWave.h"
 #include "StructUtils/UserDefinedStruct.h"
+#include "UObject/Interface.h"
+#include "WidgetBlueprint.h"
 
 namespace
 {
 	const FString GenericBlueprintPrefix(TEXT("BP_"));
+	const FString BlueprintInterfaceTypeTag(TEXT("BPType_Interface"));
 
 	const FString* FindLeadingKnownPrefix(const FString& Name)
 	{
@@ -119,6 +123,12 @@ namespace
 
 	const FString* ResolveBlueprintPrefix(const FAssetData& AssetData, UClass* AssetClass)
 	{
+		// UE 5.8 serializes EBlueprintType::BPTYPE_Interface as BPType_Interface in the Asset Registry.
+		if (AssetData.GetTagValueRef<FString>(FBlueprintTags::BlueprintType) == BlueprintInterfaceTypeTag)
+		{
+			return UBertaAssetNamingUtils::GetPrefixMap().Find(UInterface::StaticClass());
+		}
+
 		// Specific Blueprint asset types win. Do not walk to UBlueprint here.
 		if (const FString* Prefix = FindDirectBlueprintPrefix(AssetData, AssetClass))
 		{
@@ -181,9 +191,9 @@ namespace
 const TMap<UClass*, FString>& UBertaAssetNamingUtils::GetPrefixMap()
 {
 	static const TMap<UClass*, FString> Prefixes = {
-		{ UAnimBlueprint::StaticClass(), TEXT("ABP_") }, { UUserWidget::StaticClass(), TEXT("WBP_") }, { UBlueprint::StaticClass(), TEXT("BP_") },
+		{ UAnimBlueprint::StaticClass(), TEXT("ABP_") }, { UWidgetBlueprint::StaticClass(), TEXT("WBP_") }, { UUserWidget::StaticClass(), TEXT("WBP_") }, { UInterface::StaticClass(), TEXT("BPI_") }, { UBlueprint::StaticClass(), TEXT("BP_") },
 		{ UStaticMesh::StaticClass(), TEXT("SM_") }, { USkeletalMesh::StaticClass(), TEXT("SKM_") },
-		{ UMaterial::StaticClass(), TEXT("M_") }, { UMaterialInstanceConstant::StaticClass(), TEXT("MI_") }, { UMaterialParameterCollection::StaticClass(), TEXT("MPC_") },
+		{ UMaterial::StaticClass(), TEXT("M_") }, { UMaterialFunction::StaticClass(), TEXT("MF_") }, { UMaterialInstanceConstant::StaticClass(), TEXT("MI_") }, { UMaterialParameterCollection::StaticClass(), TEXT("MPC_") },
 		{ UTexture2D::StaticClass(), TEXT("T_") }, { UTextureCube::StaticClass(), TEXT("T_") }, { UTextureRenderTarget2D::StaticClass(), TEXT("RT_") },
 		{ UAimOffsetBlendSpace::StaticClass(), TEXT("AO_") }, { UAimOffsetBlendSpace1D::StaticClass(), TEXT("AO_") }, { UAnimMontage::StaticClass(), TEXT("AM_") }, { UAnimSequence::StaticClass(), TEXT("AS_") }, { UBlendSpace::StaticClass(), TEXT("BS_") }, { UBlendSpace1D::StaticClass(), TEXT("BS_") },
 		{ UParticleSystem::StaticClass(), TEXT("PS_") }, { UNiagaraSystem::StaticClass(), TEXT("NS_") }, { UNiagaraEmitter::StaticClass(), TEXT("NE_") }, { USoundWave::StaticClass(), TEXT("SW_") }, { USoundCue::StaticClass(), TEXT("SC_") },

@@ -87,14 +87,13 @@ void UBertaAssetAuditor::AuditAssetNaming()
 void UBertaAssetAuditor::AuditAssetNaming(const TArray<FAssetData>& Assets)
 {
 	int32 NeedsRename = 0;
-	int32 Unknown = 0;
+	int32 Unsupported = 0;
 	for (const FAssetData& Asset : Assets)
 	{
 		const FBertaAssetNamingPlan Plan = UBertaAssetNamingUtils::BuildRenamePlan(Asset);
 		if (Plan.Status == EBertaAssetNamingStatus::UnknownClass)
 		{
-			++Unknown;
-			UE_LOG(LogBertaDevKitEditor, Warning, TEXT("[AssetNaming] Unknown class: %s (%s)"), *Asset.AssetName.ToString(), *Asset.AssetClassPath.ToString());
+			++Unsupported;
 		}
 		else if (Plan.Status == EBertaAssetNamingStatus::NeedsRename)
 		{
@@ -102,8 +101,8 @@ void UBertaAssetAuditor::AuditAssetNaming(const TArray<FAssetData>& Assets)
 			UE_LOG(LogBertaDevKitEditor, Warning, TEXT("[AssetNaming] VIOLATION: %s -> %s"), *Asset.AssetName.ToString(), *Plan.TargetName);
 		}
 	}
-	UE_LOG(LogBertaDevKitEditor, Log, TEXT("[AssetNaming] Audit complete: %d need rename, %d unknown."), NeedsRename, Unknown);
-	ShowNotification(FText::Format(NSLOCTEXT("BertaDevKit", "AssetAudit", "Asset Audit: {0} violation(s), {1} unknown. See Output Log."), FText::AsNumber(NeedsRename), FText::AsNumber(Unknown)), NeedsRename > 0 || Unknown > 0 ? SNotificationItem::CS_Fail : SNotificationItem::CS_Success);
+	UE_LOG(LogBertaDevKitEditor, Log, TEXT("[AssetNaming] Audit complete: %d violation(s), %d unsupported/skipped."), NeedsRename, Unsupported);
+	ShowNotification(FText::Format(NSLOCTEXT("BertaDevKit", "AssetAudit", "Asset Audit: {0} violation(s), {1} unsupported/skipped. See Output Log."), FText::AsNumber(NeedsRename), FText::AsNumber(Unsupported)), NeedsRename > 0 ? SNotificationItem::CS_Fail : SNotificationItem::CS_Success);
 }
 
 void UBertaAssetAuditor::FixAssetNaming()
@@ -116,7 +115,7 @@ void UBertaAssetAuditor::FixAssetNaming()
 void UBertaAssetAuditor::FixAssetNaming(const TArray<FAssetData>& Assets)
 {
 	TArray<TPair<FAssetData, FBertaAssetNamingPlan>> Candidates;
-	int32 Unknown = 0;
+	int32 Unsupported = 0;
 	for (const FAssetData& Asset : Assets)
 	{
 		FBertaAssetNamingPlan Plan = UBertaAssetNamingUtils::BuildRenamePlan(Asset);
@@ -126,28 +125,23 @@ void UBertaAssetAuditor::FixAssetNaming(const TArray<FAssetData>& Assets)
 		}
 		else if (Plan.Status == EBertaAssetNamingStatus::UnknownClass)
 		{
-			++Unknown;
+			++Unsupported;
 		}
 	}
 
 	if (Candidates.IsEmpty())
 	{
-		if (Unknown > 0)
+		if (Unsupported > 0)
 		{
-			UE_LOG(LogBertaDevKitEditor, Warning, TEXT("[AssetNaming] Fix skipped: %d asset(s) have unknown classes."), Unknown);
-			ShowNotification(FText::Format(NSLOCTEXT("BertaDevKit", "UnknownAssetFix", "Asset Fix: No assets renamed; {0} unknown class(es). See Output Log."), FText::AsNumber(Unknown)), SNotificationItem::CS_Fail);
+			UE_LOG(LogBertaDevKitEditor, Log, TEXT("[AssetNaming] Fix complete: no supported assets require renaming; %d unsupported asset(s) skipped."), Unsupported);
+			ShowNotification(FText::Format(NSLOCTEXT("BertaDevKit", "UnsupportedAssetFix", "Asset Fix: No supported assets require renaming. {0} unsupported asset(s) skipped."), FText::AsNumber(Unsupported)), SNotificationItem::CS_Success);
 		}
 		else
 		{
-			ShowNotification(NSLOCTEXT("BertaDevKit", "NoAssetFix", "Asset Fix: No assets require renaming."), SNotificationItem::CS_Success);
+			ShowNotification(NSLOCTEXT("BertaDevKit", "NoAssetFix", "Asset Fix: No supported assets require renaming."), SNotificationItem::CS_Success);
 		}
 
 		return;
-	}
-
-	if (Unknown > 0)
-	{
-		UE_LOG(LogBertaDevKitEditor, Warning, TEXT("[AssetNaming] Fix will skip %d asset(s) with unknown classes."), Unknown);
 	}
 
 	TArray<FBertaAssetNamingBatchCandidate> BatchCandidates;
@@ -191,8 +185,8 @@ void UBertaAssetAuditor::FixAssetNaming(const TArray<FAssetData>& Assets)
 		return;
 	}
 
-	const FText ConfirmationText = Unknown > 0
-		? FText::Format(NSLOCTEXT("BertaDevKit", "ConfirmAssetFixWithUnknown", "Rename {0} project asset(s)? {1} unknown asset(s) will be skipped."), FText::AsNumber(BatchCandidates.Num()), FText::AsNumber(Unknown))
+	const FText ConfirmationText = Unsupported > 0
+		? FText::Format(NSLOCTEXT("BertaDevKit", "ConfirmAssetFixWithUnsupported", "Rename {0} project asset(s)? {1} unsupported asset(s) will be skipped."), FText::AsNumber(BatchCandidates.Num()), FText::AsNumber(Unsupported))
 		: FText::Format(NSLOCTEXT("BertaDevKit", "ConfirmAssetFix", "Rename {0} project asset(s) to match BertaDevKit naming rules?"), FText::AsNumber(BatchCandidates.Num()));
 	if (FMessageDialog::Open(EAppMsgType::YesNo, ConfirmationText) != EAppReturnType::Yes)
 	{
@@ -251,8 +245,8 @@ void UBertaAssetAuditor::FixAssetNaming(const TArray<FAssetData>& Assets)
 	const bool bAllAtTarget = AtTarget == BatchCandidates.Num();
 	if (bRenameAssetsSucceeded && bAllAtTarget)
 	{
-		UE_LOG(LogBertaDevKitEditor, Log, TEXT("[AssetNaming] Fix complete: %d renamed, %d unknown, 0 load failed, 0 unexpected."), AtTarget, Unknown);
-		ShowNotification(FText::Format(NSLOCTEXT("BertaDevKit", "AssetFix", "Asset Fix: {0} renamed, {1} unknown."), FText::AsNumber(AtTarget), FText::AsNumber(Unknown)), Unknown > 0 ? SNotificationItem::CS_Fail : SNotificationItem::CS_Success);
+		UE_LOG(LogBertaDevKitEditor, Log, TEXT("[AssetNaming] Fix complete: %d renamed, %d unsupported/skipped, 0 load failed, 0 unexpected."), AtTarget, Unsupported);
+		ShowNotification(FText::Format(NSLOCTEXT("BertaDevKit", "AssetFix", "Asset Fix: {0} renamed, {1} unsupported/skipped."), FText::AsNumber(AtTarget), FText::AsNumber(Unsupported)), SNotificationItem::CS_Success);
 		return;
 	}
 
