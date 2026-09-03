@@ -275,6 +275,8 @@ bool UBertaWorldUtils::LineTrace(const UObject* WorldContextObject,
                                  const TArray<AActor*>& ActorsToIgnore,
                                  FHitResult& OutHit)
 {
+	OutHit = FHitResult();
+
 	UWorld* World = GetWorldChecked(WorldContextObject);
 	if (!World)
 	{
@@ -303,6 +305,17 @@ bool UBertaWorldUtils::SphereTrace(const UObject* WorldContextObject,
                                    const TArray<AActor*>& ActorsToIgnore,
                                    FHitResult& OutHit)
 {
+	OutHit = FHitResult();
+
+	if (Radius < 0.0f)
+	{
+		UE_LOG(LogBertaDevKit,
+		       Warning,
+		       TEXT("[BertaWorldUtils::SphereTrace] Radius must be non-negative. Received %f."),
+		       Radius);
+		return false;
+	}
+
 	UWorld* World = GetWorldChecked(WorldContextObject);
 	if (!World)
 	{

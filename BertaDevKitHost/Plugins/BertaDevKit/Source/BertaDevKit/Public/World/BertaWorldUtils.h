@@ -113,8 +113,8 @@ public:
 	 * @param End                 Trace end position in world space.
 	 * @param Channel             Collision channel to trace against.
 	 * @param ActorsToIgnore      Actors excluded from the trace.
-	 * @param OutHit              Hit result if the trace connects.
-	 * @return True if something was hit.
+	 * @param OutHit              Hit result if the trace connects; reset when no hit is returned or the trace cannot run.
+	 * @return True if something was hit. OutHit is reset when false is returned.
 	 */
 	UFUNCTION(BlueprintCallable,
 		Category = "BertaDevKit|World|Traces",
@@ -132,11 +132,11 @@ public:
 	 * @param WorldContextObject  Any valid UObject in the current world.
 	 * @param Start               Sweep start position in world space.
 	 * @param End                 Sweep end position in world space.
-	 * @param Radius              Radius of the sweep sphere in Unreal units.
+	 * @param Radius              Non-negative radius of the sweep sphere in Unreal units. Zero is permitted and may behave as a line trace.
 	 * @param Channel             Collision channel to trace against.
 	 * @param ActorsToIgnore      Actors excluded from the trace.
-	 * @param OutHit              Hit result if the trace connects.
-	 * @return True if something was hit.
+	 * @param OutHit              Hit result if the trace connects; reset when no hit is returned or the trace cannot run.
+	 * @return True if something was hit. OutHit is reset when false is returned.
 	 */
 	UFUNCTION(BlueprintCallable,
 		Category = "BertaDevKit|World|Traces",
