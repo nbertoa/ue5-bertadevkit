@@ -14,8 +14,8 @@ void FBertaDevKitEditorModule::StartupModule()
 
 	// Bind to OnPostEngineInit using a named member callback — avoids a raw lambda
 	// and makes the call traceable in the debugger.
-	FCoreDelegates::OnPostEngineInit.AddRaw(this,
-	                                        &FBertaDevKitEditorModule::OnPostEngineInit);
+	FCoreDelegates::GetOnPostEngineInit().AddRaw(this,
+	                                             &FBertaDevKitEditorModule::OnPostEngineInit);
 
 	UE_LOG(LogBertaDevKitEditor,
 	       Log,
@@ -27,7 +27,7 @@ void FBertaDevKitEditorModule::ShutdownModule()
 	// Remove the delegate binding before the toolbar is destroyed.
 	// If OnPostEngineInit has not fired yet (edge case on very fast shutdown),
 	// this prevents a dangling callback.
-	FCoreDelegates::OnPostEngineInit.RemoveAll(this);
+	FCoreDelegates::GetOnPostEngineInit().RemoveAll(this);
 
 	if (EditorToolbar)
 	{

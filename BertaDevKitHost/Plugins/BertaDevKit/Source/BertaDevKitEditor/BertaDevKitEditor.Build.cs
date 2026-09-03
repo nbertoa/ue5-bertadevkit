@@ -31,7 +31,6 @@ public class BertaDevKitEditor : ModuleRules
 			"SlateCore", // FNotificationInfo, FNotificationEntry
 			"ToolMenus", // UToolMenus, FToolMenuEntry
 			"WorkspaceMenuStructure", // WorkspaceMenu — tab spawner category registration
-			"StructUtils", // UUserDefinedStruct (UE 5.6+)
 			"EnhancedInput",
 		});
 	}

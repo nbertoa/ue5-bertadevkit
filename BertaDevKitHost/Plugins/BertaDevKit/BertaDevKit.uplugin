@@ -46,13 +46,6 @@
       "TargetAllowList": [
         "Editor"
       ]
-    },
-    {
-      "Name": "StructUtils",
-      "Enabled": true,
-      "TargetAllowList": [
-        "Editor"
-      ]
     }
   ]
 }
