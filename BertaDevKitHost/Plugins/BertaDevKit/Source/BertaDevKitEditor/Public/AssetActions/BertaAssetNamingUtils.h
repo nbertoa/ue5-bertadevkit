@@ -28,7 +28,7 @@ public:
 	static const TMap<FTopLevelAssetPath, FString>& GetOptionalPluginPrefixes();
 	/** Resolves prefix, target name, and rename state without loading the asset. */
 	static FBertaAssetNamingPlan BuildRenamePlan(const FAssetData& AssetData);
-	/** The sole path that creates FAssetRenameData and invokes AssetTools. */
+	/** Executes a single loaded-asset rename through the shared Asset Naming execution path. */
 	static EBertaRenameResult ExecuteRename(UObject* Asset, const FBertaAssetNamingPlan& Plan);
 	/** Convenience entry point for a loaded asset; it uses the same FAssetData plan. */
 	static EBertaRenameResult RenameAssetWithPrefix(UObject* Asset);

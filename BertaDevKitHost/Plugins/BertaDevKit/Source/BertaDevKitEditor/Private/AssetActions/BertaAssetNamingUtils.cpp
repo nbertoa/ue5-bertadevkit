@@ -1,4 +1,5 @@
 #include "AssetActions/BertaAssetNamingUtils.h"
+#include "AssetActions/BertaAssetNamingBatch.h"
 #include "Log/BertaDevKitEditorLog.h"
 
 #include "AIController.h"
@@ -8,7 +9,6 @@
 #include "Animation/AnimMontage.h"
 #include "Animation/BlendSpace.h"
 #include "Animation/BlendSpace1D.h"
-#include "AssetToolsModule.h"
 #include "BehaviorTree/BlackboardData.h"
 #include "BehaviorTree/BTDecorator.h"
 #include "BehaviorTree/BTService.h"
@@ -36,7 +36,6 @@
 #include "EnvironmentQuery/EnvQueryContext.h"
 #include "InputAction.h"
 #include "InputMappingContext.h"
-#include "Misc/PackageName.h"
 #include "NiagaraEmitter.h"
 #include "NiagaraSystem.h"
 #include "Particles/ParticleSystem.h"
@@ -228,9 +227,19 @@ EBertaRenameResult UBertaAssetNamingUtils::ExecuteRename(UObject* Asset, const F
 	{
 		return EBertaRenameResult::Failed;
 	}
-	TArray<FAssetRenameData> RenameData;
-	RenameData.Emplace(Asset, FPackageName::GetLongPackagePath(Asset->GetOutermost()->GetName()), Plan.TargetName);
-	if (!FAssetToolsModule::GetModule().Get().RenameAssets(RenameData))
+	FBertaAssetNamingBatchCandidate Candidate;
+	FText FailureReason;
+	if (!BertaAssetNamingBatch::BuildCandidate(FAssetData(Asset), Plan, Candidate, FailureReason))
+	{
+		UE_LOG(LogBertaDevKitEditor, Error, TEXT("Asset rename could not build a valid destination: %s (%s)"), *Asset->GetPathName(), *FailureReason.ToString());
+		return EBertaRenameResult::Failed;
+	}
+
+	TArray<FBertaAssetNamingBatchCandidate> Candidates;
+	Candidates.Add(MoveTemp(Candidate));
+	TArray<UObject*> LoadedAssets;
+	LoadedAssets.Add(Asset);
+	if (!BertaAssetNamingBatch::Execute(Candidates, LoadedAssets))
 	{
 		UE_LOG(LogBertaDevKitEditor, Error, TEXT("Asset rename failed: %s -> %s"), *Asset->GetName(), *Plan.TargetName);
 		return EBertaRenameResult::Failed;

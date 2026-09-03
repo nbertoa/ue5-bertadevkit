@@ -1,0 +1,355 @@
+diff --git a/BertaDevKitHost/Plugins/BertaDevKit/Source/BertaDevKitEditor/Private/AssetActions/BertaAssetAuditor.cpp b/BertaDevKitHost/Plugins/BertaDevKit/Source/BertaDevKitEditor/Private/AssetActions/BertaAssetAuditor.cpp
+index adf04e7..637827b 100644
+--- a/BertaDevKitHost/Plugins/BertaDevKit/Source/BertaDevKitEditor/Private/AssetActions/BertaAssetAuditor.cpp
++++ b/BertaDevKitHost/Plugins/BertaDevKit/Source/BertaDevKitEditor/Private/AssetActions/BertaAssetAuditor.cpp
+@@ -1,4 +1,5 @@
+ #include "AssetActions/BertaAssetAuditor.h"
++#include "AssetActions/BertaAssetNamingBatch.h"
+ #include "AssetActions/BertaAssetNamingUtils.h"
+ #include "Log/BertaDevKitEditorLog.h"
+ 
+@@ -6,6 +7,9 @@
+ #include "EditorUtilityLibrary.h"
+ #include "Framework/Notifications/NotificationManager.h"
+ #include "Misc/MessageDialog.h"
++#include "Misc/PackageName.h"
++#include "UObject/Package.h"
++#include "UObject/StrongObjectPtr.h"
+ #include "Widgets/Notifications/SNotificationList.h"
+ 
+ namespace
+@@ -26,6 +30,21 @@ namespace
+ 			Item->SetCompletionState(State);
+ 		}
+ 	}
++
++	bool IsTargetOccupied(IAssetRegistry& AssetRegistry, const FBertaAssetNamingBatchCandidate& Candidate)
++	{
++		if (AssetRegistry.GetAssetByObjectPath(Candidate.TargetObjectPath).IsValid())
++		{
++			return true;
++		}
++
++		if (FindPackage(nullptr, *Candidate.TargetPackageName))
++		{
++			return true;
++		}
++
++		return FPackageName::DoesPackageExist(Candidate.TargetPackageName);
++	}
+ }
+ 
+ void UBertaAssetAuditor::ResolveAssetScope(TArray<FAssetData>& OutAssets)
+@@ -117,33 +136,117 @@ void UBertaAssetAuditor::FixAssetNaming()
+ 		return;
+ 	}
+ 
+-	const FText ConfirmationText = FText::Format(NSLOCTEXT("BertaDevKit", "ConfirmAssetFix", "Rename {0} project asset(s) to match BertaDevKit naming rules?"), FText::AsNumber(Candidates.Num()));
++	if (Unknown > 0)
++	{
++		UE_LOG(LogBertaDevKitEditor, Warning, TEXT("[AssetNaming] Fix will skip %d asset(s) with unknown classes."), Unknown);
++	}
++
++	TArray<FBertaAssetNamingBatchCandidate> BatchCandidates;
++	BatchCandidates.Reserve(Candidates.Num());
++	int32 CandidateBuildFailed = 0;
++	for (const TPair<FAssetData, FBertaAssetNamingPlan>& Candidate : Candidates)
++	{
++		FBertaAssetNamingBatchCandidate BatchCandidate;
++		FText FailureReason;
++		if (!BertaAssetNamingBatch::BuildCandidate(Candidate.Key, Candidate.Value, BatchCandidate, FailureReason))
++		{
++			++CandidateBuildFailed;
++			UE_LOG(LogBertaDevKitEditor, Error, TEXT("[AssetNaming] Batch candidate failed: %s (%s)"), *Candidate.Key.GetSoftObjectPath().ToString(), *FailureReason.ToString());
++			continue;
++		}
++
++		BatchCandidates.Add(MoveTemp(BatchCandidate));
++	}
++
++	if (CandidateBuildFailed > 0)
++	{
++		UE_LOG(LogBertaDevKitEditor, Error, TEXT("[AssetNaming] Fix aborted: %d candidate(s) could not produce valid rename destinations."), CandidateBuildFailed);
++		ShowNotification(FText::Format(NSLOCTEXT("BertaDevKit", "AssetFixCandidateBuildFailed", "Asset Fix aborted: {0} invalid rename candidate(s). See Output Log."), FText::AsNumber(CandidateBuildFailed)), SNotificationItem::CS_Fail);
++		return;
++	}
++
++	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
++	const FBertaAssetNamingBatchPreflightResult PreflightResult = BertaAssetNamingBatch::Preflight(BatchCandidates, [&AssetRegistry](const FBertaAssetNamingBatchCandidate& Candidate)
++	{
++		return IsTargetOccupied(AssetRegistry, Candidate);
++	});
++	if (!PreflightResult.IsSafe())
++	{
++		for (const FBertaAssetNamingBatchConflict& Conflict : PreflightResult.Conflicts)
++		{
++			UE_LOG(LogBertaDevKitEditor, Error, TEXT("[AssetNaming] Batch conflict: %s -> %s (%s)"), *Conflict.SourceObjectPath, *Conflict.TargetObjectPath, *Conflict.Reason.ToString());
++		}
++
++		UE_LOG(LogBertaDevKitEditor, Error, TEXT("[AssetNaming] Fix aborted: %d conflict(s) across %d rename candidate(s)."), PreflightResult.Conflicts.Num(), BatchCandidates.Num());
++		ShowNotification(FText::Format(NSLOCTEXT("BertaDevKit", "AssetFixPreflightFailed", "Asset Fix aborted: {0} conflict(s) across {1} rename candidate(s). See Output Log."), FText::AsNumber(PreflightResult.Conflicts.Num()), FText::AsNumber(BatchCandidates.Num())), SNotificationItem::CS_Fail);
++		return;
++	}
++
++	const FText ConfirmationText = Unknown > 0
++		? FText::Format(NSLOCTEXT("BertaDevKit", "ConfirmAssetFixWithUnknown", "Rename {0} project asset(s)? {1} unknown asset(s) will be skipped."), FText::AsNumber(BatchCandidates.Num()), FText::AsNumber(Unknown))
++		: FText::Format(NSLOCTEXT("BertaDevKit", "ConfirmAssetFix", "Rename {0} project asset(s) to match BertaDevKit naming rules?"), FText::AsNumber(BatchCandidates.Num()));
+ 	if (FMessageDialog::Open(EAppMsgType::YesNo, ConfirmationText) != EAppReturnType::Yes)
+ 	{
+ 		return;
+ 	}
+ 
+-	int32 Renamed = 0;
+ 	int32 LoadFailed = 0;
+-	int32 RenameFailed = 0;
+-	for (const TPair<FAssetData, FBertaAssetNamingPlan>& Candidate : Candidates)
++	TArray<TStrongObjectPtr<UObject>> LoadedAssetReferences;
++	LoadedAssetReferences.Reserve(BatchCandidates.Num());
++	TArray<UObject*> LoadedAssets;
++	LoadedAssets.Reserve(BatchCandidates.Num());
++	for (const FBertaAssetNamingBatchCandidate& Candidate : BatchCandidates)
+ 	{
+-		UObject* Asset = Candidate.Key.GetAsset();
++		UObject* Asset = Candidate.AssetData.GetAsset();
+ 		if (!IsValid(Asset))
+ 		{
+ 			++LoadFailed;
++			UE_LOG(LogBertaDevKitEditor, Error, TEXT("[AssetNaming] Batch load failed: %s"), *Candidate.SourceObjectPath);
+ 			continue;
+ 		}
+ 
+-		if (UBertaAssetNamingUtils::ExecuteRename(Asset, Candidate.Value) == EBertaRenameResult::Renamed)
++		LoadedAssetReferences.Emplace(Asset);
++		LoadedAssets.Add(Asset);
++	}
++
++	if (LoadFailed > 0)
++	{
++		UE_LOG(LogBertaDevKitEditor, Error, TEXT("[AssetNaming] Fix aborted: %d of %d candidate asset(s) failed to load; no rename was attempted."), LoadFailed, BatchCandidates.Num());
++		ShowNotification(FText::Format(NSLOCTEXT("BertaDevKit", "AssetFixLoadFailed", "Asset Fix aborted: {0} asset(s) failed to load. No assets were renamed."), FText::AsNumber(LoadFailed)), SNotificationItem::CS_Fail);
++		return;
++	}
++
++	const bool bRenameAssetsSucceeded = BertaAssetNamingBatch::Execute(BatchCandidates, LoadedAssets);
++	int32 AtTarget = 0;
++	int32 AtSource = 0;
++	int32 Unexpected = 0;
++	for (int32 CandidateIndex = 0; CandidateIndex < BatchCandidates.Num(); ++CandidateIndex)
++	{
++		const FString CurrentObjectPath = LoadedAssets[CandidateIndex]->GetPathName();
++		const FBertaAssetNamingBatchCandidate& Candidate = BatchCandidates[CandidateIndex];
++		if (CurrentObjectPath == Candidate.TargetObjectPath)
++		{
++			++AtTarget;
++		}
++		else if (CurrentObjectPath == Candidate.SourceObjectPath)
+ 		{
+-			++Renamed;
++			++AtSource;
+ 		}
+ 		else
+ 		{
+-			++RenameFailed;
++			++Unexpected;
++			UE_LOG(LogBertaDevKitEditor, Error, TEXT("[AssetNaming] Batch postflight unexpected location: %s is at %s; expected %s or %s."), *Candidate.SourceObjectPath, *CurrentObjectPath, *Candidate.TargetObjectPath, *Candidate.SourceObjectPath);
+ 		}
+ 	}
+-	UE_LOG(LogBertaDevKitEditor, Log, TEXT("[AssetNaming] Fix complete: %d renamed, %d unknown, %d load failed, %d rename failed."), Renamed, Unknown, LoadFailed, RenameFailed);
+-	ShowNotification(FText::Format(NSLOCTEXT("BertaDevKit", "AssetFix", "Asset Fix: {0} renamed, {1} unknown, {2} load failed, {3} rename failed."), FText::AsNumber(Renamed), FText::AsNumber(Unknown), FText::AsNumber(LoadFailed), FText::AsNumber(RenameFailed)), Unknown + LoadFailed + RenameFailed > 0 ? SNotificationItem::CS_Fail : SNotificationItem::CS_Success);
++
++	const bool bAllAtTarget = AtTarget == BatchCandidates.Num();
++	if (bRenameAssetsSucceeded && bAllAtTarget)
++	{
++		UE_LOG(LogBertaDevKitEditor, Log, TEXT("[AssetNaming] Fix complete: %d renamed, %d unknown, 0 load failed, 0 unexpected."), AtTarget, Unknown);
++		ShowNotification(FText::Format(NSLOCTEXT("BertaDevKit", "AssetFix", "Asset Fix: {0} renamed, {1} unknown."), FText::AsNumber(AtTarget), FText::AsNumber(Unknown)), Unknown > 0 ? SNotificationItem::CS_Fail : SNotificationItem::CS_Success);
++		return;
++	}
++
++	UE_LOG(LogBertaDevKitEditor, Error, TEXT("[AssetNaming] Batch rename incomplete: AssetTools returned %s; %d at target, %d at source, %d unexpected."), bRenameAssetsSucceeded ? TEXT("true") : TEXT("false"), AtTarget, AtSource, Unexpected);
++	ShowNotification(FText::Format(NSLOCTEXT("BertaDevKit", "AssetFixIncomplete", "Asset Fix incomplete: {0} renamed, {1} unchanged, {2} unexpected. See Output Log."), FText::AsNumber(AtTarget), FText::AsNumber(AtSource), FText::AsNumber(Unexpected)), SNotificationItem::CS_Fail);
+ }
+diff --git a/BertaDevKitHost/Plugins/BertaDevKit/Source/BertaDevKitEditor/Private/AssetActions/BertaAssetNamingUtils.cpp b/BertaDevKitHost/Plugins/BertaDevKit/Source/BertaDevKitEditor/Private/AssetActions/BertaAssetNamingUtils.cpp
+index c5d6486..5f46798 100644
+--- a/BertaDevKitHost/Plugins/BertaDevKit/Source/BertaDevKitEditor/Private/AssetActions/BertaAssetNamingUtils.cpp
++++ b/BertaDevKitHost/Plugins/BertaDevKit/Source/BertaDevKitEditor/Private/AssetActions/BertaAssetNamingUtils.cpp
+@@ -1,4 +1,5 @@
+ #include "AssetActions/BertaAssetNamingUtils.h"
++#include "AssetActions/BertaAssetNamingBatch.h"
+ #include "Log/BertaDevKitEditorLog.h"
+ 
+ #include "AIController.h"
+@@ -8,7 +9,6 @@
+ #include "Animation/AnimMontage.h"
+ #include "Animation/BlendSpace.h"
+ #include "Animation/BlendSpace1D.h"
+-#include "AssetToolsModule.h"
+ #include "BehaviorTree/BlackboardData.h"
+ #include "BehaviorTree/BTDecorator.h"
+ #include "BehaviorTree/BTService.h"
+@@ -36,7 +36,6 @@
+ #include "EnvironmentQuery/EnvQueryContext.h"
+ #include "InputAction.h"
+ #include "InputMappingContext.h"
+-#include "Misc/PackageName.h"
+ #include "NiagaraEmitter.h"
+ #include "NiagaraSystem.h"
+ #include "Particles/ParticleSystem.h"
+@@ -228,9 +227,19 @@ EBertaRenameResult UBertaAssetNamingUtils::ExecuteRename(UObject* Asset, const F
+ 	{
+ 		return EBertaRenameResult::Failed;
+ 	}
+-	TArray<FAssetRenameData> RenameData;
+-	RenameData.Emplace(Asset, FPackageName::GetLongPackagePath(Asset->GetOutermost()->GetName()), Plan.TargetName);
+-	if (!FAssetToolsModule::GetModule().Get().RenameAssets(RenameData))
++	FBertaAssetNamingBatchCandidate Candidate;
++	FText FailureReason;
++	if (!BertaAssetNamingBatch::BuildCandidate(FAssetData(Asset), Plan, Candidate, FailureReason))
++	{
++		UE_LOG(LogBertaDevKitEditor, Error, TEXT("Asset rename could not build a valid destination: %s (%s)"), *Asset->GetPathName(), *FailureReason.ToString());
++		return EBertaRenameResult::Failed;
++	}
++
++	TArray<FBertaAssetNamingBatchCandidate> Candidates;
++	Candidates.Add(MoveTemp(Candidate));
++	TArray<UObject*> LoadedAssets;
++	LoadedAssets.Add(Asset);
++	if (!BertaAssetNamingBatch::Execute(Candidates, LoadedAssets))
+ 	{
+ 		UE_LOG(LogBertaDevKitEditor, Error, TEXT("Asset rename failed: %s -> %s"), *Asset->GetName(), *Plan.TargetName);
+ 		return EBertaRenameResult::Failed;
+diff --git a/BertaDevKitHost/Plugins/BertaDevKit/Source/BertaDevKitEditor/Private/Tests/BertaAssetNamingTests.cpp b/BertaDevKitHost/Plugins/BertaDevKit/Source/BertaDevKitEditor/Private/Tests/BertaAssetNamingTests.cpp
+index 09da186..a91da00 100644
+--- a/BertaDevKitHost/Plugins/BertaDevKit/Source/BertaDevKitEditor/Private/Tests/BertaAssetNamingTests.cpp
++++ b/BertaDevKitHost/Plugins/BertaDevKit/Source/BertaDevKitEditor/Private/Tests/BertaAssetNamingTests.cpp
+@@ -1,4 +1,5 @@
+ #include "AssetActions/BertaAssetNamingUtils.h"
++#include "AssetActions/BertaAssetNamingBatch.h"
+ 
+ #if WITH_DEV_AUTOMATION_TESTS
+ 
+@@ -9,6 +10,7 @@
+ #include "Engine/StaticMesh.h"
+ #include "Materials/MaterialInstanceConstant.h"
+ #include "Misc/AutomationTest.h"
++#include "Misc/PackageName.h"
+ 
+ namespace
+ {
+@@ -35,6 +37,21 @@ namespace
+ 		Test.TestEqual(TEXT("Prefix"), Plan.ExpectedPrefix, FString(Prefix));
+ 		Test.TestEqual(TEXT("Target"), Plan.TargetName, FString(Target));
+ 	}
++
++	FBertaAssetNamingBatchCandidate MakeBatchCandidate(FAutomationTestBase& Test, const TCHAR* PackageName, const TCHAR* AssetName, const TCHAR* TargetName)
++	{
++		const FString PackagePath = FPackageName::GetLongPackagePath(PackageName);
++		const FAssetData AssetData(FName(PackageName), FName(*PackagePath), FName(AssetName), UStaticMesh::StaticClass()->GetClassPathName());
++		FBertaAssetNamingPlan Plan;
++		Plan.Status = EBertaAssetNamingStatus::NeedsRename;
++		Plan.ExpectedPrefix = TEXT("SM_");
++		Plan.TargetName = TargetName;
++
++		FBertaAssetNamingBatchCandidate Candidate;
++		FText FailureReason;
++		Test.TestTrue(FString::Printf(TEXT("Build batch candidate %s"), PackageName), BertaAssetNamingBatch::BuildCandidate(AssetData, Plan, Candidate, FailureReason));
++		return Candidate;
++	}
+ }
+ 
+ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FBertaAssetNamingCoreTest, "BertaDevKit.AssetNaming.Core", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+@@ -56,4 +73,82 @@ bool FBertaAssetNamingCoreTest::RunTest(const FString& Parameters)
+ 	return true;
+ }
+ 
++IMPLEMENT_SIMPLE_AUTOMATION_TEST(FBertaAssetNamingBatchTest, "BertaDevKit.AssetNaming.Batch", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
++bool FBertaAssetNamingBatchTest::RunTest(const FString& Parameters)
++{
++	{
++		TArray<FBertaAssetNamingBatchCandidate> Candidates;
++		Candidates.Add(MakeBatchCandidate(*this, TEXT("/Game/AssetNamingBatch/Distinct/Foo"), TEXT("Foo"), TEXT("SM_Foo")));
++		Candidates.Add(MakeBatchCandidate(*this, TEXT("/Game/AssetNamingBatch/Distinct/Bar"), TEXT("Bar"), TEXT("SM_Bar")));
++		const FBertaAssetNamingBatchPreflightResult Result = BertaAssetNamingBatch::Preflight(Candidates, [](const FBertaAssetNamingBatchCandidate&)
++		{
++			return false;
++		});
++		TestTrue(TEXT("Distinct targets are accepted"), Result.IsSafe());
++	}
++
++	{
++		TArray<FBertaAssetNamingBatchCandidate> Candidates;
++		Candidates.Add(MakeBatchCandidate(*this, TEXT("/Game/AssetNamingBatch/FolderA/Rock"), TEXT("Rock"), TEXT("SM_Rock")));
++		Candidates.Add(MakeBatchCandidate(*this, TEXT("/Game/AssetNamingBatch/FolderB/Rock"), TEXT("Rock"), TEXT("SM_Rock")));
++		const FBertaAssetNamingBatchPreflightResult Result = BertaAssetNamingBatch::Preflight(Candidates, [](const FBertaAssetNamingBatchCandidate&)
++		{
++			return false;
++		});
++		TestTrue(TEXT("Matching names in different folders do not collide"), Result.IsSafe());
++	}
++
++	{
++		TArray<FBertaAssetNamingBatchCandidate> Candidates;
++		Candidates.Add(MakeBatchCandidate(*this, TEXT("/Game/AssetNamingBatch/Duplicate/One"), TEXT("One"), TEXT("SM_Target")));
++		Candidates.Add(MakeBatchCandidate(*this, TEXT("/Game/AssetNamingBatch/Duplicate/Two"), TEXT("Two"), TEXT("SM_Target")));
++		const FBertaAssetNamingBatchPreflightResult Result = BertaAssetNamingBatch::Preflight(Candidates, [](const FBertaAssetNamingBatchCandidate&)
++		{
++			return false;
++		});
++		TestFalse(TEXT("Duplicate complete target paths are rejected"), Result.IsSafe());
++		TestEqual(TEXT("Every duplicate candidate is reported"), Result.Conflicts.Num(), 2);
++	}
++
++	{
++		TArray<FBertaAssetNamingBatchCandidate> Candidates;
++		Candidates.Add(MakeBatchCandidate(*this, TEXT("/Game/AssetNamingBatch/Invalid/Source"), TEXT("Source"), TEXT("Invalid/Name")));
++		const FBertaAssetNamingBatchPreflightResult Result = BertaAssetNamingBatch::Preflight(Candidates, [](const FBertaAssetNamingBatchCandidate&)
++		{
++			return false;
++		});
++		TestFalse(TEXT("Invalid target path is rejected"), Result.IsSafe());
++		TestEqual(TEXT("Invalid target conflict count"), Result.Conflicts.Num(), 1);
++		TestEqual(TEXT("Invalid target conflict type"), Result.Conflicts[0].Type, EBertaAssetNamingBatchConflictType::InvalidTarget);
++	}
++
++	{
++		TArray<FBertaAssetNamingBatchCandidate> Candidates;
++		Candidates.Add(MakeBatchCandidate(*this, TEXT("/Game/AssetNamingBatch/Occupied/Source"), TEXT("Source"), TEXT("SM_Taken")));
++		const FBertaAssetNamingBatchPreflightResult Result = BertaAssetNamingBatch::Preflight(Candidates, [](const FBertaAssetNamingBatchCandidate& Candidate)
++		{
++			return Candidate.TargetObjectPath == TEXT("/Game/AssetNamingBatch/Occupied/SM_Taken.SM_Taken");
++		});
++		TestFalse(TEXT("Occupied target is rejected"), Result.IsSafe());
++		TestEqual(TEXT("Occupied target conflict type"), Result.Conflicts[0].Type, EBertaAssetNamingBatchConflictType::OccupiedTarget);
++	}
++
++	{
++		TArray<FBertaAssetNamingBatchCandidate> Candidates;
++		Candidates.Add(MakeBatchCandidate(*this, TEXT("/Game/AssetNamingBatch/Chain/A"), TEXT("A"), TEXT("B")));
++		Candidates.Add(MakeBatchCandidate(*this, TEXT("/Game/AssetNamingBatch/Chain/B"), TEXT("B"), TEXT("C")));
++		const FBertaAssetNamingBatchPreflightResult Result = BertaAssetNamingBatch::Preflight(Candidates, [&Candidates](const FBertaAssetNamingBatchCandidate& Candidate)
++		{
++			return Candidates.ContainsByPredicate([&Candidate](const FBertaAssetNamingBatchCandidate& ExistingCandidate)
++			{
++				return ExistingCandidate.SourceObjectPath == Candidate.TargetObjectPath;
++			});
++		});
++		TestFalse(TEXT("Chained rename into a candidate source is rejected"), Result.IsSafe());
++		TestEqual(TEXT("Chained rename conflict type"), Result.Conflicts[0].Type, EBertaAssetNamingBatchConflictType::OccupiedTarget);
++	}
++
++	return true;
++}
++
+ #endif
+diff --git a/BertaDevKitHost/Plugins/BertaDevKit/Source/BertaDevKitEditor/Public/AssetActions/BertaAssetNamingUtils.h b/BertaDevKitHost/Plugins/BertaDevKit/Source/BertaDevKitEditor/Public/AssetActions/BertaAssetNamingUtils.h
+index eb59eda..ee4b0bf 100644
+--- a/BertaDevKitHost/Plugins/BertaDevKit/Source/BertaDevKitEditor/Public/AssetActions/BertaAssetNamingUtils.h
++++ b/BertaDevKitHost/Plugins/BertaDevKit/Source/BertaDevKitEditor/Public/AssetActions/BertaAssetNamingUtils.h
+@@ -28,7 +28,7 @@ public:
+ 	static const TMap<FTopLevelAssetPath, FString>& GetOptionalPluginPrefixes();
+ 	/** Resolves prefix, target name, and rename state without loading the asset. */
+ 	static FBertaAssetNamingPlan BuildRenamePlan(const FAssetData& AssetData);
+-	/** The sole path that creates FAssetRenameData and invokes AssetTools. */
++	/** Executes a single loaded-asset rename through the shared Asset Naming execution path. */
+ 	static EBertaRenameResult ExecuteRename(UObject* Asset, const FBertaAssetNamingPlan& Plan);
+ 	/** Convenience entry point for a loaded asset; it uses the same FAssetData plan. */
+ 	static EBertaRenameResult RenameAssetWithPrefix(UObject* Asset);
