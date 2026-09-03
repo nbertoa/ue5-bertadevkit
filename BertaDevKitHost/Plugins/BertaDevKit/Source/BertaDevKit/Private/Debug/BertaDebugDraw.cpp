@@ -5,6 +5,7 @@
 #include "Components/SphereComponent.h"
 #include "Debug/BertaDebugLog.h"
 #include "DrawDebugHelpers.h"
+#include "Engine/Engine.h"
 #include "Settings/BertaDevKitSettings.h"
 
 // ─── Private helpers ────────────────────────────────────────────────────────
@@ -16,6 +17,15 @@ const UWorld* UBertaDebugDraw::ResolveWorld(const UObject* WorldContextObject,
 	                TEXT("[BertaDebugDraw::%s] WorldContextObject is null or invalid."),
 	                CallerName))
 	{
+		return nullptr;
+	}
+
+	if (!GEngine)
+	{
+		UE_LOG(LogBertaDebug,
+		       Warning,
+		       TEXT("[BertaDebugDraw::%s] GEngine is unavailable; cannot resolve a UWorld."),
+		       CallerName);
 		return nullptr;
 	}
 

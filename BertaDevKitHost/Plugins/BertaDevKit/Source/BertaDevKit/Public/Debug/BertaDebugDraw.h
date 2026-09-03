@@ -11,9 +11,10 @@ class UBoxComponent;
 /**
  * Blueprint and C++ utility library for in-world debug drawing.
  *
- * All functions are stripped from Shipping builds via the DevelopmentOnly meta tag —
- * zero runtime overhead in production. Shapes are drawn using Unreal's built-in
- * DrawDebug* family of functions.
+ * Blueprint-exposed draw nodes are marked DevelopmentOnly and are intended for
+ * development-mode debugging rather than normal Shipping Blueprint execution.
+ * Their C++ implementations remain Runtime code unless separately compile-gated.
+ * Shapes are drawn using Unreal's built-in DrawDebug* family of functions.
  *
  * Duration behaviour:
  *   Duration <= 0.0f  →  shape persists until manually cleared or until PIE ends.
