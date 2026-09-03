@@ -55,41 +55,101 @@ namespace
 		const TMap<FTopLevelAssetPath, FString>& OptionalPrefixes = UBertaAssetNamingUtils::GetOptionalPluginPrefixes();
 		for (UClass* Current = Class; Current; Current = Current->GetSuperClass())
 		{
-			if (const FString* Prefix = Prefixes.Find(Current)) return Prefix;
-			if (const FString* Prefix = OptionalPrefixes.Find(Current->GetClassPathName())) return Prefix;
+			if (const FString* Prefix = Prefixes.Find(Current))
+			{
+				return Prefix;
+			}
+
+			if (const FString* Prefix = OptionalPrefixes.Find(Current->GetClassPathName()))
+			{
+				return Prefix;
+			}
 		}
+
 		return nullptr;
 	}
 
-	const FString* FindOptionalPrefixByPath(const FString& ExportPath)
+	bool TryParseClassPath(const FString& ExportPath, FTopLevelAssetPath& OutClassPath)
 	{
-		for (const TPair<FTopLevelAssetPath, FString>& Pair : UBertaAssetNamingUtils::GetOptionalPluginPrefixes())
+		FString ClassPath = ExportPath;
+		ClassPath.RemoveFromStart(TEXT("Class'"));
+		ClassPath.RemoveFromEnd(TEXT("'"));
+		OutClassPath = FTopLevelAssetPath(ClassPath);
+		return OutClassPath.IsValid();
+	}
+
+	const FString* FindOptionalPrefix(const FTopLevelAssetPath& ClassPath)
+	{
+		return UBertaAssetNamingUtils::GetOptionalPluginPrefixes().Find(ClassPath);
+	}
+
+	const FString* FindDirectBlueprintPrefix(const FAssetData& AssetData, UClass* AssetClass)
+	{
+		if (const FString* Prefix = FindOptionalPrefix(AssetData.AssetClassPath))
 		{
-			if (ExportPath.Contains(Pair.Key.ToString())) return &Pair.Value;
+			return Prefix;
 		}
+
+		if (AssetClass != UBlueprint::StaticClass())
+		{
+			return UBertaAssetNamingUtils::GetPrefixMap().Find(AssetClass);
+		}
+
 		return nullptr;
 	}
 
 	const FString* ResolveBlueprintPrefix(const FAssetData& AssetData, UClass* AssetClass)
 	{
-		// Specific Blueprint asset types win; generic UBlueprint is resolved from its native parent.
-		if (AssetClass != UBlueprint::StaticClass()) if (const FString* Prefix = FindPrefixInHierarchy(AssetClass)) return Prefix;
-		FString NativeParentPath;
-		if (AssetData.GetTagValue(FBlueprintTags::NativeParentClassPath, NativeParentPath) && !NativeParentPath.IsEmpty() && NativeParentPath != TEXT("None"))
+		// Specific Blueprint asset types win. Do not walk to UBlueprint here.
+		if (const FString* Prefix = FindDirectBlueprintPrefix(AssetData, AssetClass))
 		{
-			if (const FString* Prefix = FindOptionalPrefixByPath(NativeParentPath)) return Prefix;
-			NativeParentPath.RemoveFromStart(TEXT("Class'"));
-			NativeParentPath.RemoveFromEnd(TEXT("'"));
-			if (UClass* NativeParentClass = FindObject<UClass>(nullptr, *NativeParentPath)) if (const FString* Prefix = FindPrefixInHierarchy(NativeParentClass)) return Prefix;
+			return Prefix;
 		}
+
+		FString NativeParentPath;
+		if (AssetData.GetTagValue(FBlueprintTags::NativeParentClassPath, NativeParentPath)
+			&& !NativeParentPath.IsEmpty()
+			&& NativeParentPath != TEXT("None"))
+		{
+			FTopLevelAssetPath NativeParentClassPath;
+			if (TryParseClassPath(NativeParentPath, NativeParentClassPath))
+			{
+				if (const FString* Prefix = FindOptionalPrefix(NativeParentClassPath))
+				{
+					return Prefix;
+				}
+
+				if (UClass* NativeParentClass = FindObject<UClass>(nullptr, *NativeParentClassPath.ToString()))
+				{
+					if (const FString* Prefix = FindPrefixInHierarchy(NativeParentClass))
+					{
+						return Prefix;
+					}
+				}
+			}
+		}
+
 		return &GenericBlueprintPrefix;
 	}
 
 	FString BuildTargetName(const FString& AssetName, const FString& Prefix, UClass* AssetClass)
 	{
+		if (AssetName.StartsWith(Prefix))
+		{
+			return AssetName;
+		}
+
 		FString NameToPrefix = AssetName;
-		if (AssetClass->IsChildOf(UMaterialInstanceConstant::StaticClass())) { NameToPrefix.RemoveFromStart(TEXT("M_")); NameToPrefix.RemoveFromEnd(TEXT("_Inst")); }
-		else if (AssetClass->IsChildOf(UAnimMontage::StaticClass())) NameToPrefix.RemoveFromEnd(TEXT("_Montage"));
+		if (AssetClass && AssetClass->IsChildOf(UMaterialInstanceConstant::StaticClass()))
+		{
+			NameToPrefix.RemoveFromStart(TEXT("M_"));
+			NameToPrefix.RemoveFromEnd(TEXT("_Inst"));
+		}
+		else if (AssetClass && AssetClass->IsChildOf(UAnimMontage::StaticClass()))
+		{
+			NameToPrefix.RemoveFromEnd(TEXT("_Montage"));
+		}
+
 		return Prefix + NameToPrefix;
 	}
 }
@@ -118,6 +178,7 @@ const TMap<FTopLevelAssetPath, FString>& UBertaAssetNamingUtils::GetOptionalPlug
 		{ FTopLevelAssetPath(TEXT("/Script/GameplayAbilities"), TEXT("GameplayEffect")), TEXT("GE_") },
 		{ FTopLevelAssetPath(TEXT("/Script/GameplayAbilities"), TEXT("GameplayCueNotify_Static")), TEXT("GC_") },
 		{ FTopLevelAssetPath(TEXT("/Script/GameplayAbilities"), TEXT("GameplayCueNotify_Actor")), TEXT("GC_") },
+		{ FTopLevelAssetPath(TEXT("/Script/GameplayAbilities"), TEXT("GameplayAbilityBlueprint")), TEXT("GA_") },
 	};
 	return Prefixes;
 }
@@ -126,9 +187,25 @@ FBertaAssetNamingPlan UBertaAssetNamingUtils::BuildRenamePlan(const FAssetData& 
 {
 	FBertaAssetNamingPlan Plan;
 	UClass* AssetClass = AssetData.GetClass();
-	if (!AssetClass) return Plan;
-	const FString* Prefix = AssetClass->IsChildOf(UBlueprint::StaticClass()) ? ResolveBlueprintPrefix(AssetData, AssetClass) : FindPrefixInHierarchy(AssetClass);
-	if (!Prefix || Prefix->IsEmpty()) return Plan;
+	const FString* Prefix = FindOptionalPrefix(AssetData.AssetClassPath);
+	if (Prefix)
+	{
+		Plan.ExpectedPrefix = *Prefix;
+		Plan.TargetName = BuildTargetName(AssetData.AssetName.ToString(), Plan.ExpectedPrefix, AssetClass);
+		Plan.Status = AssetData.AssetName.ToString() == Plan.TargetName ? EBertaAssetNamingStatus::AlreadyCorrect : EBertaAssetNamingStatus::NeedsRename;
+		return Plan;
+	}
+
+	if (!AssetClass)
+	{
+		return Plan;
+	}
+
+	Prefix = AssetClass->IsChildOf(UBlueprint::StaticClass()) ? ResolveBlueprintPrefix(AssetData, AssetClass) : FindPrefixInHierarchy(AssetClass);
+	if (!Prefix || Prefix->IsEmpty())
+	{
+		return Plan;
+	}
 	Plan.ExpectedPrefix = *Prefix;
 	Plan.TargetName = BuildTargetName(AssetData.AssetName.ToString(), Plan.ExpectedPrefix, AssetClass);
 	Plan.Status = AssetData.AssetName.ToString() == Plan.TargetName ? EBertaAssetNamingStatus::AlreadyCorrect : EBertaAssetNamingStatus::NeedsRename;
@@ -137,9 +214,20 @@ FBertaAssetNamingPlan UBertaAssetNamingUtils::BuildRenamePlan(const FAssetData& 
 
 EBertaRenameResult UBertaAssetNamingUtils::ExecuteRename(UObject* Asset, const FBertaAssetNamingPlan& Plan)
 {
-	if (Plan.Status == EBertaAssetNamingStatus::UnknownClass) return EBertaRenameResult::UnknownClass;
-	if (Plan.Status == EBertaAssetNamingStatus::AlreadyCorrect) return EBertaRenameResult::AlreadyCorrect;
-	if (!ensureMsgf(IsValid(Asset), TEXT("ExecuteRename requires a valid asset for a NeedsRename plan."))) return EBertaRenameResult::Failed;
+	if (Plan.Status == EBertaAssetNamingStatus::UnknownClass)
+	{
+		return EBertaRenameResult::UnknownClass;
+	}
+
+	if (Plan.Status == EBertaAssetNamingStatus::AlreadyCorrect)
+	{
+		return EBertaRenameResult::AlreadyCorrect;
+	}
+
+	if (!ensureMsgf(IsValid(Asset), TEXT("ExecuteRename requires a valid asset for a NeedsRename plan.")))
+	{
+		return EBertaRenameResult::Failed;
+	}
 	TArray<FAssetRenameData> RenameData;
 	RenameData.Emplace(Asset, FPackageName::GetLongPackagePath(Asset->GetOutermost()->GetName()), Plan.TargetName);
 	if (!FAssetToolsModule::GetModule().Get().RenameAssets(RenameData))
@@ -152,6 +240,9 @@ EBertaRenameResult UBertaAssetNamingUtils::ExecuteRename(UObject* Asset, const F
 
 EBertaRenameResult UBertaAssetNamingUtils::RenameAssetWithPrefix(UObject* Asset)
 {
-	if (!ensureMsgf(IsValid(Asset), TEXT("RenameAssetWithPrefix received an invalid asset."))) return EBertaRenameResult::UnknownClass;
+	if (!ensureMsgf(IsValid(Asset), TEXT("RenameAssetWithPrefix received an invalid asset.")))
+	{
+		return EBertaRenameResult::UnknownClass;
+	}
 	return ExecuteRename(Asset, BuildRenamePlan(FAssetData(Asset)));
 }
