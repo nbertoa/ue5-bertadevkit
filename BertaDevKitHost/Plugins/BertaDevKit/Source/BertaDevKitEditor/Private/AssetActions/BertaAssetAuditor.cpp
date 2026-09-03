@@ -1,342 +1,68 @@
 #include "AssetActions/BertaAssetAuditor.h"
-
 #include "AssetActions/BertaAssetNamingUtils.h"
 #include "Log/BertaDevKitEditorLog.h"
 
 #include "AssetRegistry/AssetRegistryModule.h"
-#include "AssetToolsModule.h"
 #include "EditorUtilityLibrary.h"
-#include "Engine/Blueprint.h"
-#include "Misc/MessageDialog.h"
 #include "Framework/Notifications/NotificationManager.h"
-#include "Materials/MaterialInstanceConstant.h"
-#include "Misc/PackageName.h"
+#include "Misc/MessageDialog.h"
 #include "Widgets/Notifications/SNotificationList.h"
-
-// ----------------------------------------------------------------
-// Internal helpers
-// ----------------------------------------------------------------
 
 namespace
 {
 	bool IsProjectAsset(const FAssetData& AssetData)
 	{
-		const FString PackagePath = AssetData.PackagePath.ToString();
-		return PackagePath == TEXT("/Game") || PackagePath.StartsWith(TEXT("/Game/"));
+		const FString Path = AssetData.PackagePath.ToString();
+		return Path == TEXT("/Game") || Path.StartsWith(TEXT("/Game/"));
 	}
-
-	/** Builds and displays an FNotificationInfo toast with the given message. */
-	void ShowNotification(const FText& Message,
-	                      const SNotificationItem::ECompletionState State)
+	void ShowNotification(const FText& Message, SNotificationItem::ECompletionState State)
 	{
-		FNotificationInfo Info(Message);
-		Info.bFireAndForget = true;
-		Info.ExpireDuration = 4.0f;
-
-		TSharedPtr<SNotificationItem> Notification = FSlateNotificationManager::Get().AddNotification(Info);
-
-		if (Notification.IsValid())
-		{
-			Notification->SetCompletionState(State);
-		}
+		FNotificationInfo Info(Message); Info.bFireAndForget = true; Info.ExpireDuration = 4.0f;
+		if (const TSharedPtr<SNotificationItem> Item = FSlateNotificationManager::Get().AddNotification(Info)) Item->SetCompletionState(State);
 	}
 }
-
-// ----------------------------------------------------------------
-// ResolveAssetScope
-// ----------------------------------------------------------------
 
 void UBertaAssetAuditor::ResolveAssetScope(TArray<FAssetData>& OutAssets)
 {
 	OutAssets.Reset();
-
-	// Priority 1: individually selected assets in the Content Browser.
-	const TArray<FAssetData> SelectedAssets = UEditorUtilityLibrary::GetSelectedAssetData();
-
-	if (!SelectedAssets.IsEmpty())
-	{
-		for (const FAssetData& AssetData : SelectedAssets)
-		{
-			if (IsProjectAsset(AssetData))
-			{
-				OutAssets.Add(AssetData);
-			}
-		}
-
-		UE_LOG(LogBertaDevKitEditor,
-		       Log,
-		       TEXT("[UBertaAssetAuditor::ResolveAssetScope] Using %d selected asset(s)."),
-		       OutAssets.Num());
-
-		return;
-	}
-
-	const FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
-
-	FARFilter Filter;
-	Filter.bRecursivePaths = true;
-
-	// Priority 2: the folder active in the Content Browser directory tree.
-	FString ActiveFolderPath;
-	const bool bHasActivePath = UEditorUtilityLibrary::GetCurrentContentBrowserPath(ActiveFolderPath);
-
-	if (bHasActivePath && (ActiveFolderPath == TEXT("/Game") || ActiveFolderPath.StartsWith(TEXT("/Game/"))))
-	{
-		Filter.PackagePaths.Add(FName(*ActiveFolderPath));
-
-		UE_LOG(LogBertaDevKitEditor,
-		       Log,
-		       TEXT("[UBertaAssetAuditor::ResolveAssetScope] Scanning active folder: %s"),
-		       *ActiveFolderPath);
-	}
-	else
-	{
-		// Priority 3: full /Game/ scan as last resort.
-		Filter.PackagePaths.Add(FName(TEXT("/Game")));
-
-		UE_LOG(LogBertaDevKitEditor,
-		       Log,
-		       TEXT("[UBertaAssetAuditor::ResolveAssetScope] No folder active — falling back to full /Game/ scan."));
-	}
-
-	AssetRegistryModule.Get().GetAssets(Filter,
-	                                    OutAssets);
-
-	UE_LOG(LogBertaDevKitEditor,
-	       Log,
-	       TEXT("[UBertaAssetAuditor::ResolveAssetScope] Found %d asset(s) in scope."),
-	       OutAssets.Num());
+	for (const FAssetData& Asset : UEditorUtilityLibrary::GetSelectedAssetData()) if (IsProjectAsset(Asset)) OutAssets.Add(Asset);
+	if (!OutAssets.IsEmpty()) return;
+	FARFilter Filter; Filter.bRecursivePaths = true;
+	FString Folder;
+	if (!UEditorUtilityLibrary::GetCurrentContentBrowserPath(Folder) || (Folder != TEXT("/Game") && !Folder.StartsWith(TEXT("/Game/")))) Folder = TEXT("/Game");
+	Filter.PackagePaths.Add(*Folder);
+	FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get().GetAssets(Filter, OutAssets);
 }
-
-// ----------------------------------------------------------------
-// AuditAssetNaming
-// ----------------------------------------------------------------
 
 void UBertaAssetAuditor::AuditAssetNaming()
 {
-	UE_LOG(LogBertaDevKitEditor,
-	       Log,
-	       TEXT("[UBertaAssetAuditor::AuditAssetNaming] Starting audit..."));
-
-	TArray<FAssetData> Assets;
-	ResolveAssetScope(Assets);
-
-	int32 ViolationCount = 0;
-
-	for (const FAssetData& AssetData : Assets)
+	TArray<FAssetData> Assets; ResolveAssetScope(Assets);
+	int32 NeedsRename = 0, Unknown = 0;
+	for (const FAssetData& Asset : Assets)
 	{
-		UClass* AssetClass = AssetData.GetClass();
-
-		if (!AssetClass)
-		{
-			// Class not loaded — skip silently, not a violation.
-			continue;
-		}
-
-		// For Blueprint assets, resolve the prefix via the Asset Registry tag to
-		// avoid loading the asset into memory during a dry audit.
-		const FString* FoundPrefix = nullptr;
-
-		if (AssetClass == UBlueprint::StaticClass() || AssetClass->IsChildOf(UBlueprint::StaticClass()))
-		{
-			FoundPrefix = UBertaAssetNamingUtils::ResolveBlueprintPrefixFromTag(AssetData);
-		}
-		else
-		{
-			FoundPrefix = UBertaAssetNamingUtils::FindPrefixForClass(AssetClass,
-			                                                         nullptr);
-		}
-
-		if (!FoundPrefix || FoundPrefix->IsEmpty())
-		{
-			UE_LOG(LogBertaDevKitEditor,
-			       Verbose,
-			       TEXT("[UBertaAssetAuditor::AuditAssetNaming] Unknown class, skipping: %s (%s)"),
-			       *AssetData.AssetName.ToString(),
-			       *AssetData.AssetClassPath.GetAssetName().ToString());
-			continue;
-		}
-
-		const FString AssetName = AssetData.AssetName.ToString();
-
-		if (!AssetName.StartsWith(*FoundPrefix))
-		{
-			UE_LOG(LogBertaDevKitEditor,
-			       Warning,
-			       TEXT( "[UBertaAssetAuditor::AuditAssetNaming] VIOLATION — Asset: %s | Class: %s | Expected prefix: %s | Path: %s" ),
-			       *AssetName,
-			       *AssetClass->GetName(),
-			       **FoundPrefix,
-			       *AssetData.PackagePath.ToString());
-
-			++ViolationCount;
-		}
+		const FBertaAssetNamingPlan Plan = UBertaAssetNamingUtils::BuildRenamePlan(Asset);
+		if (Plan.Status == EBertaAssetNamingStatus::UnknownClass) { ++Unknown; UE_LOG(LogBertaDevKitEditor, Warning, TEXT("[AssetNaming] Unknown class: %s (%s)"), *Asset.AssetName.ToString(), *Asset.AssetClassPath.ToString()); }
+		else if (Plan.Status == EBertaAssetNamingStatus::NeedsRename) { ++NeedsRename; UE_LOG(LogBertaDevKitEditor, Warning, TEXT("[AssetNaming] VIOLATION: %s -> %s"), *Asset.AssetName.ToString(), *Plan.TargetName); }
 	}
-
-	UE_LOG(LogBertaDevKitEditor,
-	       Log,
-	       TEXT("[UBertaAssetAuditor::AuditAssetNaming] Audit complete — %d violation(s) found."),
-	       ViolationCount);
-
-	const FText NotificationText = ViolationCount > 0 ? FText::Format(NSLOCTEXT("BertaDevKit",
-	                                                                            "AuditViolations",
-	                                                                            "Asset Audit: {0} violation(s) found. See Output Log."),
-	                                                                  FText::AsNumber(ViolationCount)) : NSLOCTEXT("BertaDevKit",
-	                                                                                                               "AuditClean",
-	                                                                                                               "Asset Audit: No violations found.");
-
-	const SNotificationItem::ECompletionState NotificationState = ViolationCount > 0 ? SNotificationItem::CS_Fail : SNotificationItem::CS_Success;
-
-	ShowNotification(NotificationText,
-	                 NotificationState);
+	UE_LOG(LogBertaDevKitEditor, Log, TEXT("[AssetNaming] Audit complete: %d need rename, %d unknown."), NeedsRename, Unknown);
+	ShowNotification(FText::Format(NSLOCTEXT("BertaDevKit", "AssetAudit", "Asset Audit: {0} violation(s), {1} unknown. See Output Log."), FText::AsNumber(NeedsRename), FText::AsNumber(Unknown)), NeedsRename > 0 || Unknown > 0 ? SNotificationItem::CS_Fail : SNotificationItem::CS_Success);
 }
-
-// ----------------------------------------------------------------
-// FixAssetNaming
-// ----------------------------------------------------------------
 
 void UBertaAssetAuditor::FixAssetNaming()
 {
-	UE_LOG(LogBertaDevKitEditor,
-	       Log,
-	       TEXT("[UBertaAssetAuditor::FixAssetNaming] Starting fix..."));
-
-	TArray<FAssetData> Assets;
-	ResolveAssetScope(Assets);
-
-	if (Assets.IsEmpty())
+	TArray<FAssetData> Assets; ResolveAssetScope(Assets);
+	TArray<TPair<FAssetData, FBertaAssetNamingPlan>> Candidates;
+	int32 Unknown = 0;
+	for (const FAssetData& Asset : Assets) { FBertaAssetNamingPlan Plan = UBertaAssetNamingUtils::BuildRenamePlan(Asset); if (Plan.Status == EBertaAssetNamingStatus::NeedsRename) Candidates.Emplace(Asset, MoveTemp(Plan)); else if (Plan.Status == EBertaAssetNamingStatus::UnknownClass) ++Unknown; }
+	if (Candidates.IsEmpty()) { ShowNotification(NSLOCTEXT("BertaDevKit", "NoAssetFix", "Asset Fix: No assets require renaming."), SNotificationItem::CS_Success); return; }
+	if (FMessageDialog::Open(EAppMsgType::YesNo, FText::Format(NSLOCTEXT("BertaDevKit", "ConfirmAssetFix", "Rename {0} project asset(s) to match BertaDevKit naming rules?"), FText::AsNumber(Candidates.Num()))) != EAppReturnType::Yes) return;
+	int32 Renamed = 0, LoadFailed = 0, RenameFailed = 0;
+	for (const TPair<FAssetData, FBertaAssetNamingPlan>& Candidate : Candidates)
 	{
-		ShowNotification(NSLOCTEXT("BertaDevKit", "NoProjectAssets", "Asset Fix: No project assets in scope."),
-		                 SNotificationItem::CS_None);
-		return;
+		UObject* Asset = Candidate.Key.GetAsset();
+		if (!IsValid(Asset)) { ++LoadFailed; continue; }
+		if (UBertaAssetNamingUtils::ExecuteRename(Asset, Candidate.Value) == EBertaRenameResult::Renamed) ++Renamed; else ++RenameFailed;
 	}
-
-	const FText ConfirmationText = FText::Format(
-		NSLOCTEXT("BertaDevKit", "ConfirmAssetFix",
-		          "Rename up to {0} project asset(s) to match BertaDevKit naming rules? This updates references and cannot be undone as one operation."),
-		FText::AsNumber(Assets.Num()));
-	if (FMessageDialog::Open(EAppMsgType::YesNo, ConfirmationText) != EAppReturnType::Yes)
-	{
-		UE_LOG(LogBertaDevKitEditor, Log,
-		       TEXT("[UBertaAssetAuditor::FixAssetNaming] User cancelled asset rename."));
-		return;
-	}
-
-	int32 RenamedCount = 0;
-	int32 SkippedCount = 0;
-
-	for (const FAssetData& AssetData : Assets)
-	{
-		UClass* AssetClass = AssetData.GetClass();
-
-		if (!AssetClass)
-		{
-			continue;
-		}
-
-		// Load the asset first — FindPrefixForClass needs the UBlueprint object
-		// to inspect ParentClass for framework and optional-plugin Blueprints.
-		UObject* const LoadedAsset = AssetData.GetAsset();
-
-		if (!IsValid(LoadedAsset))
-		{
-			UE_LOG(LogBertaDevKitEditor,
-			       Warning,
-			       TEXT("[UBertaAssetAuditor::FixAssetNaming] Failed to load asset: %s"),
-			       *AssetData.AssetName.ToString());
-			++SkippedCount;
-			continue;
-		}
-
-		// Use FindPrefixForClass for loaded Blueprint assets so the ParentClass walk
-		// is used — same resolution path as AuditAssetNaming. For generic Blueprints
-		// where the ParentClass walk finds no match, fall back to the tag-based resolver.
-		const FString* FoundPrefix = nullptr;
-
-		if (AssetClass == UBlueprint::StaticClass() || AssetClass->IsChildOf(UBlueprint::StaticClass()))
-		{
-			FoundPrefix = UBertaAssetNamingUtils::FindPrefixForClass(AssetClass,
-			                                                         LoadedAsset);
-
-			if (!FoundPrefix)
-			{
-				FoundPrefix = UBertaAssetNamingUtils::ResolveBlueprintPrefixFromTag(AssetData);
-			}
-		}
-		else
-		{
-			FoundPrefix = UBertaAssetNamingUtils::FindPrefixForClass(AssetClass,
-			                                                         nullptr);
-		}
-
-		if (!FoundPrefix || FoundPrefix->IsEmpty())
-		{
-			UE_LOG(LogBertaDevKitEditor,
-			       Verbose,
-			       TEXT("[UBertaAssetAuditor::FixAssetNaming] Unknown class, skipping: %s"),
-			       *AssetData.AssetName.ToString());
-			continue;
-		}
-
-		// Asset already correct — nothing to fix.
-		if (AssetData.AssetName.ToString().StartsWith(*FoundPrefix))
-		{
-			continue;
-		}
-
-		// Rename using the resolved prefix directly — bypasses RenameAssetWithPrefix's
-		// own class walk, which does not have access to ParentClass context.
-		FString CleanName = AssetData.AssetName.ToString();
-
-		// Material instances auto-named by the engine may carry "M_" and "_Inst".
-		if (LoadedAsset->IsA<UMaterialInstanceConstant>())
-		{
-			CleanName.RemoveFromStart(TEXT("M_"));
-			CleanName.RemoveFromEnd(TEXT("_Inst"));
-		}
-
-		// Animation montages may carry a "_Montage" suffix — strip before applying "AM_".
-		if (LoadedAsset->IsA<UAnimMontage>())
-		{
-			CleanName.RemoveFromEnd(TEXT("_Montage"));
-		}
-
-		const FString NewName = *FoundPrefix + CleanName;
-		const FString PackagePath = FPackageName::GetLongPackagePath(LoadedAsset->GetOutermost()->GetName());
-		TArray<FAssetRenameData> RenameData;
-		RenameData.Emplace(LoadedAsset, PackagePath, NewName);
-		if (!FAssetToolsModule::GetModule().Get().RenameAssets(RenameData))
-		{
-			UE_LOG(LogBertaDevKitEditor, Error,
-			       TEXT("[UBertaAssetAuditor::FixAssetNaming] Failed: %s -> %s"),
-			       *AssetData.AssetName.ToString(), *NewName);
-			++SkippedCount;
-			continue;
-		}
-
-		UE_LOG(LogBertaDevKitEditor,
-		       Log,
-		       TEXT("[UBertaAssetAuditor::FixAssetNaming] Fixed: %s → %s"),
-		       *AssetData.AssetName.ToString(),
-		       *NewName);
-
-		++RenamedCount;
-	}
-
-	UE_LOG(LogBertaDevKitEditor,
-	       Log,
-	       TEXT("[UBertaAssetAuditor::FixAssetNaming] Done — renamed %d asset(s), skipped %d."),
-	       RenamedCount,
-	       SkippedCount);
-
-	const FText NotificationText = FText::Format(NSLOCTEXT("BertaDevKit",
-	                                                       "AuditFixDone",
-	                                                       "Asset Fix: {0} renamed, {1} skipped. See Output Log."),
-	                                             FText::AsNumber(RenamedCount),
-	                                             FText::AsNumber(SkippedCount));
-
-	const SNotificationItem::ECompletionState NotificationState = SkippedCount > 0 ? SNotificationItem::CS_Fail : SNotificationItem::CS_Success;
-
-	ShowNotification(NotificationText,
-	                 NotificationState);
+	UE_LOG(LogBertaDevKitEditor, Log, TEXT("[AssetNaming] Fix complete: %d renamed, %d unknown, %d load failed, %d rename failed."), Renamed, Unknown, LoadFailed, RenameFailed);
+	ShowNotification(FText::Format(NSLOCTEXT("BertaDevKit", "AssetFix", "Asset Fix: {0} renamed, {1} unknown, {2} load failed, {3} rename failed."), FText::AsNumber(Renamed), FText::AsNumber(Unknown), FText::AsNumber(LoadFailed), FText::AsNumber(RenameFailed)), Unknown + LoadFailed + RenameFailed > 0 ? SNotificationItem::CS_Fail : SNotificationItem::CS_Success);
 }

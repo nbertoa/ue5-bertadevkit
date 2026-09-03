@@ -1,21 +1,19 @@
 #include "AssetActions/BertaAssetNamingUtils.h"
-
 #include "Log/BertaDevKitEditorLog.h"
 
-#include "AssetToolsModule.h"
 #include "AIController.h"
+#include "Animation/AnimBlueprint.h"
+#include "Animation/AimOffsetBlendSpace.h"
+#include "Animation/AimOffsetBlendSpace1D.h"
+#include "Animation/AnimMontage.h"
+#include "Animation/BlendSpace.h"
+#include "Animation/BlendSpace1D.h"
+#include "AssetToolsModule.h"
 #include "BehaviorTree/BlackboardData.h"
 #include "BehaviorTree/BTDecorator.h"
 #include "BehaviorTree/BTService.h"
 #include "BehaviorTree/BTTaskNode.h"
-#include "EditorUtilityLibrary.h"
-#include "Animation/AimOffsetBlendSpace.h"
-#include "Animation/AimOffsetBlendSpace1D.h"
-#include "Animation/AnimBlueprint.h"
-#include "Animation/AnimMontage.h"
-#include "Animation/AnimSequence.h"
-#include "Animation/BlendSpace.h"
-#include "Animation/BlendSpace1D.h"
+#include "Blueprint/BlueprintSupport.h"
 #include "Blueprint/UserWidget.h"
 #include "Engine/Blueprint.h"
 #include "Engine/DataAsset.h"
@@ -26,19 +24,18 @@
 #include "Engine/TextureCube.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Engine/UserDefinedEnum.h"
-#include "Engine/BlueprintGeneratedClass.h"
-#include "EnvironmentQuery/EnvQuery.h"
-#include "EnvironmentQuery/EnvQueryContext.h"
 #include "GameFramework/Character.h"
-#include "GameFramework/GameMode.h"
 #include "GameFramework/GameModeBase.h"
+#include "GameFramework/GameMode.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
-#include "InputAction.h"
-#include "InputMappingContext.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialInstanceConstant.h"
 #include "Materials/MaterialParameterCollection.h"
+#include "EnvironmentQuery/EnvQuery.h"
+#include "EnvironmentQuery/EnvQueryContext.h"
+#include "InputAction.h"
+#include "InputMappingContext.h"
 #include "Misc/PackageName.h"
 #include "NiagaraEmitter.h"
 #include "NiagaraSystem.h"
@@ -48,490 +45,113 @@
 #include "Sound/SoundWave.h"
 #include "StructUtils/UserDefinedStruct.h"
 
-// ----------------------------------------------------------------
-// Internal helpers
-// ----------------------------------------------------------------
-
 namespace
 {
-	/**
-	 * Extracts the native class name from an Asset Registry "ParentClass" tag value.
-	 *
-	 * Expected format: /Script/CoreUObject.Class'/Script/Module.ClassName'
-	 * Returns the ClassName portion after the last '.', or NAME_None if the
-	 * format is unexpected.
-	 */
-	FName ExtractClassNameFromTag(const FString& TagValue)
+	const FString GenericBlueprintPrefix(TEXT("BP_"));
+
+	const FString* FindPrefixInHierarchy(UClass* Class)
 	{
-		// Find the last '.' — the class name follows it.
-		int32 DotIndex = INDEX_NONE;
-		if (!TagValue.FindLastChar(TEXT('.'),
-		                           DotIndex))
+		const TMap<UClass*, FString>& Prefixes = UBertaAssetNamingUtils::GetPrefixMap();
+		const TMap<FTopLevelAssetPath, FString>& OptionalPrefixes = UBertaAssetNamingUtils::GetOptionalPluginPrefixes();
+		for (UClass* Current = Class; Current; Current = Current->GetSuperClass())
 		{
-			return NAME_None;
+			if (const FString* Prefix = Prefixes.Find(Current)) return Prefix;
+			if (const FString* Prefix = OptionalPrefixes.Find(Current->GetClassPathName())) return Prefix;
 		}
-
-		// Extract everything after the last '.' and strip the closing '\''.
-		FString ClassName = TagValue.RightChop(DotIndex + 1);
-		ClassName.RemoveFromEnd(TEXT("'"));
-
-		if (ClassName.IsEmpty())
-		{
-			return NAME_None;
-		}
-
-		return FName(*ClassName);
-	}
-}
-
-// ----------------------------------------------------------------
-// GetPrefixMap
-// ----------------------------------------------------------------
-
-const TMap<UClass*, FString>& UBertaAssetNamingUtils::GetPrefixMap()
-{
-	// Static local — constructed once on first call, reused for the lifetime
-	// of the editor session. No locking needed: asset operations are single-threaded.
-	//
-	// Classes from optional plugins (GameplayAbilities, etc.) are intentionally
-	// absent. Their prefixes are resolved via GetOptionalPluginPrefixes() using
-	// class name string comparison, avoiding hard module dependencies that would
-	// prevent the editor from launching on projects without those plugins.
-	static const TMap<UClass*, FString> PrefixMap = {
-		// Blueprints — specific subclasses must appear before UBlueprint so that
-		// the hierarchy walk in FindPrefixForClass matches the most derived type first.
-		{
-			UAnimBlueprint::StaticClass(),
-			TEXT("ABP_")
-		},
-		{
-			UUserWidget::StaticClass(),
-			TEXT("WBP_")
-		},
-		{
-			UBlueprint::StaticClass(),
-			TEXT("BP_")
-		},
-
-		// Meshes
-		{
-			UStaticMesh::StaticClass(),
-			TEXT("SM_")
-		},
-		{
-			USkeletalMesh::StaticClass(),
-			TEXT("SKM_")
-		},
-
-		// Materials
-		{
-			UMaterial::StaticClass(),
-			TEXT("M_")
-		},
-		{
-			UMaterialInstanceConstant::StaticClass(),
-			TEXT("MI_")
-		},
-		{
-			UMaterialParameterCollection::StaticClass(),
-			TEXT("MPC_")
-		},
-
-		// Textures
-		{
-			UTexture2D::StaticClass(),
-			TEXT("T_")
-		},
-		{
-			UTextureCube::StaticClass(),
-			TEXT("T_")
-		},
-		{
-			UTextureRenderTarget2D::StaticClass(),
-			TEXT("RT_")
-		},
-
-		// Animation — AimOffset is a BlendSpace subclass; must appear before BlendSpace.
-		{
-			UAimOffsetBlendSpace::StaticClass(),
-			TEXT("AO_")
-		},
-		{
-			UAimOffsetBlendSpace1D::StaticClass(),
-			TEXT("AO_")
-		},
-		{
-			UAnimSequence::StaticClass(),
-			TEXT("AS_")
-		},
-		{
-			UAnimMontage::StaticClass(),
-			TEXT("AM_")
-		},
-		{
-			UBlendSpace::StaticClass(),
-			TEXT("BS_")
-		},
-		{
-			UBlendSpace1D::StaticClass(),
-			TEXT("BS_")
-		},
-
-		// VFX
-		{
-			UParticleSystem::StaticClass(),
-			TEXT("PS_")
-		},
-		{
-			UNiagaraSystem::StaticClass(),
-			TEXT("NS_")
-		},
-		{
-			UNiagaraEmitter::StaticClass(),
-			TEXT("NE_")
-		},
-
-		// Audio
-		{
-			USoundWave::StaticClass(),
-			TEXT("SW_")
-		},
-		{
-			USoundCue::StaticClass(),
-			TEXT("SC_")
-		},
-
-		// Data
-		{
-			UDataTable::StaticClass(),
-			TEXT("DT_")
-		},
-		{
-			UDataAsset::StaticClass(),
-			TEXT("DA_")
-		},
-
-		// Physics
-		{
-			UPhysicsAsset::StaticClass(),
-			TEXT("PA_")
-		},
-
-		// User-defined types
-		{
-			UUserDefinedEnum::StaticClass(),
-			TEXT("E_")
-		},
-		{
-			UUserDefinedStruct::StaticClass(),
-			TEXT("F_")
-		},
-
-		// Framework Blueprint parent classes — resolved via UBlueprint::ParentClass walk.
-		{
-			AGameModeBase::StaticClass(),
-			TEXT("GM_")
-		},
-		{
-			AGameMode::StaticClass(),
-			TEXT("GM_")
-		},
-		{
-			APlayerController::StaticClass(),
-			TEXT("PC_")
-		},
-		{
-			ACharacter::StaticClass(),
-			TEXT("CH_")
-		},
-		{
-			APawn::StaticClass(),
-			TEXT("P_")
-		},
-
-		// AI
-		{
-			UBlackboardData::StaticClass(),
-			TEXT("BB_")
-		},
-		{
-			AAIController::StaticClass(),
-			TEXT("AIC_")
-		},
-		{
-			UBTDecorator::StaticClass(),
-			TEXT("BTD_")
-		},
-		{
-			UBTService::StaticClass(),
-			TEXT("BTS_")
-		},
-		{
-			UBTTaskNode::StaticClass(),
-			TEXT("BTT_")
-		},
-
-		// EQS
-		{
-			UEnvQuery::StaticClass(),
-			TEXT("EQS_")
-		},
-		{
-			UEnvQueryContext::StaticClass(),
-			TEXT("EQSC_")
-		},
-
-		// Input
-		{
-			UInputAction::StaticClass(),
-			TEXT("IA_")
-		},
-		{
-			UInputMappingContext::StaticClass(),
-			TEXT("IMC_")
-		},
-	};
-
-	return PrefixMap;
-}
-
-// ----------------------------------------------------------------
-// GetOptionalPluginPrefixes
-// ----------------------------------------------------------------
-
-const TMap<FName, FString>& UBertaAssetNamingUtils::GetOptionalPluginPrefixes()
-{
-	// Static local — keyed by native class name string to avoid hard module
-	// dependencies on optional plugins (e.g. GameplayAbilities).
-	// These names are stable across UE versions — Epic cannot rename them
-	// without breaking backward compatibility for thousands of projects.
-	static const TMap<FName, FString> OptionalPrefixes = {
-		// Gameplay Ability System
-		{
-			FName(TEXT("GameplayAbility")),
-			TEXT("GA_")
-		},
-		{
-			FName(TEXT("GameplayEffect")),
-			TEXT("GE_")
-		},
-		{
-			FName(TEXT("GameplayCueNotify_Static")),
-			TEXT("GC_")
-		},
-		{
-			FName(TEXT("GameplayCueNotify_Actor")),
-			TEXT("GC_")
-		},
-		{
-			FName(TEXT("GameplayAbilityBlueprint")),
-			TEXT("GA_")
-		},
-		{
-			FName(TEXT("GameplayEffectBlueprint")),
-			TEXT("GE_")
-		},
-	};
-
-	return OptionalPrefixes;
-}
-
-// ----------------------------------------------------------------
-// FindPrefixForClass
-// ----------------------------------------------------------------
-
-const FString* UBertaAssetNamingUtils::FindPrefixForClass(UClass* AssetClass,
-                                                          UObject* Asset)
-{
-	const TMap<UClass*, FString>& PrefixMap = GetPrefixMap();
-	const TMap<FName, FString>& OptionalPrefixes = GetOptionalPluginPrefixes();
-
-	// Path A: asset is loaded and is a Blueprint — walk UBlueprint::ParentClass directly.
-	// The meaningful class for prefix resolution is the native parent, not the asset
-	// class itself (which is always UBlueprint or a subclass like UAnimBlueprint).
-	if (const UBlueprint* const BP = Cast<UBlueprint>(Asset))
-	{
-		UClass* ParentClass = BP->ParentClass;
-
-		while (ParentClass)
-		{
-			if (const FString* Found = PrefixMap.Find(ParentClass))
-			{
-				return Found;
-			}
-
-			if (const FString* Found = OptionalPrefixes.Find(ParentClass->GetFName()))
-			{
-				return Found;
-			}
-
-			ParentClass = ParentClass->GetSuperClass();
-		}
-
-		// Blueprint with no registered parent — unknown.
 		return nullptr;
 	}
 
-	// Path B: non-Blueprint asset — walk the asset's own class hierarchy directly.
-	UClass* CurrentClass = AssetClass;
-
-	while (CurrentClass)
+	const FString* FindOptionalPrefixByPath(const FString& ExportPath)
 	{
-		if (const FString* Found = PrefixMap.Find(CurrentClass))
+		for (const TPair<FTopLevelAssetPath, FString>& Pair : UBertaAssetNamingUtils::GetOptionalPluginPrefixes())
 		{
-			return Found;
+			if (ExportPath.Contains(Pair.Key.ToString())) return &Pair.Value;
 		}
-
-		CurrentClass = CurrentClass->GetSuperClass();
+		return nullptr;
 	}
 
-	return nullptr;
+	const FString* ResolveBlueprintPrefix(const FAssetData& AssetData, UClass* AssetClass)
+	{
+		// Specific Blueprint asset types win; generic UBlueprint is resolved from its native parent.
+		if (AssetClass != UBlueprint::StaticClass()) if (const FString* Prefix = FindPrefixInHierarchy(AssetClass)) return Prefix;
+		FString NativeParentPath;
+		if (AssetData.GetTagValue(FBlueprintTags::NativeParentClassPath, NativeParentPath) && !NativeParentPath.IsEmpty() && NativeParentPath != TEXT("None"))
+		{
+			if (const FString* Prefix = FindOptionalPrefixByPath(NativeParentPath)) return Prefix;
+			NativeParentPath.RemoveFromStart(TEXT("Class'"));
+			NativeParentPath.RemoveFromEnd(TEXT("'"));
+			if (UClass* NativeParentClass = FindObject<UClass>(nullptr, *NativeParentPath)) if (const FString* Prefix = FindPrefixInHierarchy(NativeParentClass)) return Prefix;
+		}
+		return &GenericBlueprintPrefix;
+	}
+
+	FString BuildTargetName(const FString& AssetName, const FString& Prefix, UClass* AssetClass)
+	{
+		FString NameToPrefix = AssetName;
+		if (AssetClass->IsChildOf(UMaterialInstanceConstant::StaticClass())) { NameToPrefix.RemoveFromStart(TEXT("M_")); NameToPrefix.RemoveFromEnd(TEXT("_Inst")); }
+		else if (AssetClass->IsChildOf(UAnimMontage::StaticClass())) NameToPrefix.RemoveFromEnd(TEXT("_Montage"));
+		return Prefix + NameToPrefix;
+	}
 }
 
-// ----------------------------------------------------------------
-// ResolveBlueprintPrefixFromTag
-// ----------------------------------------------------------------
-
-const FString* UBertaAssetNamingUtils::ResolveBlueprintPrefixFromTag(const FAssetData& AssetData)
+const TMap<UClass*, FString>& UBertaAssetNamingUtils::GetPrefixMap()
 {
-	const TMap<UClass*, FString>& PrefixMap = GetPrefixMap();
-	const TMap<FName, FString>& OptionalPrefixes = GetOptionalPluginPrefixes();
-
-	// If the asset class itself has a direct entry in the prefix map
-	// (e.g. UAnimBlueprint → "ABP_"), use it immediately without parsing the tag.
-	// This avoids misrouting AnimBlueprints through the ParentClass walk,
-	// which would resolve to the animation class rather than UAnimBlueprint.
-	UClass* const AssetClass = AssetData.GetClass();
-	if (AssetClass)
-	{
-		// For UBlueprint specifically, skip the direct map lookup and proceed to the
-		// ParentClass tag walk — the meaningful prefix lives in the native parent hierarchy,
-		// not in the asset class itself.
-		// Specific Blueprint subclasses (UAnimBlueprint, UGameplayAbilityBlueprint, etc.)
-		// are still resolved here via the direct lookup.
-		const bool bIsGenericBlueprint = (AssetClass == UBlueprint::StaticClass());
-
-		if (!bIsGenericBlueprint)
-		{
-			if (const FString* Found = PrefixMap.Find(AssetClass))
-			{
-				return Found;
-			}
-
-			if (const FString* Found = OptionalPrefixes.Find(AssetClass->GetFName()))
-			{
-				return Found;
-			}
-		}
-	}
-
-	// Read the "ParentClass" tag stored by the Asset Registry.
-	// This tag is populated for all Blueprint assets without loading them into memory.
-	// Format: /Script/CoreUObject.Class'/Script/Module.ClassName'
-	FString ParentClassTag;
-	AssetData.GetTagValue(TEXT("ParentClass"),
-	                      ParentClassTag);
-
-	if (ParentClassTag.IsEmpty())
-	{
-		// No tag — fall back to generic BP_ prefix.
-		return PrefixMap.Find(UBlueprint::StaticClass());
-	}
-
-	const FName ParentClassName = ExtractClassNameFromTag(ParentClassTag);
-
-	if (ParentClassName == NAME_None)
-	{
-		return PrefixMap.Find(UBlueprint::StaticClass());
-	}
-
-	// Check the optional plugin map first (GAS, etc.) — keyed by class name string.
-	if (const FString* Found = OptionalPrefixes.Find(ParentClassName))
-	{
-		return Found;
-	}
-
-	// Try to resolve the actual UClass and walk the main prefix map.
-	// This covers framework classes (AGameModeBase, APlayerController, etc.)
-	// that are always available without optional plugins.
-	if (UClass* const ParentClass = FindFirstObject<UClass>(*ParentClassName.ToString(),
-	                                                        EFindFirstObjectOptions::None))
-	{
-		UClass* Current = ParentClass;
-
-		while (Current)
-		{
-			if (const FString* Found = PrefixMap.Find(Current))
-			{
-				return Found;
-			}
-
-			Current = Current->GetSuperClass();
-		}
-	}
-
-	// Parent class not registered — fall back to generic BP_ prefix.
-	return PrefixMap.Find(UBlueprint::StaticClass());
+	static const TMap<UClass*, FString> Prefixes = {
+		{ UAnimBlueprint::StaticClass(), TEXT("ABP_") }, { UUserWidget::StaticClass(), TEXT("WBP_") }, { UBlueprint::StaticClass(), TEXT("BP_") },
+		{ UStaticMesh::StaticClass(), TEXT("SM_") }, { USkeletalMesh::StaticClass(), TEXT("SKM_") },
+		{ UMaterial::StaticClass(), TEXT("M_") }, { UMaterialInstanceConstant::StaticClass(), TEXT("MI_") }, { UMaterialParameterCollection::StaticClass(), TEXT("MPC_") },
+		{ UTexture2D::StaticClass(), TEXT("T_") }, { UTextureCube::StaticClass(), TEXT("T_") }, { UTextureRenderTarget2D::StaticClass(), TEXT("RT_") },
+		{ UAimOffsetBlendSpace::StaticClass(), TEXT("AO_") }, { UAimOffsetBlendSpace1D::StaticClass(), TEXT("AO_") }, { UAnimMontage::StaticClass(), TEXT("AM_") }, { UAnimSequence::StaticClass(), TEXT("AS_") }, { UBlendSpace::StaticClass(), TEXT("BS_") }, { UBlendSpace1D::StaticClass(), TEXT("BS_") },
+		{ UParticleSystem::StaticClass(), TEXT("PS_") }, { UNiagaraSystem::StaticClass(), TEXT("NS_") }, { UNiagaraEmitter::StaticClass(), TEXT("NE_") }, { USoundWave::StaticClass(), TEXT("SW_") }, { USoundCue::StaticClass(), TEXT("SC_") },
+		{ UDataTable::StaticClass(), TEXT("DT_") }, { UDataAsset::StaticClass(), TEXT("DA_") }, { UPhysicsAsset::StaticClass(), TEXT("PA_") }, { UUserDefinedEnum::StaticClass(), TEXT("E_") }, { UUserDefinedStruct::StaticClass(), TEXT("F_") },
+		{ AGameModeBase::StaticClass(), TEXT("GM_") }, { AGameMode::StaticClass(), TEXT("GM_") }, { APlayerController::StaticClass(), TEXT("PC_") }, { ACharacter::StaticClass(), TEXT("CH_") }, { APawn::StaticClass(), TEXT("P_") },
+		{ UBlackboardData::StaticClass(), TEXT("BB_") }, { AAIController::StaticClass(), TEXT("AIC_") }, { UBTDecorator::StaticClass(), TEXT("BTD_") }, { UBTService::StaticClass(), TEXT("BTS_") }, { UBTTaskNode::StaticClass(), TEXT("BTT_") },
+		{ UEnvQuery::StaticClass(), TEXT("EQS_") }, { UEnvQueryContext::StaticClass(), TEXT("EQSC_") }, { UInputAction::StaticClass(), TEXT("IA_") }, { UInputMappingContext::StaticClass(), TEXT("IMC_") },
+	};
+	return Prefixes;
 }
 
-// ----------------------------------------------------------------
-// RenameAssetWithPrefix
-// ----------------------------------------------------------------
-
-EBertaRenameResult UBertaAssetNamingUtils::RenameAssetWithPrefix(UObject* const Asset)
+const TMap<FTopLevelAssetPath, FString>& UBertaAssetNamingUtils::GetOptionalPluginPrefixes()
 {
-	// Programming invariant — callers must validate before passing.
-	if (!ensureMsgf(IsValid(Asset),
-	                TEXT("UBertaAssetNamingUtils::RenameAssetWithPrefix — received null or invalid asset.")))
-	{
-		return EBertaRenameResult::UnknownClass;
-	}
+	static const TMap<FTopLevelAssetPath, FString> Prefixes = {
+		{ FTopLevelAssetPath(TEXT("/Script/GameplayAbilities"), TEXT("GameplayAbility")), TEXT("GA_") },
+		{ FTopLevelAssetPath(TEXT("/Script/GameplayAbilities"), TEXT("GameplayEffect")), TEXT("GE_") },
+		{ FTopLevelAssetPath(TEXT("/Script/GameplayAbilities"), TEXT("GameplayCueNotify_Static")), TEXT("GC_") },
+		{ FTopLevelAssetPath(TEXT("/Script/GameplayAbilities"), TEXT("GameplayCueNotify_Actor")), TEXT("GC_") },
+	};
+	return Prefixes;
+}
 
-	// Resolve prefix using the full Blueprint-aware path.
-	const FString* FoundPrefix = FindPrefixForClass(Asset->GetClass(),
-	                                                Asset);
+FBertaAssetNamingPlan UBertaAssetNamingUtils::BuildRenamePlan(const FAssetData& AssetData)
+{
+	FBertaAssetNamingPlan Plan;
+	UClass* AssetClass = AssetData.GetClass();
+	if (!AssetClass) return Plan;
+	const FString* Prefix = AssetClass->IsChildOf(UBlueprint::StaticClass()) ? ResolveBlueprintPrefix(AssetData, AssetClass) : FindPrefixInHierarchy(AssetClass);
+	if (!Prefix || Prefix->IsEmpty()) return Plan;
+	Plan.ExpectedPrefix = *Prefix;
+	Plan.TargetName = BuildTargetName(AssetData.AssetName.ToString(), Plan.ExpectedPrefix, AssetClass);
+	Plan.Status = AssetData.AssetName.ToString() == Plan.TargetName ? EBertaAssetNamingStatus::AlreadyCorrect : EBertaAssetNamingStatus::NeedsRename;
+	return Plan;
+}
 
-	if (!FoundPrefix || FoundPrefix->IsEmpty())
-	{
-		return EBertaRenameResult::UnknownClass;
-	}
-
-	// Asset already carries the correct prefix — nothing to do.
-	if (Asset->GetName().StartsWith(*FoundPrefix))
-	{
-		return EBertaRenameResult::AlreadyCorrect;
-	}
-
-	// Take a mutable copy of the name to apply stripping and prefixing.
-	FString CleanName = Asset->GetName();
-
-	// Material instances auto-named by the engine may carry "M_" and "_Inst".
-	// Strip both before applying "MI_" to produce a clean final name.
-	if (Asset->IsA<UMaterialInstanceConstant>())
-	{
-		CleanName.RemoveFromStart(TEXT("M_"));
-		CleanName.RemoveFromEnd(TEXT("_Inst"));
-	}
-
-	// Animation montages auto-named by the engine or imported may carry a "_Montage" suffix.
-	// Strip it before applying "AM_" to produce a clean final name.
-	if (Asset->IsA<UAnimMontage>())
-	{
-		CleanName.RemoveFromEnd(TEXT("_Montage"));
-	}
-
-	const FString NewName = *FoundPrefix + CleanName;
-	const FString PackagePath = FPackageName::GetLongPackagePath(Asset->GetOutermost()->GetName());
+EBertaRenameResult UBertaAssetNamingUtils::ExecuteRename(UObject* Asset, const FBertaAssetNamingPlan& Plan)
+{
+	if (Plan.Status == EBertaAssetNamingStatus::UnknownClass) return EBertaRenameResult::UnknownClass;
+	if (Plan.Status == EBertaAssetNamingStatus::AlreadyCorrect) return EBertaRenameResult::AlreadyCorrect;
+	if (!ensureMsgf(IsValid(Asset), TEXT("ExecuteRename requires a valid asset for a NeedsRename plan."))) return EBertaRenameResult::Failed;
 	TArray<FAssetRenameData> RenameData;
-	RenameData.Emplace(Asset, PackagePath, NewName);
-
+	RenameData.Emplace(Asset, FPackageName::GetLongPackagePath(Asset->GetOutermost()->GetName()), Plan.TargetName);
 	if (!FAssetToolsModule::GetModule().Get().RenameAssets(RenameData))
 	{
-		UE_LOG(LogBertaDevKitEditor, Error,
-		       TEXT("UBertaAssetNamingUtils::RenameAssetWithPrefix - failed to rename '%s' to '%s'."),
-		       *Asset->GetName(), *NewName);
+		UE_LOG(LogBertaDevKitEditor, Error, TEXT("Asset rename failed: %s -> %s"), *Asset->GetName(), *Plan.TargetName);
 		return EBertaRenameResult::Failed;
 	}
-
 	return EBertaRenameResult::Renamed;
+}
+
+EBertaRenameResult UBertaAssetNamingUtils::RenameAssetWithPrefix(UObject* Asset)
+{
+	if (!ensureMsgf(IsValid(Asset), TEXT("RenameAssetWithPrefix received an invalid asset."))) return EBertaRenameResult::UnknownClass;
+	return ExecuteRename(Asset, BuildRenamePlan(FAssetData(Asset)));
 }
