@@ -49,6 +49,25 @@ void UBertaWorldValidation::RunValidation()
 		return;
 	}
 
+	const bool bAnyCheckEnabled = Settings->bValidateStaticMeshComponents
+		|| Settings->bValidateWorldBounds
+		|| Settings->bValidateLightMobility
+		|| Settings->bValidateActorScale;
+	if (!bAnyCheckEnabled)
+	{
+		UE_LOG(LogBertaDevKitEditor,
+		       Log,
+		       TEXT("[BertaWorldValidation] No validation checks are enabled in Project Settings."));
+
+		FNotificationInfo Info(NSLOCTEXT("BertaWorldValidation", "NoChecksEnabled", "World Validation: No checks enabled."));
+		Info.ExpireDuration = 5.0f;
+		if (const TSharedPtr<SNotificationItem> Notification = FSlateNotificationManager::Get().AddNotification(Info))
+		{
+			Notification->SetCompletionState(SNotificationItem::CS_None);
+		}
+		return;
+	}
+
 	// GEditor is always valid in an Editor-only module, but guard defensively.
 	if (!GEditor)
 	{

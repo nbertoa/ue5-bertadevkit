@@ -73,7 +73,7 @@ public:
 	bool bWorldValidationEnabled;
 
 	/**
-	 * When true, flags actors that have a UStaticMeshComponent with no mesh asset assigned.
+	 * Opt-in project policy that flags actors with a UStaticMeshComponent with no mesh asset assigned.
 	 */
 	UPROPERTY(Config,
 		EditAnywhere,
@@ -82,7 +82,7 @@ public:
 	bool bValidateStaticMeshComponents;
 
 	/**
-	 * When true, flags actors placed beyond the configured world bounds threshold.
+	 * Opt-in project policy that flags actors placed beyond the configured world bounds threshold.
 	 */
 	UPROPERTY(Config,
 		EditAnywhere,
@@ -91,7 +91,7 @@ public:
 	bool bValidateWorldBounds;
 
 	/**
-	 * When true, flags light actors whose mobility does not match the expected project setting.
+	 * Opt-in project policy that flags light actors whose mobility does not match the expected project setting.
 	 */
 	UPROPERTY(Config,
 		EditAnywhere,
@@ -100,7 +100,7 @@ public:
 	bool bValidateLightMobility;
 
 	/**
-	 * When true, flags actors with a negative or zero scale on any axis.
+	 * Opt-in project policy that flags actors with a negative or zero scale on any axis.
 	 */
 	UPROPERTY(Config,
 		EditAnywhere,

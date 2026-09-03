@@ -8,14 +8,14 @@ UBertaDevKitSettings::UBertaDevKitSettings()
 	bDebugDrawEnabled = true;
 	bScreenStatsEnabled = true;
 
-	// World Validation — all checks enabled by default.
+	// World Validation policies are opt-in because projects define their own conventions.
 	// The world bounds threshold defaults to 10 km (1,000,000 cm), which covers most project scales.
 	// Expected light mobility defaults to Static, the most common setting for non-dynamic projects.
 	bWorldValidationEnabled = true;
-	bValidateStaticMeshComponents = true;
-	bValidateWorldBounds = true;
-	bValidateLightMobility = true;
-	bValidateActorScale = true;
+	bValidateStaticMeshComponents = false;
+	bValidateWorldBounds = false;
+	bValidateLightMobility = false;
+	bValidateActorScale = false;
 	WorldBoundsThreshold = 1000000.0f;
 	ExpectedLightMobility = EComponentMobility::Static;
 }
