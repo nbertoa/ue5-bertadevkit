@@ -7,16 +7,19 @@ This file is derived from my personal engineering knowledge base.
 Canonical repository:
 
 https://github.com/nbertoa/lifeos
-
+~~~~
 Canonical AGENTS document:
 
 https://github.com/nbertoa/lifeos/blob/main/AGENTS.md
 
-When the canonical repository is accessible, consult it before making significant architectural decisions or when additional engineering guidance is needed.
+When the canonical repository is accessible, consult it before making significant architectural decisions or when
+additional engineering guidance is needed.
 
-If the canonical repository cannot be accessed, continue using the instructions in this file. Never assume missing guidance.
+If the canonical repository cannot be accessed, continue using the instructions in this file. Never assume missing
+guidance.
 
-Changes to my long-term engineering standards should be made in the canonical LifeOS repository rather than independently in project repositories.
+Changes to my long-term engineering standards should be made in the canonical LifeOS repository rather than
+independently in project repositories.
 
 ---
 
@@ -24,7 +27,8 @@ Changes to my long-term engineering standards should be made in the canonical Li
 
 LifeOS is the canonical source of my long-term engineering standards, decision criteria, and AI collaboration guidance.
 
-Your goal is not to maximize code output or documentation volume. Your goal is to improve engineering quality while preserving correctness, maintainability, and durable knowledge.
+Your goal is not to maximize code output or documentation volume. Your goal is to improve engineering quality while
+preserving correctness, maintainability, and durable knowledge.
 
 Do not turn repositories into encyclopedias. Prefer preserving judgment over collecting information.
 
@@ -35,10 +39,12 @@ Communicate with the user in Spanish by default.
 However:
 
 - Keep source code in English.
-- Do not translate identifiers, Unreal Engine APIs, C++ keywords, class names, function names, variable names, modules, or technical terminology normally written in English.
+- Do not translate identifiers, Unreal Engine APIs, C++ keywords, class names, function names, variable names, modules,
+  or technical terminology normally written in English.
 - Preserve compiler errors, logs, and engine messages exactly as produced.
 - Explain technical concepts in Spanish.
-- Unless explicitly requested otherwise, all reviews, reasoning, summaries, architectural discussions, and progress updates must be written in Spanish.
+- Unless explicitly requested otherwise, all reviews, reasoning, summaries, architectural discussions, and progress
+  updates must be written in Spanish.
 
 # Instruction hierarchy
 
@@ -64,6 +70,7 @@ Discussion is not authorization to modify files.
 Authorization to modify files is not authorization to commit or push.
 
 Before implementing:
+
 - Understand the problem.
 - Understand expected behavior.
 - Identify ownership.
@@ -100,6 +107,7 @@ Always review the complete diff before finishing.
 # Defensive programming
 
 Always distinguish:
+
 - Preconditions
 - Postconditions
 - Invariants
@@ -115,6 +123,7 @@ Do not compensate for poor ownership with defensive checks.
 Use early returns to clarify valid execution paths.
 
 Choose deliberately between:
+
 - validation
 - check
 - ensure
@@ -126,6 +135,7 @@ Never silently continue from an unsafe state.
 # Unreal Engine guidance
 
 Always consider:
+
 - UObject ownership
 - Garbage Collection
 - Actor lifecycle
@@ -155,6 +165,7 @@ Match verification effort to risk.
 Never claim tests that were not executed.
 
 Always report:
+
 - what was verified;
 - what could not be verified;
 - remaining assumptions;
@@ -163,6 +174,7 @@ Always report:
 # Code review
 
 Prioritize:
+
 1. Correctness
 2. Undefined behavior
 3. Ownership
@@ -180,6 +192,7 @@ Distinguish defects from preferences.
 # Git policy
 
 Unless explicitly authorized:
+
 - do not commit;
 - do not push;
 - do not create branches;
