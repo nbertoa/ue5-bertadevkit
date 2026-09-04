@@ -100,7 +100,7 @@ public:
 	bool bValidateLightMobility;
 
 	/**
-	 * Opt-in project policy that flags actors with a negative or zero scale on any axis.
+	 * Opt-in project policy that flags actors with a zero or near-zero scale on any axis.
 	 */
 	UPROPERTY(Config,
 		EditAnywhere,

@@ -256,8 +256,10 @@ bool UBertaWorldValidation::ValidateActorScale(const AActor* Actor)
 {
 	const FVector Scale = Actor->GetActorScale3D();
 
-	// Zero or negative scale breaks physics and rendering silently.
-	const bool bInvalidScale = Scale.X <= 0.0f || Scale.Y <= 0.0f || Scale.Z <= 0.0f;
+	// Mirrored actors use negative scale intentionally. Only a near-zero axis is degenerate.
+	const bool bInvalidScale = FMath::IsNearlyZero(Scale.X)
+		|| FMath::IsNearlyZero(Scale.Y)
+		|| FMath::IsNearlyZero(Scale.Z);
 
 	if (!bInvalidScale)
 	{
@@ -266,7 +268,7 @@ bool UBertaWorldValidation::ValidateActorScale(const AActor* Actor)
 
 	UE_LOG(LogBertaDevKitEditor,
 	       Warning,
-	       TEXT("[BertaWorldValidation] Invalid scale — Actor: '%s', Scale: %s"),
+	       TEXT("[BertaWorldValidation] Degenerate near-zero scale — Actor: '%s', Scale: %s"),
 	       *Actor->GetActorLabel(),
 	       *Scale.ToString());
 

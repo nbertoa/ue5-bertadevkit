@@ -49,7 +49,7 @@ private:
 	                                  EComponentMobility::Type ExpectedMobility);
 
 	/**
-	 * Flags the actor if its root component has a negative or zero scale on any axis.
+	 * Flags the actor if its root component has a zero or near-zero scale on any axis.
 	 * Returns true if a violation was found.
 	 */
 	static bool ValidateActorScale(const AActor* Actor);
