@@ -1,11 +1,14 @@
 #include "AssetActions/BertaAssetAuditor.h"
 #include "AssetActions/BertaAssetNamingBatch.h"
+#include "AssetActions/BertaAssetNamingRedirectors.h"
 #include "AssetActions/BertaAssetNamingUtils.h"
 #include "Log/BertaDevKitEditorLog.h"
 
 #include "AssetRegistry/AssetRegistryModule.h"
+#include "AssetToolsModule.h"
 #include "EditorUtilityLibrary.h"
 #include "Framework/Notifications/NotificationManager.h"
+#include "IAssetTools.h"
 #include "Misc/MessageDialog.h"
 #include "Misc/PackageName.h"
 #include "UObject/Package.h"
@@ -44,6 +47,51 @@ namespace
 		}
 
 		return FPackageName::DoesPackageExist(Candidate.TargetPackageName);
+	}
+
+	void OfferRedirectorCleanup(const TArray<FBertaAssetNamingBatchCandidate>& BatchCandidates, IAssetRegistry& AssetRegistry)
+	{
+		TArray<UObjectRedirector*> Redirectors;
+		BertaAssetNamingRedirectors::FindAtBatchSourcePaths(BatchCandidates, Redirectors);
+		if (Redirectors.IsEmpty())
+		{
+			return;
+		}
+
+		const FText ConfirmationText = FText::Format(NSLOCTEXT("BertaDevKit", "ConfirmRedirectorCleanup", "Asset Naming created {0} redirector(s). Fix them now?"), FText::AsNumber(Redirectors.Num()));
+		if (FMessageDialog::Open(EAppMsgType::YesNo, ConfirmationText) != EAppReturnType::Yes)
+		{
+			UE_LOG(LogBertaDevKitEditor, Log, TEXT("[AssetNaming] Redirector cleanup skipped by user for %d batch redirector(s)."), Redirectors.Num());
+			return;
+		}
+
+		IAssetTools& AssetTools = FAssetToolsModule::GetModule().Get();
+		if (AssetRegistry.IsLoadingAssets() || AssetTools.IsFixupReferencersInProgress())
+		{
+			UE_LOG(LogBertaDevKitEditor, Error, TEXT("[AssetNaming] Redirector cleanup could not start safely: asset discovery or another redirector fixup is in progress."));
+			ShowNotification(NSLOCTEXT("BertaDevKit", "AssetNamingRedirectorCleanupUnavailable", "Asset Naming redirector cleanup could not start safely. See Output Log."), SNotificationItem::CS_Fail);
+			return;
+		}
+
+		AssetTools.FixupReferencers(Redirectors, true, ERedirectFixupMode::DeleteFixedUpRedirectors);
+		if (AssetTools.IsFixupReferencersInProgress())
+		{
+			UE_LOG(LogBertaDevKitEditor, Error, TEXT("[AssetNaming] Redirector cleanup did not complete synchronously; its result cannot be verified safely."));
+			ShowNotification(NSLOCTEXT("BertaDevKit", "AssetNamingRedirectorCleanupUnverified", "Asset Naming redirector cleanup could not be verified. See Output Log."), SNotificationItem::CS_Fail);
+			return;
+		}
+
+		TArray<UObjectRedirector*> RemainingRedirectors;
+		BertaAssetNamingRedirectors::FindAtBatchSourcePaths(BatchCandidates, RemainingRedirectors);
+		if (RemainingRedirectors.IsEmpty())
+		{
+			UE_LOG(LogBertaDevKitEditor, Log, TEXT("[AssetNaming] Redirector cleanup complete: %d batch redirector(s) fixed up."), Redirectors.Num());
+			ShowNotification(FText::Format(NSLOCTEXT("BertaDevKit", "AssetNamingRedirectorCleanup", "Asset Naming redirector cleanup: {0} redirector(s) fixed up."), FText::AsNumber(Redirectors.Num())), SNotificationItem::CS_Success);
+			return;
+		}
+
+		UE_LOG(LogBertaDevKitEditor, Warning, TEXT("[AssetNaming] Redirector cleanup incomplete: %d of %d batch redirector(s) remain at their source paths."), RemainingRedirectors.Num(), Redirectors.Num());
+		ShowNotification(FText::Format(NSLOCTEXT("BertaDevKit", "AssetNamingRedirectorCleanupIncomplete", "Asset Naming redirector cleanup incomplete: {0} redirector(s) remain. See Output Log."), FText::AsNumber(RemainingRedirectors.Num())), SNotificationItem::CS_None);
 	}
 }
 
@@ -247,6 +295,7 @@ void UBertaAssetAuditor::FixAssetNaming(const TArray<FAssetData>& Assets)
 	{
 		UE_LOG(LogBertaDevKitEditor, Log, TEXT("[AssetNaming] Fix complete: %d renamed, %d unsupported/skipped, 0 load failed, 0 unexpected."), AtTarget, Unsupported);
 		ShowNotification(FText::Format(NSLOCTEXT("BertaDevKit", "AssetFix", "Asset Fix: {0} renamed, {1} unsupported/skipped."), FText::AsNumber(AtTarget), FText::AsNumber(Unsupported)), SNotificationItem::CS_Success);
+		OfferRedirectorCleanup(BatchCandidates, AssetRegistry);
 		return;
 	}
 

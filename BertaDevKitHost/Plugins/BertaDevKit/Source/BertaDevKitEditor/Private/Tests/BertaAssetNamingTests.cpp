@@ -1,5 +1,6 @@
 #include "AssetActions/BertaAssetNamingUtils.h"
 #include "AssetActions/BertaAssetNamingBatch.h"
+#include "AssetActions/BertaAssetNamingRedirectors.h"
 #include "AssetActions/BertaAssetNamingValidator.h"
 #include "ContentBrowser/BertaContentBrowserMenu.h"
 
@@ -19,6 +20,8 @@
 #include "Misc/DataValidation.h"
 #include "Misc/PackageName.h"
 #include "ToolMenus.h"
+#include "UObject/ObjectRedirector.h"
+#include "UObject/UObjectGlobals.h"
 #include "WidgetBlueprint.h"
 
 namespace
@@ -339,6 +342,31 @@ bool FBertaAssetNamingBatchTest::RunTest(const FString& Parameters)
 		}
 	}
 
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FBertaAssetNamingRedirectorsTest, "BertaDevKit.AssetNaming.Redirectors", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FBertaAssetNamingRedirectorsTest::RunTest(const FString& Parameters)
+{
+	UObjectRedirector* BatchRedirector = NewObject<UObjectRedirector>(GetTransientPackage(), MakeUniqueObjectName(GetTransientPackage(), UObjectRedirector::StaticClass(), TEXT("BertaAssetNamingBatchRedirector")), RF_Transient);
+	UObjectRedirector* UnrelatedRedirector = NewObject<UObjectRedirector>(GetTransientPackage(), MakeUniqueObjectName(GetTransientPackage(), UObjectRedirector::StaticClass(), TEXT("BertaAssetNamingUnrelatedRedirector")), RF_Transient);
+
+	FBertaAssetNamingBatchCandidate BatchCandidate;
+	BatchCandidate.SourceObjectPath = BatchRedirector->GetPathName();
+	FBertaAssetNamingBatchCandidate DuplicateBatchCandidate;
+	DuplicateBatchCandidate.SourceObjectPath = BatchRedirector->GetPathName();
+	FBertaAssetNamingBatchCandidate MissingCandidate;
+	MissingCandidate.SourceObjectPath = TEXT("/Engine/Transient.BertaAssetNamingMissingRedirector");
+
+	TArray<UObjectRedirector*> Redirectors;
+	BertaAssetNamingRedirectors::FindAtBatchSourcePaths({ BatchCandidate, DuplicateBatchCandidate, MissingCandidate }, Redirectors);
+	TestEqual(TEXT("Only batch source paths contribute redirectors"), Redirectors.Num(), 1);
+	TestTrue(TEXT("Batch redirector is collected"), Redirectors.Contains(BatchRedirector));
+	TestFalse(TEXT("Unrelated redirector is excluded"), Redirectors.Contains(UnrelatedRedirector));
+
+	TArray<UObjectRedirector*> MissingRedirectors;
+	BertaAssetNamingRedirectors::FindAtBatchSourcePaths({ MissingCandidate }, MissingRedirectors);
+	TestTrue(TEXT("Source paths without redirectors are ignored"), MissingRedirectors.IsEmpty());
 	return true;
 }
 
