@@ -33,7 +33,7 @@ namespace
 		MessageLog.AddMessage(FTokenizedMessage::Create(EMessageSeverity::Info, FText::FromString(Text)));
 	}
 
-	bool IsProjectAsset(const FAssetData& Asset)
+	bool IsProjectAssetForInsights(const FAssetData& Asset)
 	{
 		const FString Path = Asset.PackagePath.ToString();
 		return Path == TEXT("/Game") || Path.StartsWith(TEXT("/Game/"));
@@ -155,7 +155,7 @@ void FBertaAssetInsights::Analyze(const TArray<FAssetData>& Assets)
 	TArray<FAssetData> ProjectAssets;
 	for (const FAssetData& Asset : Assets)
 	{
-		if (IsProjectAsset(Asset))
+		if (IsProjectAssetForInsights(Asset))
 		{
 			ProjectAssets.AddUnique(Asset);
 		}
