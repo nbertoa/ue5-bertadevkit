@@ -25,6 +25,8 @@ Debug-facing Blueprint nodes use Unreal's `DevelopmentOnly` metadata where appro
 
 **Asset Cleaner** identifies conservative unused/orphan asset candidates. Its audit is read-only; cleanup revalidates candidates and opens Unreal's native deletion workflow. It never force-deletes assets.
 
+**Asset Insights** is a read-only Content Browser analysis for selected assets. It reports Saved Package Size, direct on-disk dependency/referencer counts, Texture2D and StaticMesh metrics, and conservative footprint reviews. It is not cooked-size analysis and complements Unreal's Size Map, Reference Viewer, and Asset Audit rather than replacing them.
+
 **Project Setup** is an opt-in audit/apply utility for a curated allowlist of preferred project and per-project Editor defaults. It previews changes before applying them, manages Blueprint Assist and Electronic Nodes when installed, and reports missing managed plugins without failing the rest of the operation. Its external plugin toolbox entries are reminder-only: they are never audited, reported missing, or auto-enabled. It does not mutate projects at plugin startup.
 
 The optional external tools available to Nicolás are documented in [Personal Plugin Toolbox](BertaDevKitHost/Plugins/BertaDevKit/Docs/PLUGIN_TOOLBOX.md). Consult it before recreating an overlapping specialized solution.
@@ -35,7 +37,7 @@ The optional external tools available to Nicolás are documented in [Personal Pl
 
 ### Editor access
 
-The main Editor actions are under **Tools → BertaDevKit**, including Asset Naming audit/fix, World Validation, and the Project Setup audit/apply submenu. Content Browser right-click menus provide Asset Naming, Asset Cleaner, and Blueprint Audit submenus for project assets and folders.
+The main Editor actions are under **Tools → BertaDevKit**, including Asset Naming audit/fix, World Validation, and the Project Setup audit/apply submenu. Content Browser right-click menus provide Asset Naming, Asset Cleaner, and Blueprint Audit submenus for project assets and folders, plus **BertaDevKit → Asset Insights → Analyze** for selected project assets.
 
 ## Architecture
 

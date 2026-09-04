@@ -25,6 +25,8 @@ private:
 	void OnPostEngineInit();
 	void RegisterBlueprintAuditMessageLog();
 	void UnregisterBlueprintAuditMessageLog();
+	void RegisterAssetInsightsMessageLog();
+	void UnregisterAssetInsightsMessageLog();
 
 	/** Owns the Tools menu entry for BertaDevKit. Null before StartupModule, valid after. */
 	TUniquePtr<FBertaEditorToolbar> EditorToolbar;

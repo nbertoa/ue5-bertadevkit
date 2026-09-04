@@ -2,6 +2,7 @@
 
 #include "AssetActions/BertaAssetCleaner.h"
 #include "AssetActions/BertaAssetAuditor.h"
+#include "AssetInsights/BertaAssetInsights.h"
 #include "BlueprintAudit/BertaBlueprintAuditor.h"
 #include "Log/BertaDevKitEditorLog.h"
 
@@ -74,6 +75,18 @@ namespace
 		}));
 		SubMenuEntry.Owner = FToolMenuOwner(BertaContentBrowserOwnerName);
 	}
+
+	void AddAssetInsightsSubMenu(FToolMenuSection& Section, const TArray<FAssetData>& Assets)
+	{
+		FToolMenuEntry& SubMenuEntry = Section.AddSubMenu(TEXT("BertaAssetInsights"), LOCTEXT("AssetInsights", "Asset Insights"), LOCTEXT("AssetInsightsTooltip", "Analyze saved package size, direct on-disk references, and supported asset footprint metrics. No assets are modified."), FNewToolMenuDelegate::CreateLambda([Assets](UToolMenu* Menu)
+		{
+			FToolMenuSection& SubMenuSection = Menu->FindOrAddSection(TEXT("BertaDevKitAssetInsightsActions"));
+			FToolMenuEntry AnalyzeEntry = FToolMenuEntry::InitMenuEntry(TEXT("BertaAnalyzeAssetInsights"), LOCTEXT("AnalyzeAssetInsights", "Analyze"), LOCTEXT("AnalyzeAssetInsightsTooltip", "Perform a read-only analysis of selected asset footprint metrics."), FSlateIcon(), FUIAction(FExecuteAction::CreateLambda([Assets]() { FBertaAssetInsights::Analyze(Assets); })));
+			AnalyzeEntry.Owner = FToolMenuOwner(BertaContentBrowserOwnerName);
+			SubMenuSection.AddEntry(AnalyzeEntry);
+		}));
+		SubMenuEntry.Owner = FToolMenuOwner(BertaContentBrowserOwnerName);
+	}
 }
 
 void FBertaContentBrowserMenu::Register()
@@ -104,6 +117,7 @@ void FBertaContentBrowserMenu::Register()
 				AddAssetNamingSubMenu(Section, Assets, LOCTEXT("SelectedAssets", "the selected project asset(s)"));
 				AddAssetCleanerSubMenu(Section, Assets, LOCTEXT("SelectedAssetsForCleaner", "the selected project asset(s)"));
 				AddBlueprintAuditSubMenu(Section, Assets, LOCTEXT("SelectedAssetsForBlueprintAudit", "the selected project asset(s)"));
+				AddAssetInsightsSubMenu(Section, Assets);
 			}
 		}
 	}));
