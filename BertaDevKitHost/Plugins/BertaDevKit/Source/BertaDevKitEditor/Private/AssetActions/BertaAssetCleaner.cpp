@@ -36,7 +36,7 @@ namespace
 			|| FExternalDataLayerHelper::IsExternalDataLayerPath(PackageName);
 	}
 
-	void ShowNotification(const FText& Message, SNotificationItem::ECompletionState State)
+	void ShowAssetCleanerNotification(const FText& Message, SNotificationItem::ECompletionState State)
 	{
 		FNotificationInfo Info(Message);
 		Info.bFireAndForget = true;
@@ -54,7 +54,7 @@ namespace
 		if (Registry.IsGathering())
 		{
 			UE_LOG(LogBertaDevKitEditor, Warning, TEXT("[AssetCleaner] %s aborted because the Asset Registry is gathering."), OperationName);
-			ShowNotification(LOCTEXT("RegistryGathering", "Asset Cleaner cannot run while the Asset Registry is gathering. Try again when scanning completes."), SNotificationItem::CS_None);
+			ShowAssetCleanerNotification(LOCTEXT("RegistryGathering", "Asset Cleaner cannot run while the Asset Registry is gathering. Try again when scanning completes."), SNotificationItem::CS_None);
 			return false;
 		}
 
@@ -282,7 +282,7 @@ void FBertaAssetCleaner::AuditUnusedAssets(const TArray<FAssetData>& Assets)
 	FInspectionResult Result;
 	if (!InspectAssets(Assets, TEXT("Audit"), Result)) return;
 	LogResults(Result, TEXT("Audit"));
-	ShowNotification(Result.Graph.bComplete ? FText::Format(LOCTEXT("AuditSummary", "Asset Cleaner: {0} orphan candidate package(s). See Output Log. No assets were modified."), FText::AsNumber(Result.Graph.OrphanPackages.Num())) : LOCTEXT("AuditIncomplete", "Asset Cleaner: Graph analysis is incomplete. No cleanup candidates were produced."), Result.Graph.bComplete ? SNotificationItem::CS_Success : SNotificationItem::CS_None);
+	ShowAssetCleanerNotification(Result.Graph.bComplete ? FText::Format(LOCTEXT("AuditSummary", "Asset Cleaner: {0} orphan candidate package(s). See Output Log. No assets were modified."), FText::AsNumber(Result.Graph.OrphanPackages.Num())) : LOCTEXT("AuditIncomplete", "Asset Cleaner: Graph analysis is incomplete. No cleanup candidates were produced."), Result.Graph.bComplete ? SNotificationItem::CS_Success : SNotificationItem::CS_None);
 }
 
 void FBertaAssetCleaner::CleanUnusedAssets(const TArray<FAssetData>& Assets)
@@ -294,7 +294,7 @@ void FBertaAssetCleaner::CleanUnusedAssets(const TArray<FAssetData>& Assets)
 	CollectCandidateAssets(Result, Candidates);
 	if (Candidates.IsEmpty())
 	{
-		ShowNotification(LOCTEXT("NoOrphans", "Asset Cleaner: No current orphan candidates to clean."), SNotificationItem::CS_None);
+		ShowAssetCleanerNotification(LOCTEXT("NoOrphans", "Asset Cleaner: No current orphan candidates to clean."), SNotificationItem::CS_None);
 		return;
 	}
 	IAssetRegistry& Registry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
@@ -328,7 +328,7 @@ void FBertaAssetCleaner::CleanUnusedAssets(const TArray<FAssetData>& Assets)
 	Candidates.RemoveAll([&ChangedPackages](const FAssetData& Candidate) { return ChangedPackages.Contains(Candidate.PackageName); });
 	if (Candidates.IsEmpty())
 	{
-		ShowNotification(LOCTEXT("NoRevalidatedOrphans", "Asset Cleaner: No current orphan candidates could be safely revalidated for deletion."), SNotificationItem::CS_None);
+		ShowAssetCleanerNotification(LOCTEXT("NoRevalidatedOrphans", "Asset Cleaner: No current orphan candidates could be safely revalidated for deletion."), SNotificationItem::CS_None);
 		return;
 	}
 	TArray<UObject*> Loaded;
@@ -350,18 +350,18 @@ void FBertaAssetCleaner::CleanUnusedAssets(const TArray<FAssetData>& Assets)
 	LoadedCandidates.RemoveAll([&FailedPackages](const UObject* Object) { return FailedPackages.Contains(Object->GetOutermost()->GetFName()); });
 	if (LoadedCandidates.IsEmpty())
 	{
-		ShowNotification(LOCTEXT("NoLoadedOrphans", "Asset Cleaner: No current orphan candidates could be loaded for deletion."), SNotificationItem::CS_None);
+		ShowAssetCleanerNotification(LOCTEXT("NoLoadedOrphans", "Asset Cleaner: No current orphan candidates could be loaded for deletion."), SNotificationItem::CS_None);
 		return;
 	}
 	if (Registry.IsGathering())
 	{
 		UE_LOG(LogBertaDevKitEditor, Warning, TEXT("[AssetCleaner] Clean aborted before native deletion because the Asset Registry began gathering."));
-		ShowNotification(LOCTEXT("RegistryGatheringBeforeDelete", "Asset Cleaner cannot clean while the Asset Registry is gathering. Try again when scanning completes."), SNotificationItem::CS_None);
+		ShowAssetCleanerNotification(LOCTEXT("RegistryGatheringBeforeDelete", "Asset Cleaner cannot clean while the Asset Registry is gathering. Try again when scanning completes."), SNotificationItem::CS_None);
 		return;
 	}
 	const int32 Deleted = AssetViewUtils::DeleteAssets(LoadedCandidates);
 	UE_LOG(LogBertaDevKitEditor, Log, TEXT("[AssetCleaner] Clean complete: %d of %d candidate asset(s) deleted by Unreal's native deletion workflow."), Deleted, LoadedCandidates.Num());
-	ShowNotification(FText::Format(LOCTEXT("CleanSummary", "Asset Cleaner: Unreal deleted {0} of {1} current orphan candidate asset(s). See Output Log."), FText::AsNumber(Deleted), FText::AsNumber(LoadedCandidates.Num())), Deleted > 0 ? SNotificationItem::CS_Success : SNotificationItem::CS_None);
+	ShowAssetCleanerNotification(FText::Format(LOCTEXT("CleanSummary", "Asset Cleaner: Unreal deleted {0} of {1} current orphan candidate asset(s). See Output Log."), FText::AsNumber(Deleted), FText::AsNumber(LoadedCandidates.Num())), Deleted > 0 ? SNotificationItem::CS_Success : SNotificationItem::CS_None);
 }
 
 void FBertaAssetCleaner::CollectLoadedCandidateObjects(const TArray<FAssetData>& Candidates, TConstArrayView<UObject*> LoadedObjects, TArray<UObject*>& OutLoadedCandidates)

@@ -392,9 +392,7 @@ FVector UBertaWorldUtils::GetPlayerCameraDirection(const UObject* WorldContextOb
 		return FVector::ForwardVector;
 	}
 
-	// GetActorForwardVector on CameraManager returns the camera's current forward —
-	// equivalent to the view direction but expressed as a unit vector.
-	return PC->PlayerCameraManager->GetActorForwardVector();
+	return PC->PlayerCameraManager->GetCameraRotation().Vector();
 }
 
 // --------------------------------------------------------------------
