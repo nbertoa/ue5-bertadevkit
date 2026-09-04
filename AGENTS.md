@@ -62,6 +62,8 @@ Do not recreate a solid Unreal Engine feature without a concrete usability benef
 
 Do not replace specialized plugins without a demonstrated gap.
 
+Before designing functionality that could overlap an external specialized tool, consult `BertaDevKitHost/Plugins/BertaDevKit/Docs/PLUGIN_TOOLBOX.md`. It is Nicolás's personal external plugin toolbox; its entries are optional unless explicitly stated otherwise and must not become hard dependencies without explicit authorization.
+
 Keep a feature inside BertaDevKit while it remains a cohesive utility. Consider extracting it only when it becomes an
 independent product or system with substantial API, dependencies, configuration, or lifecycle of its own.
 

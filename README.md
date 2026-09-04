@@ -15,6 +15,7 @@ BertaDevKit collects small, reusable Unreal Engine utilities for debugging, Blue
 | `UBertaScreenStats` | Named development screen stats for common value types; updating a name replaces its displayed value. |
 | `UBertaMathUtils` | Remapping, easing, angular helpers, snapping, distributions, and lightweight prediction helpers. |
 | `UBertaWorldUtils` | Actor queries, traces, player/camera access, and delayed-action timer helpers. |
+| `UBertaUIUtils` | Blueprint conveniences for common UI/player input boilerplate. |
 
 Debug-facing Blueprint nodes use Unreal's `DevelopmentOnly` metadata where appropriate. This signals intended development use; it is not a blanket claim about all Runtime code or runtime cost.
 
@@ -24,7 +25,9 @@ Debug-facing Blueprint nodes use Unreal's `DevelopmentOnly` metadata where appro
 
 **Asset Cleaner** identifies conservative unused/orphan asset candidates. Its audit is read-only; cleanup revalidates candidates and opens Unreal's native deletion workflow. It never force-deletes assets.
 
-**Project Setup** is an opt-in audit/apply utility for a curated allowlist of preferred project and per-project Editor defaults. It previews changes before applying them, configures supported optional plugins when installed, and reports missing optional plugins without failing the rest of the operation. It does not mutate projects at plugin startup.
+**Project Setup** is an opt-in audit/apply utility for a curated allowlist of preferred project and per-project Editor defaults. It previews changes before applying them, manages Blueprint Assist and Electronic Nodes when installed, and reports missing managed plugins without failing the rest of the operation. Its external plugin toolbox entries are reminder-only: they are never audited, reported missing, or auto-enabled. It does not mutate projects at plugin startup.
+
+The optional external tools available to Nicolás are documented in [Personal Plugin Toolbox](BertaDevKitHost/Plugins/BertaDevKit/Docs/PLUGIN_TOOLBOX.md). Consult it before recreating an overlapping specialized solution.
 
 **Blueprint Audit** is a read-only, conservative static linter and code-review assistant for selected Blueprint assets or Content Browser folders. It reports static findings such as unused variables/functions, private or protected access reviews, single-function member reviews for possible localization, const and pure recommendations, and unused function inputs. Findings require manual review: static analysis cannot prove runtime/reflection use, a single-function member may intentionally retain state between calls, and making a function Pure can change evaluation timing and count. Blueprint findings appear in Output Log and in the native **BertaDevKit Blueprint Audit** Message Log; Blueprint asset tokens are clickable. Blueprint Audit has no Fix, Fix All, or graph-rewriting action.
 

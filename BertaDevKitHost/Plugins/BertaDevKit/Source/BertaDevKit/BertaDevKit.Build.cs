@@ -15,7 +15,8 @@ public class BertaDevKit : ModuleRules
 			"Core",
 			"CoreUObject",
 			"Engine",
-			"DeveloperSettings" // UDeveloperSettings
+			"DeveloperSettings", // UDeveloperSettings
+			"UMG" // UUserWidget is part of the public Blueprint API.
 		});
 
 		// Private dependencies are only visible inside BertaDevKit.
@@ -26,7 +27,6 @@ public class BertaDevKit : ModuleRules
 			// Empty for now. Add here as the plugin grows.
 			// Examples:
 			// "GameplayAbilities" — when GAS helpers are added
-			// "UMG"              — when widget utilities are added
 			// "EnhancedInput"    — when input helpers are added
 		});
 	}
