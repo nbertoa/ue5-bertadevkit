@@ -144,7 +144,8 @@ AActor* UBertaWorldUtils::GetClosestActorInRadius(const UObject* WorldContextObj
 	}
 
 	AActor* ClosestActor = nullptr;
-	float ClosestDistanceSquared = Radius * Radius;
+	const float RadiusSquared = Radius * Radius;
+	float ClosestDistanceSquared = 0.0f;
 
 	for (TActorIterator<AActor> It(World,
 	                               ActorClass); It; ++It)
@@ -159,9 +160,10 @@ AActor* UBertaWorldUtils::GetClosestActorInRadius(const UObject* WorldContextObj
 		const float DistanceSquared = FVector::DistSquared(Origin,
 		                                                   Actor->GetActorLocation());
 
-		// Reject actors outside the current closest distance first.
-		// Strict less-than: on a tie, the first actor found wins.
-		if (DistanceSquared > ClosestDistanceSquared)
+		// The radius boundary is inclusive. Once a candidate exists, retain it
+		// when a later actor is at the same distance.
+		if (DistanceSquared > RadiusSquared
+			|| (ClosestActor && DistanceSquared >= ClosestDistanceSquared))
 		{
 			continue;
 		}

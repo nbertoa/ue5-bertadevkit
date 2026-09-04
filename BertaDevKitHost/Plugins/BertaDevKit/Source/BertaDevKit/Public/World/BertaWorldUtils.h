@@ -50,6 +50,7 @@ public:
 	/**
 	 * Returns the closest actor of the given class within a sphere of the given radius.
 	 * Optionally filters by actor tag. Returns null if none found.
+	 * Exact distance ties retain the first matching actor encountered; actor iteration order is not guaranteed.
 	 *
 	 * @param WorldContextObject  Any valid UObject in the current world.
 	 * @param Origin              Center of the search sphere in world space.
