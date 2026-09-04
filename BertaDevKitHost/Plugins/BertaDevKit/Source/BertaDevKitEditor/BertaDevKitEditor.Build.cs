@@ -31,6 +31,7 @@ public class BertaDevKitEditor : ModuleRules
 			"EnhancedInput",
 			"DataValidation", // UEditorValidatorBase
 			"BlueprintGraph", // UBlueprintEditorSettings
+			"Kismet", // UBlueprint and Blueprint graph inspection
 			"Projects", // IProjectManager and IPluginManager
 		});
 	}

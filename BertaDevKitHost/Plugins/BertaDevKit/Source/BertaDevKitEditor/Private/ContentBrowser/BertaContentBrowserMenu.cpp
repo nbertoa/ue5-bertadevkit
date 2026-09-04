@@ -2,6 +2,7 @@
 
 #include "AssetActions/BertaAssetCleaner.h"
 #include "AssetActions/BertaAssetAuditor.h"
+#include "BlueprintAudit/BertaBlueprintAuditor.h"
 #include "Log/BertaDevKitEditorLog.h"
 
 #include "AssetRegistry/AssetRegistryModule.h"
@@ -61,6 +62,18 @@ namespace
 		}));
 		SubMenuEntry.Owner = FToolMenuOwner(BertaContentBrowserOwnerName);
 	}
+
+	void AddBlueprintAuditSubMenu(FToolMenuSection& Section, const TArray<FAssetData>& Assets, const FText& TooltipScope)
+	{
+		FToolMenuEntry& SubMenuEntry = Section.AddSubMenu(TEXT("BertaBlueprintAudit"), LOCTEXT("BlueprintAudit", "Blueprint Audit"), FText::Format(LOCTEXT("BlueprintAuditTooltip", "Audit selected Blueprint assets in {0}. No Blueprints are modified."), TooltipScope), FNewToolMenuDelegate::CreateLambda([Assets](UToolMenu* Menu)
+		{
+			FToolMenuSection& SubMenuSection = Menu->FindOrAddSection(TEXT("BertaDevKitBlueprintAuditActions"));
+			FToolMenuEntry AuditEntry = FToolMenuEntry::InitMenuEntry(TEXT("BertaAuditBlueprints"), LOCTEXT("AuditBlueprints", "Audit"), LOCTEXT("AuditBlueprintsTooltip", "Perform a read-only static Blueprint audit."), FSlateIcon(), FUIAction(FExecuteAction::CreateLambda([Assets]() { FBertaBlueprintAuditor::Audit(Assets); })));
+			AuditEntry.Owner = FToolMenuOwner(BertaContentBrowserOwnerName);
+			SubMenuSection.AddEntry(AuditEntry);
+		}));
+		SubMenuEntry.Owner = FToolMenuOwner(BertaContentBrowserOwnerName);
+	}
 }
 
 void FBertaContentBrowserMenu::Register()
@@ -90,6 +103,7 @@ void FBertaContentBrowserMenu::Register()
 			{
 				AddAssetNamingSubMenu(Section, Assets, LOCTEXT("SelectedAssets", "the selected project asset(s)"));
 				AddAssetCleanerSubMenu(Section, Assets, LOCTEXT("SelectedAssetsForCleaner", "the selected project asset(s)"));
+				AddBlueprintAuditSubMenu(Section, Assets, LOCTEXT("SelectedAssetsForBlueprintAudit", "the selected project asset(s)"));
 			}
 		}
 	}));
@@ -110,6 +124,7 @@ void FBertaContentBrowserMenu::Register()
 			GatherAssetsInProjectFolders(Context->GetSelectedPackagePaths(), Assets);
 			AddAssetNamingSubMenu(Section, Assets, LOCTEXT("SelectedFolders", "the selected project folder(s) recursively"));
 			AddAssetCleanerSubMenu(Section, Assets, LOCTEXT("SelectedFoldersForCleaner", "the selected project folder(s) recursively"));
+			AddBlueprintAuditSubMenu(Section, Assets, LOCTEXT("SelectedFoldersForBlueprintAudit", "the selected project folder(s) recursively"));
 		}
 	}));
 	FolderDynamicEntry.Owner = FToolMenuOwner(BertaContentBrowserOwnerName);
