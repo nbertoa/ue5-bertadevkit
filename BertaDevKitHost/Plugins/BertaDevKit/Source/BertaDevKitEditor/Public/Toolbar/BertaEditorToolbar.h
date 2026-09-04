@@ -56,4 +56,7 @@ private:
 	 * Delegates directly to UBertaWorldValidation::RunValidation().
 	 */
 	void OnRunWorldValidationClicked();
+
+	void OnAuditProjectDefaultsClicked();
+	void OnApplyProjectDefaultsClicked();
 };

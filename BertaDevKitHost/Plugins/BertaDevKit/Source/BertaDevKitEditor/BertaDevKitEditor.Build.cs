@@ -30,6 +30,8 @@ public class BertaDevKitEditor : ModuleRules
 			"ContentBrowser", // UContentBrowserAssetContextMenuContext, UContentBrowserFolderContext
 			"EnhancedInput",
 			"DataValidation", // UEditorValidatorBase
+			"BlueprintGraph", // UBlueprintEditorSettings
+			"Projects", // IProjectManager and IPluginManager
 		});
 	}
 }

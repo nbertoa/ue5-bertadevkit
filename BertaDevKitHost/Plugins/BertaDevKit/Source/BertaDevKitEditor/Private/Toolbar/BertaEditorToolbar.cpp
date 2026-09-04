@@ -2,6 +2,7 @@
 
 #include "AssetActions/BertaAssetAuditor.h"
 #include "Log/BertaDevKitEditorLog.h"
+#include "ProjectSetup/BertaProjectSetup.h"
 #include "WorldValidation/BertaWorldValidation.h"
 
 #include "ToolMenus.h"
@@ -110,6 +111,21 @@ void FBertaEditorToolbar::Register()
 		Section.AddEntry(Entry);
 	}
 
+	{
+		FToolMenuEntry Entry = FToolMenuEntry::InitSubMenu(
+			"BertaProjectSetup",
+			NSLOCTEXT("BertaDevKit", "ProjectSetup", "Project Setup"),
+			NSLOCTEXT("BertaDevKit", "ProjectSetupTooltip", "Audit or apply BertaDevKit project defaults."),
+			FNewToolMenuDelegate::CreateLambda([this](UToolMenu* Menu)
+			{
+				FToolMenuSection& ProjectSetupSection = Menu->AddSection("BertaProjectSetupSection");
+				ProjectSetupSection.AddMenuEntry("BertaAuditProjectDefaults", NSLOCTEXT("BertaDevKit", "AuditProjectDefaults", "Audit Project Defaults"), NSLOCTEXT("BertaDevKit", "AuditProjectDefaultsTooltip", "Report differences without modifying settings."), FSlateIcon(), FUIAction(FExecuteAction::CreateRaw(this, &FBertaEditorToolbar::OnAuditProjectDefaultsClicked)));
+				ProjectSetupSection.AddMenuEntry("BertaApplyProjectDefaults", NSLOCTEXT("BertaDevKit", "ApplyProjectDefaults", "Apply Project Defaults"), NSLOCTEXT("BertaDevKit", "ApplyProjectDefaultsTooltip", "Preview and apply the allowlisted project defaults."), FSlateIcon(), FUIAction(FExecuteAction::CreateRaw(this, &FBertaEditorToolbar::OnApplyProjectDefaultsClicked)));
+			}));
+		Entry.Owner = FToolMenuOwner(BertaOwnerName);
+		Section.AddEntry(Entry);
+	}
+
 	UE_LOG(LogBertaDevKitEditor,
 	       Log,
 	       TEXT("[FBertaEditorToolbar::Register] BertaDevKit Tools menu entries registered."));
@@ -158,4 +174,14 @@ void FBertaEditorToolbar::OnRunWorldValidationClicked()
 	       TEXT("[FBertaEditorToolbar::OnRunWorldValidationClicked] User triggered Run World Validation."));
 
 	UBertaWorldValidation::RunValidation();
+}
+
+void FBertaEditorToolbar::OnAuditProjectDefaultsClicked()
+{
+	FBertaProjectSetup::AuditAndReport();
+}
+
+void FBertaEditorToolbar::OnApplyProjectDefaultsClicked()
+{
+	FBertaProjectSetup::ApplyWithConfirmation();
 }
