@@ -69,4 +69,25 @@ bool FBertaAssetCleanerGraphTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FBertaAssetCleanerEmptyFolderPathsTest, "BertaDevKit.AssetCleaner.EmptyFolderPaths", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FBertaAssetCleanerEmptyFolderPathsTest::RunTest(const FString& Parameters)
+{
+	TArray<FString> Collapsed;
+	FBertaAssetCleaner::CollapseEmptyFolderCandidates({ TEXT("/Game/A"), TEXT("/Game/A/B"), TEXT("/Game/A/B/C"), TEXT("/Game/X"), TEXT("/Game/X/Y") }, { TEXT("/Game") }, Collapsed);
+	TestEqual(TEXT("Nested empty folders collapse to two roots"), Collapsed.Num(), 2);
+	TestTrue(TEXT("A is retained as the highest root"), Collapsed.Contains(TEXT("/Game/A")));
+	TestTrue(TEXT("X is retained as the highest root"), Collapsed.Contains(TEXT("/Game/X")));
+
+	FBertaAssetCleaner::CollapseEmptyFolderCandidates({ TEXT("/Game/A"), TEXT("/Game/A/B"), TEXT("/Game/A/B/C") }, { TEXT("/Game/A/B") }, Collapsed);
+	TestEqual(TEXT("Selected scope does not broaden upward"), Collapsed.Num(), 1);
+	TestTrue(TEXT("Selected nested scope is retained"), Collapsed.Contains(TEXT("/Game/A/B")));
+	TestTrue(TEXT("Game root is never an empty-folder candidate"), FBertaAssetCleaner::IsProtectedEmptyFolderPath(TEXT("/Game")));
+	TestTrue(TEXT("External actors are protected"), FBertaAssetCleaner::IsProtectedEmptyFolderPath(TEXT("/Game/Maps/__ExternalActors__/Level")));
+	TestTrue(TEXT("External objects are protected"), FBertaAssetCleaner::IsProtectedEmptyFolderPath(TEXT("/Game/Maps/__ExternalObjects__/Level")));
+	FBertaAssetCleaner::CollapseEmptyFolderCandidates({ TEXT("/Game/D"), TEXT("/Game/D"), TEXT("/Game/D/E") }, { TEXT("/Game/D"), TEXT("/Game/D/E") }, Collapsed);
+	TestEqual(TEXT("Overlapping candidates are deduplicated"), Collapsed.Num(), 1);
+	TestTrue(TEXT("Duplicate collapse root is retained"), Collapsed.Contains(TEXT("/Game/D")));
+	return true;
+}
+
 #endif

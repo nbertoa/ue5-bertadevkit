@@ -48,9 +48,9 @@ namespace
 		SubMenuEntry.Owner = FToolMenuOwner(BertaContentBrowserOwnerName);
 	}
 
-	void AddAssetCleanerSubMenu(FToolMenuSection& Section, const TArray<FAssetData>& Assets, const FText& TooltipScope)
+	void AddAssetCleanerSubMenu(FToolMenuSection& Section, const TArray<FAssetData>& Assets, const FText& TooltipScope, const TArray<FString>& SelectedFolders = {})
 	{
-		FToolMenuEntry& SubMenuEntry = Section.AddSubMenu(TEXT("BertaAssetCleaner"), LOCTEXT("AssetCleaner", "Asset Cleaner"), FText::Format(LOCTEXT("AssetCleanerTooltip", "Asset Cleaner tools for {0}."), TooltipScope), FNewToolMenuDelegate::CreateLambda([Assets, TooltipScope](UToolMenu* Menu)
+		FToolMenuEntry& SubMenuEntry = Section.AddSubMenu(TEXT("BertaAssetCleaner"), LOCTEXT("AssetCleaner", "Asset Cleaner"), FText::Format(LOCTEXT("AssetCleanerTooltip", "Asset Cleaner tools for {0}."), TooltipScope), FNewToolMenuDelegate::CreateLambda([Assets, TooltipScope, SelectedFolders](UToolMenu* Menu)
 		{
 			FToolMenuSection& SubMenuSection = Menu->FindOrAddSection(TEXT("BertaDevKitAssetCleanerActions"));
 			FToolMenuEntry AuditEntry = FToolMenuEntry::InitMenuEntry(TEXT("BertaAuditUnusedAssets"), LOCTEXT("AuditUnusedAssets", "Audit"), FText::Format(LOCTEXT("AuditUnusedAssetsTooltip", "Find unused asset candidates among {0}. No assets are modified."), TooltipScope), FSlateIcon(), FUIAction(FExecuteAction::CreateLambda([Assets]() { FBertaAssetCleaner::AuditUnusedAssets(Assets); })));
@@ -60,6 +60,13 @@ namespace
 			FToolMenuEntry CleanEntry = FToolMenuEntry::InitMenuEntry(TEXT("BertaCleanUnusedAssets"), LOCTEXT("CleanUnusedAssets", "Clean Unused Assets"), LOCTEXT("CleanUnusedAssetsTooltip", "Revalidate orphan asset candidates and open Unreal's native deletion workflow. No force delete is performed."), FSlateIcon(), FUIAction(FExecuteAction::CreateLambda([Assets]() { FBertaAssetCleaner::CleanUnusedAssets(Assets); })));
 			CleanEntry.Owner = FToolMenuOwner(BertaContentBrowserOwnerName);
 			SubMenuSection.AddEntry(CleanEntry);
+
+			if (!SelectedFolders.IsEmpty())
+			{
+				FToolMenuEntry CleanEmptyFoldersEntry = FToolMenuEntry::InitMenuEntry(TEXT("BertaCleanEmptyFolders"), LOCTEXT("CleanEmptyFolders", "Clean Empty Folders"), LOCTEXT("CleanEmptyFoldersTooltip", "Find, revalidate, and remove empty project Content folders recursively. No assets are deleted."), FSlateIcon(), FUIAction(FExecuteAction::CreateLambda([SelectedFolders]() { FBertaAssetCleaner::CleanEmptyFolders(SelectedFolders); })));
+				CleanEmptyFoldersEntry.Owner = FToolMenuOwner(BertaContentBrowserOwnerName);
+				SubMenuSection.AddEntry(CleanEmptyFoldersEntry);
+			}
 		}));
 		SubMenuEntry.Owner = FToolMenuOwner(BertaContentBrowserOwnerName);
 	}
@@ -134,10 +141,18 @@ void FBertaContentBrowserMenu::Register()
 				return;
 			}
 
+			TArray<FString> ProjectFolders;
+			for (const FString& Folder : Context->GetSelectedPackagePaths())
+			{
+				if (IsProjectPath(Folder))
+				{
+					ProjectFolders.AddUnique(Folder);
+				}
+			}
 			TArray<FAssetData> Assets;
-			GatherAssetsInProjectFolders(Context->GetSelectedPackagePaths(), Assets);
+			GatherAssetsInProjectFolders(ProjectFolders, Assets);
 			AddAssetNamingSubMenu(Section, Assets, LOCTEXT("SelectedFolders", "the selected project folder(s) recursively"));
-			AddAssetCleanerSubMenu(Section, Assets, LOCTEXT("SelectedFoldersForCleaner", "the selected project folder(s) recursively"));
+			AddAssetCleanerSubMenu(Section, Assets, LOCTEXT("SelectedFoldersForCleaner", "the selected project folder(s) recursively"), ProjectFolders);
 			AddBlueprintAuditSubMenu(Section, Assets, LOCTEXT("SelectedFoldersForBlueprintAudit", "the selected project folder(s) recursively"));
 		}
 	}));

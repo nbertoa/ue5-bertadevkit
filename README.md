@@ -23,7 +23,7 @@ Debug-facing Blueprint nodes use Unreal's `DevelopmentOnly` metadata where appro
 
 **Asset Naming** audits BertaDevKit naming conventions and can apply a reviewed rename batch. It is available from the Tools menu and Content Browser context menus for selected assets or folders. It also participates in UE Data Validation. After a successful rename, redirectors created by that batch can be offered for cleanup through Unreal's native redirector workflow.
 
-**Asset Cleaner** identifies conservative unused/orphan asset candidates. Its audit is read-only; cleanup revalidates candidates and opens Unreal's native deletion workflow. It never force-deletes assets.
+**Asset Cleaner** identifies conservative unused/orphan asset candidates. Its audit is read-only; cleanup revalidates candidates and opens Unreal's native deletion workflow. From selected folder scopes it can also remove safely revalidated empty project Content folders; it never force-deletes assets.
 
 **Asset Insights** is a read-only Content Browser analysis for selected assets. It reports Saved Package Size, direct on-disk dependency/referencer counts, Texture2D and StaticMesh metrics, and conservative footprint reviews. It is not cooked-size analysis and complements Unreal's Size Map, Reference Viewer, and Asset Audit rather than replacing them.
 

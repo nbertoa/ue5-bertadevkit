@@ -8,7 +8,11 @@
 #include "Engine/AssetManager.h"
 #include "Engine/World.h"
 #include "Framework/Notifications/NotificationManager.h"
+#include "HAL/FileManager.h"
+#include "Misc/MessageDialog.h"
 #include "Misc/PackagePath.h"
+#include "Misc/PackageName.h"
+#include "Misc/Paths.h"
 #include "UObject/ObjectRedirector.h"
 #include "Widgets/Notifications/SNotificationList.h"
 #include "WorldPartition/DataLayer/ExternalDataLayerHelper.h"
@@ -25,7 +29,9 @@ namespace
 
 	bool ContainsPackagePathSegment(const FString& PackageName, const TCHAR* Segment)
 	{
-		return PackageName.Contains(FString::Printf(TEXT("/%s/"), Segment), ESearchCase::IgnoreCase);
+		const FString SegmentWithSeparators = FString::Printf(TEXT("/%s/"), Segment);
+		return PackageName.Contains(SegmentWithSeparators, ESearchCase::IgnoreCase)
+			|| PackageName.EndsWith(FString::Printf(TEXT("/%s"), Segment), ESearchCase::IgnoreCase);
 	}
 
 	bool IsGeneratedWorldStoragePackage(const FAssetData& AssetData)
@@ -197,6 +203,103 @@ namespace
 			}
 		}
 	}
+
+	FString NormalizeFolderPath(FString FolderPath)
+	{
+		FolderPath.ReplaceInline(TEXT("\\"), TEXT("/"));
+		while (FolderPath.Len() > 1 && FolderPath.EndsWith(TEXT("/")))
+		{
+			FolderPath.LeftChopInline(1);
+		}
+		return FolderPath;
+	}
+
+	bool IsProjectFolderPath(const FString& FolderPath)
+	{
+		return FolderPath == TEXT("/Game") || FolderPath.StartsWith(TEXT("/Game/"));
+	}
+
+	bool TryGetProjectContentDirectory(const FString& FolderPath, FString& OutDirectory)
+	{
+		if (!IsProjectFolderPath(FolderPath) || !FPackageName::TryConvertLongPackageNameToFilename(FolderPath, OutDirectory))
+		{
+			return false;
+		}
+
+		FPaths::NormalizeDirectoryName(OutDirectory);
+		FString ProjectContentDirectory = FPaths::ConvertRelativePathToFull(FPaths::ProjectContentDir());
+		FPaths::NormalizeDirectoryName(ProjectContentDirectory);
+		return OutDirectory == ProjectContentDirectory || FPaths::IsUnderDirectory(OutDirectory, ProjectContentDirectory);
+	}
+
+	bool TryGetProjectFolderPath(const FString& Directory, FString& OutFolderPath)
+	{
+		FString NormalizedDirectory = Directory;
+		FPaths::NormalizeDirectoryName(NormalizedDirectory);
+		if (!FPackageName::TryConvertFilenameToLongPackageName(NormalizedDirectory, OutFolderPath))
+		{
+			return false;
+		}
+
+		OutFolderPath = NormalizeFolderPath(MoveTemp(OutFolderPath));
+		return IsProjectFolderPath(OutFolderPath);
+	}
+
+	bool DoesDirectoryTreeContainFiles(const FString& Directory, bool& bOutEnumerated)
+	{
+		bOutEnumerated = false;
+		if (!FPaths::DirectoryExists(Directory))
+		{
+			return true;
+		}
+
+		bool bContainsFiles = false;
+		const bool bIterationCompleted = IFileManager::Get().IterateDirectoryRecursively(*Directory, [&bContainsFiles](const TCHAR*, const bool bIsDirectory)
+		{
+			if (!bIsDirectory)
+			{
+				bContainsFiles = true;
+				return false;
+			}
+			return true;
+		});
+		bOutEnumerated = bIterationCompleted || bContainsFiles;
+		return bContainsFiles;
+	}
+
+	void AddFolderAndDescendants(const FString& FolderPath, const FString& Directory, TSet<FString>& InOutFolderPaths, int32& InOutDirectoriesInspected, int32& InOutSkippedDirectories)
+	{
+		auto AddDirectory = [&InOutFolderPaths, &InOutDirectoriesInspected, &InOutSkippedDirectories](const FString& PhysicalDirectory, const FString* KnownFolderPath = nullptr)
+		{
+			FString CandidateFolderPath;
+			if (KnownFolderPath)
+			{
+				CandidateFolderPath = *KnownFolderPath;
+			}
+			else if (!TryGetProjectFolderPath(PhysicalDirectory, CandidateFolderPath))
+			{
+				++InOutSkippedDirectories;
+				UE_LOG(LogBertaDevKitEditor, Warning, TEXT("[AssetCleaner] SKIPPED: %s - directory could not be mapped safely to /Game."), *PhysicalDirectory);
+				return;
+			}
+
+			if (!InOutFolderPaths.Contains(CandidateFolderPath))
+			{
+				++InOutDirectoriesInspected;
+				InOutFolderPaths.Add(CandidateFolderPath);
+			}
+		};
+
+		AddDirectory(Directory, &FolderPath);
+		IFileManager::Get().IterateDirectoryRecursively(*Directory, [&AddDirectory](const TCHAR* FilenameOrDirectory, const bool bIsDirectory)
+		{
+			if (bIsDirectory)
+			{
+				AddDirectory(FilenameOrDirectory);
+			}
+			return true;
+		});
+	}
 }
 
 FBertaAssetCleanerClassificationResult FBertaAssetCleaner::ClassifyAsset(const FAssetData& AssetData, const FBertaAssetCleanerInspection& Inspection)
@@ -362,6 +465,216 @@ void FBertaAssetCleaner::CleanUnusedAssets(const TArray<FAssetData>& Assets)
 	const int32 Deleted = AssetViewUtils::DeleteAssets(LoadedCandidates);
 	UE_LOG(LogBertaDevKitEditor, Log, TEXT("[AssetCleaner] Clean complete: %d of %d candidate asset(s) deleted by Unreal's native deletion workflow."), Deleted, LoadedCandidates.Num());
 	ShowAssetCleanerNotification(FText::Format(LOCTEXT("CleanSummary", "Asset Cleaner: Unreal deleted {0} of {1} current orphan candidate asset(s). See Output Log."), FText::AsNumber(Deleted), FText::AsNumber(LoadedCandidates.Num())), Deleted > 0 ? SNotificationItem::CS_Success : SNotificationItem::CS_None);
+}
+
+bool FBertaAssetCleaner::IsPathWithinSelectedFolderScopes(const FString& FolderPath, const TArray<FString>& SelectedFolderScopes)
+{
+	const FString NormalizedFolderPath = NormalizeFolderPath(FolderPath);
+	return SelectedFolderScopes.ContainsByPredicate([&NormalizedFolderPath](const FString& Scope)
+	{
+		const FString NormalizedScope = NormalizeFolderPath(Scope);
+		return NormalizedFolderPath == NormalizedScope || NormalizedFolderPath.StartsWith(NormalizedScope + TEXT("/"));
+	});
+}
+
+bool FBertaAssetCleaner::IsProtectedEmptyFolderPath(const FString& FolderPath)
+{
+	const FString NormalizedFolderPath = NormalizeFolderPath(FolderPath);
+	return NormalizedFolderPath == TEXT("/Game")
+		|| ContainsPackagePathSegment(NormalizedFolderPath, FPackagePath::GetExternalActorsFolderName())
+		|| ContainsPackagePathSegment(NormalizedFolderPath, FPackagePath::GetExternalObjectsFolderName())
+		|| ContainsPackagePathSegment(NormalizedFolderPath, TEXT("EDL"))
+		|| FExternalDataLayerHelper::IsExternalDataLayerPath(NormalizedFolderPath);
+}
+
+void FBertaAssetCleaner::CollapseEmptyFolderCandidates(const TArray<FString>& CandidatePaths, const TArray<FString>& SelectedFolderScopes, TArray<FString>& OutDeleteRoots)
+{
+	OutDeleteRoots.Reset();
+	TSet<FString> UniqueCandidates;
+	for (const FString& CandidatePath : CandidatePaths)
+	{
+		const FString NormalizedCandidatePath = NormalizeFolderPath(CandidatePath);
+		if (IsProjectFolderPath(NormalizedCandidatePath)
+			&& !IsProtectedEmptyFolderPath(NormalizedCandidatePath)
+			&& IsPathWithinSelectedFolderScopes(NormalizedCandidatePath, SelectedFolderScopes))
+		{
+			UniqueCandidates.Add(NormalizedCandidatePath);
+		}
+	}
+
+	TArray<FString> OrderedCandidates = UniqueCandidates.Array();
+	OrderedCandidates.Sort([](const FString& Left, const FString& Right)
+	{
+		return Left.Len() == Right.Len() ? Left < Right : Left.Len() < Right.Len();
+	});
+	for (const FString& CandidatePath : OrderedCandidates)
+	{
+		if (!OutDeleteRoots.ContainsByPredicate([&CandidatePath](const FString& AcceptedPath)
+		{
+			return CandidatePath == AcceptedPath || CandidatePath.StartsWith(AcceptedPath + TEXT("/"));
+		}))
+		{
+			OutDeleteRoots.Add(CandidatePath);
+		}
+	}
+}
+
+void FBertaAssetCleaner::CleanEmptyFolders(const TArray<FString>& SelectedFolders)
+{
+	TArray<FString> SelectedFolderScopes;
+	for (const FString& SelectedFolder : SelectedFolders)
+	{
+		const FString NormalizedFolderPath = NormalizeFolderPath(SelectedFolder);
+		FString Directory;
+		if (!TryGetProjectContentDirectory(NormalizedFolderPath, Directory))
+		{
+			UE_LOG(LogBertaDevKitEditor, Warning, TEXT("[AssetCleaner] SKIPPED: %s - selected folder could not be mapped safely to project Content."), *SelectedFolder);
+			continue;
+		}
+		SelectedFolderScopes.AddUnique(NormalizedFolderPath);
+	}
+
+	if (SelectedFolderScopes.IsEmpty())
+	{
+		ShowAssetCleanerNotification(LOCTEXT("NoValidFolderScope", "Asset Cleaner: No valid project Content folder scope was selected."), SNotificationItem::CS_None);
+		return;
+	}
+
+	IAssetRegistry& Registry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+	if (Registry.IsGathering())
+	{
+		UE_LOG(LogBertaDevKitEditor, Warning, TEXT("[AssetCleaner] Empty folder cleanup aborted because the Asset Registry is gathering."));
+		ShowAssetCleanerNotification(LOCTEXT("RegistryGatheringEmptyFolders", "Asset Cleaner cannot clean empty folders while the Asset Registry is gathering. Try again when scanning completes."), SNotificationItem::CS_None);
+		return;
+	}
+
+	TSet<FString> DiscoveredFolderPaths;
+	int32 DirectoriesInspected = 0;
+	int32 SkippedDirectories = 0;
+	for (const FString& Scope : SelectedFolderScopes)
+	{
+		FString Directory;
+		if (TryGetProjectContentDirectory(Scope, Directory) && FPaths::DirectoryExists(Directory))
+		{
+			AddFolderAndDescendants(Scope, Directory, DiscoveredFolderPaths, DirectoriesInspected, SkippedDirectories);
+		}
+		else
+		{
+			++SkippedDirectories;
+			UE_LOG(LogBertaDevKitEditor, Warning, TEXT("[AssetCleaner] SKIPPED: %s - selected physical directory does not exist."), *Scope);
+		}
+	}
+
+	TArray<FString> EmptyDirectories;
+	for (const FString& FolderPath : DiscoveredFolderPaths)
+	{
+		if (!IsPathWithinSelectedFolderScopes(FolderPath, SelectedFolderScopes) || IsProtectedEmptyFolderPath(FolderPath))
+		{
+			++SkippedDirectories;
+			continue;
+		}
+		if (Registry.HasAssets(*FolderPath, true))
+		{
+			continue;
+		}
+
+		FString Directory;
+		bool bEnumerated = false;
+		if (!TryGetProjectContentDirectory(FolderPath, Directory) || DoesDirectoryTreeContainFiles(Directory, bEnumerated) || !bEnumerated)
+		{
+			if (!bEnumerated)
+			{
+				++SkippedDirectories;
+				UE_LOG(LogBertaDevKitEditor, Warning, TEXT("[AssetCleaner] SKIPPED: %s - physical subtree could not be inspected."), *FolderPath);
+			}
+			continue;
+		}
+		EmptyDirectories.Add(FolderPath);
+	}
+
+	TArray<FString> DeleteRoots;
+	CollapseEmptyFolderCandidates(EmptyDirectories, SelectedFolderScopes, DeleteRoots);
+	for (const FString& DeleteRoot : DeleteRoots)
+	{
+		UE_LOG(LogBertaDevKitEditor, Log, TEXT("[AssetCleaner] EMPTY FOLDER CANDIDATE: %s"), *DeleteRoot);
+	}
+	UE_LOG(LogBertaDevKitEditor, Log, TEXT("[AssetCleaner] Empty folder preflight: %d selected root(s), %d directory/directories inspected, %d empty directory/directories discovered, %d collapsed delete root(s), %d protected/skipped directory/directories."), SelectedFolderScopes.Num(), DirectoriesInspected, EmptyDirectories.Num(), DeleteRoots.Num(), SkippedDirectories);
+	if (DeleteRoots.IsEmpty())
+	{
+		ShowAssetCleanerNotification(LOCTEXT("NoEmptyFolders", "Asset Cleaner: No empty folders found in the selected scope."), SNotificationItem::CS_Success);
+		return;
+	}
+
+	const FText ConfirmationText = FText::Format(LOCTEXT("ConfirmEmptyFolderDelete", "Delete {0} empty project Content folder(s)?\n\nThese folders were found to contain no Asset Registry assets and no files. They will be revalidated immediately before deletion.\n\nSee Output Log for the candidate paths."), FText::AsNumber(DeleteRoots.Num()));
+	if (FMessageDialog::Open(EAppMsgType::YesNo, ConfirmationText, LOCTEXT("ConfirmEmptyFolderDeleteTitle", "Clean Empty Folders")) != EAppReturnType::Yes)
+	{
+		return;
+	}
+
+	if (Registry.IsGathering())
+	{
+		UE_LOG(LogBertaDevKitEditor, Warning, TEXT("[AssetCleaner] Empty folder cleanup aborted before deletion because the Asset Registry began gathering."));
+		ShowAssetCleanerNotification(LOCTEXT("RegistryGatheringBeforeEmptyFolderDelete", "Asset Cleaner cannot clean empty folders while the Asset Registry is gathering. Try again when scanning completes."), SNotificationItem::CS_None);
+		return;
+	}
+
+	TArray<FString> RevalidatedDeleteRoots;
+	int32 RevalidationSkips = 0;
+	for (const FString& DeleteRoot : DeleteRoots)
+	{
+		FString Directory;
+		bool bEnumerated = false;
+		const bool bStillSafe = IsPathWithinSelectedFolderScopes(DeleteRoot, SelectedFolderScopes)
+			&& !IsProtectedEmptyFolderPath(DeleteRoot)
+			&& TryGetProjectContentDirectory(DeleteRoot, Directory)
+			&& FPaths::DirectoryExists(Directory)
+			&& !Registry.HasAssets(*DeleteRoot, true)
+			&& !DoesDirectoryTreeContainFiles(Directory, bEnumerated)
+			&& bEnumerated;
+		if (bStillSafe)
+		{
+			RevalidatedDeleteRoots.Add(DeleteRoot);
+		}
+		else
+		{
+			++RevalidationSkips;
+			UE_LOG(LogBertaDevKitEditor, Warning, TEXT("[AssetCleaner] SKIPPED: %s - folder changed after preflight or could not be safely revalidated."), *DeleteRoot);
+		}
+	}
+	if (RevalidatedDeleteRoots.IsEmpty())
+	{
+		ShowAssetCleanerNotification(LOCTEXT("NoRevalidatedEmptyFolders", "Asset Cleaner: No empty folders could be safely revalidated for deletion."), SNotificationItem::CS_None);
+		return;
+	}
+	if (Registry.IsGathering())
+	{
+		UE_LOG(LogBertaDevKitEditor, Warning, TEXT("[AssetCleaner] Empty folder cleanup aborted because the Asset Registry began gathering during revalidation."));
+		ShowAssetCleanerNotification(LOCTEXT("RegistryGatheringDuringEmptyFolderRevalidation", "Asset Cleaner cannot clean empty folders while the Asset Registry is gathering. Try again when scanning completes."), SNotificationItem::CS_None);
+		return;
+	}
+
+	AssetViewUtils::FDeleteFolderParameters DeleteParameters;
+	DeleteParameters.PathsToDelete = RevalidatedDeleteRoots;
+	DeleteParameters.bShowConfirmationBeforeLoadingAssets = false;
+	const bool bNativeDeletionReportedSuccess = AssetViewUtils::DeleteFolders(DeleteParameters);
+
+	int32 Deleted = 0;
+	int32 Failed = 0;
+	for (const FString& DeleteRoot : RevalidatedDeleteRoots)
+	{
+		FString Directory;
+		if (TryGetProjectContentDirectory(DeleteRoot, Directory) && !FPaths::DirectoryExists(Directory))
+		{
+			++Deleted;
+		}
+		else
+		{
+			++Failed;
+			UE_LOG(LogBertaDevKitEditor, Warning, TEXT("[AssetCleaner] FAILED: %s - folder remains after native deletion."), *DeleteRoot);
+		}
+	}
+	UE_LOG(LogBertaDevKitEditor, Log, TEXT("[AssetCleaner] Empty folder cleanup complete: %d deleted, %d remaining, %d skipped during revalidation, %d failed. Native workflow result: %s."), Deleted, Failed, RevalidationSkips, Failed, bNativeDeletionReportedSuccess ? TEXT("success") : TEXT("failure"));
+	ShowAssetCleanerNotification(FText::Format(LOCTEXT("CleanEmptyFoldersSummary", "Asset Cleaner: {0} empty folder(s) deleted, {1} skipped, {2} failed. See Output Log."), FText::AsNumber(Deleted), FText::AsNumber(RevalidationSkips), FText::AsNumber(Failed)), Failed == 0 ? SNotificationItem::CS_Success : SNotificationItem::CS_None);
 }
 
 void FBertaAssetCleaner::CollectLoadedCandidateObjects(const TArray<FAssetData>& Candidates, TConstArrayView<UObject*> LoadedObjects, TArray<UObject*>& OutLoadedCandidates)

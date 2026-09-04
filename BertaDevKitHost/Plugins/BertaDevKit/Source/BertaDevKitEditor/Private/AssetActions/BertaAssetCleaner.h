@@ -51,7 +51,11 @@ class FBertaAssetCleaner
 public:
 	static void AuditUnusedAssets(const TArray<FAssetData>& Assets);
 	static void CleanUnusedAssets(const TArray<FAssetData>& Assets);
+	static void CleanEmptyFolders(const TArray<FString>& SelectedFolders);
 	static FBertaAssetCleanerClassificationResult ClassifyAsset(const FAssetData& AssetData, const FBertaAssetCleanerInspection& Inspection);
 	static FBertaAssetCleanerGraphAnalysis AnalyzePackageGraph(const TArray<FBertaAssetCleanerPackageRecord>& PackageRecords);
 	static void CollectLoadedCandidateObjects(const TArray<FAssetData>& Candidates, TConstArrayView<UObject*> LoadedObjects, TArray<UObject*>& OutLoadedCandidates);
+	static bool IsPathWithinSelectedFolderScopes(const FString& FolderPath, const TArray<FString>& SelectedFolderScopes);
+	static bool IsProtectedEmptyFolderPath(const FString& FolderPath);
+	static void CollapseEmptyFolderCandidates(const TArray<FString>& CandidatePaths, const TArray<FString>& SelectedFolderScopes, TArray<FString>& OutDeleteRoots);
 };
