@@ -26,13 +26,23 @@ namespace
 
 	void AddAssetNamingEntries(FToolMenuSection& Section, const TArray<FAssetData>& Assets, const FText& TooltipScope)
 	{
-		FToolMenuEntry AuditEntry = FToolMenuEntry::InitMenuEntry(TEXT("BertaAuditAssetNaming"), LOCTEXT("AuditAssetNaming", "Audit Asset Naming"), FText::Format(LOCTEXT("AuditAssetNamingTooltip", "Audit Asset Naming for {0}."), TooltipScope), FSlateIcon(), FUIAction(FExecuteAction::CreateLambda([Assets]() { UBertaAssetAuditor::AuditAssetNaming(Assets); })));
+		FToolMenuEntry AuditEntry = FToolMenuEntry::InitMenuEntry(TEXT("BertaAuditAssetNaming"), LOCTEXT("AuditAssetNaming", "Audit"), FText::Format(LOCTEXT("AuditAssetNamingTooltip", "Audit asset naming for {0}."), TooltipScope), FSlateIcon(), FUIAction(FExecuteAction::CreateLambda([Assets]() { UBertaAssetAuditor::AuditAssetNaming(Assets); })));
 		AuditEntry.Owner = FToolMenuOwner(BertaContentBrowserOwnerName);
 		Section.AddEntry(AuditEntry);
 
-		FToolMenuEntry FixEntry = FToolMenuEntry::InitMenuEntry(TEXT("BertaFixAssetNaming"), LOCTEXT("FixAssetNaming", "Fix Asset Naming"), FText::Format(LOCTEXT("FixAssetNamingTooltip", "Fix Asset Naming for {0}."), TooltipScope), FSlateIcon(), FUIAction(FExecuteAction::CreateLambda([Assets]() { UBertaAssetAuditor::FixAssetNaming(Assets); })));
+		FToolMenuEntry FixEntry = FToolMenuEntry::InitMenuEntry(TEXT("BertaFixAssetNaming"), LOCTEXT("FixAssetNaming", "Fix"), FText::Format(LOCTEXT("FixAssetNamingTooltip", "Fix asset naming for {0}."), TooltipScope), FSlateIcon(), FUIAction(FExecuteAction::CreateLambda([Assets]() { UBertaAssetAuditor::FixAssetNaming(Assets); })));
 		FixEntry.Owner = FToolMenuOwner(BertaContentBrowserOwnerName);
 		Section.AddEntry(FixEntry);
+	}
+
+	void AddAssetNamingSubMenu(FToolMenuSection& Section, const TArray<FAssetData>& Assets, const FText& TooltipScope)
+	{
+		FToolMenuEntry& SubMenuEntry = Section.AddSubMenu(TEXT("BertaAssetNaming"), LOCTEXT("AssetNaming", "Asset Naming"), FText::Format(LOCTEXT("AssetNamingTooltip", "Asset Naming tools for {0}."), TooltipScope), FNewToolMenuDelegate::CreateLambda([Assets, TooltipScope](UToolMenu* Menu)
+		{
+			FToolMenuSection& SubMenuSection = Menu->FindOrAddSection(TEXT("BertaDevKitAssetNamingActions"));
+			AddAssetNamingEntries(SubMenuSection, Assets, TooltipScope);
+		}));
+		SubMenuEntry.Owner = FToolMenuOwner(BertaContentBrowserOwnerName);
 	}
 }
 
@@ -61,7 +71,7 @@ void FBertaContentBrowserMenu::Register()
 			FilterProjectAssets(Context->SelectedAssets, Assets);
 			if (!Assets.IsEmpty())
 			{
-				AddAssetNamingEntries(Section, Assets, LOCTEXT("SelectedAssets", "the selected project asset(s)"));
+				AddAssetNamingSubMenu(Section, Assets, LOCTEXT("SelectedAssets", "the selected project asset(s)"));
 			}
 		}
 	}));
@@ -80,7 +90,7 @@ void FBertaContentBrowserMenu::Register()
 
 			TArray<FAssetData> Assets;
 			GatherAssetsInProjectFolders(Context->GetSelectedPackagePaths(), Assets);
-			AddAssetNamingEntries(Section, Assets, LOCTEXT("SelectedFolders", "the selected project folder(s) recursively"));
+			AddAssetNamingSubMenu(Section, Assets, LOCTEXT("SelectedFolders", "the selected project folder(s) recursively"));
 		}
 	}));
 	FolderDynamicEntry.Owner = FToolMenuOwner(BertaContentBrowserOwnerName);
