@@ -42,6 +42,8 @@ Use for generic Blueprint utility extensions such as regex, array/object/struct 
 
 ### UForge — HTTP & JSON Blueprint Utility
 
+Status: Owned by Nicolás.
+
 Use for Blueprint-heavy R&D involving HTTP/REST (`GET`, `POST`, `PUT`, `PATCH`, `DELETE`), request headers and bodies, JSON parsing/building and field access, Blueprint Struct ↔ JSON, file I/O, supported uploads/downloads and streaming workflows, WebSockets, and external services such as Spotify, OpenAI/ChatGPT, or custom APIs.
 
 Do not implement a generic HTTP, JSON, or WebSocket subsystem in BertaDevKit unless a demonstrated gap remains after considering UE 5.8 native APIs and UForge. For C++, UE native HTTP/JSON/WebSocket APIs may still be preferable to adding a plugin dependency.
