@@ -59,6 +59,65 @@ FColor UBertaDebugDraw::ToFColor(const FLinearColor& LinearColor)
 	return LinearColor.ToFColor(true);
 }
 
+namespace
+{
+	bool ValidatePositiveScalar(const float Value, const TCHAR* ParameterName, const TCHAR* CallerName)
+	{
+		if (FMath::IsFinite(Value) && Value > 0.0f)
+		{
+			return true;
+		}
+
+		UE_LOG(LogBertaDebug, Warning, TEXT("[BertaDebugDraw::%s] %s must be finite and > 0. Received %f."), CallerName, ParameterName, Value);
+		return false;
+	}
+
+	bool ValidateThickness(const float Thickness, const TCHAR* CallerName)
+	{
+		if (FMath::IsFinite(Thickness) && Thickness >= 0.0f)
+		{
+			return true;
+		}
+
+		UE_LOG(LogBertaDebug, Warning, TEXT("[BertaDebugDraw::%s] Thickness must be finite and >= 0. Received %f."), CallerName, Thickness);
+		return false;
+	}
+
+	bool ValidateSegments(const int32 Segments, const TCHAR* CallerName)
+	{
+		if (Segments >= 4)
+		{
+			return true;
+		}
+
+		UE_LOG(LogBertaDebug, Warning, TEXT("[BertaDebugDraw::%s] Segments must be >= 4. Received %d."), CallerName, Segments);
+		return false;
+	}
+
+	bool ValidateExtent(const FVector& Extent, const TCHAR* CallerName)
+	{
+		if (FMath::IsFinite(Extent.X) && FMath::IsFinite(Extent.Y) && FMath::IsFinite(Extent.Z)
+			&& Extent.X >= 0.0f && Extent.Y >= 0.0f && Extent.Z >= 0.0f)
+		{
+			return true;
+		}
+
+		UE_LOG(LogBertaDebug, Warning, TEXT("[BertaDebugDraw::%s] Extent components must be finite and >= 0. Received %s."), CallerName, *Extent.ToString());
+		return false;
+	}
+
+	bool ValidateCapsule(const float HalfHeight, const float Radius, const TCHAR* CallerName)
+	{
+		if (FMath::IsFinite(HalfHeight) && FMath::IsFinite(Radius) && HalfHeight > 0.0f && Radius > 0.0f && HalfHeight >= Radius)
+		{
+			return true;
+		}
+
+		UE_LOG(LogBertaDebug, Warning, TEXT("[BertaDebugDraw::%s] Capsule requires finite HalfHeight >= Radius > 0. Received HalfHeight=%f Radius=%f."), CallerName, HalfHeight, Radius);
+		return false;
+	}
+}
+
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 void UBertaDebugDraw::DrawSphere(const UObject* WorldContextObject,
@@ -76,6 +135,13 @@ void UBertaDebugDraw::DrawSphere(const UObject* WorldContextObject,
 	}
 
 	if (!UBertaDevKitSettings::Get()->bDebugDrawEnabled)
+	{
+		return;
+	}
+
+	if (!ValidatePositiveScalar(Radius, TEXT("Radius"), TEXT("DrawSphere"))
+		|| !ValidateSegments(Segments, TEXT("DrawSphere"))
+		|| !ValidateThickness(Thickness, TEXT("DrawSphere")))
 	{
 		return;
 	}
@@ -115,6 +181,13 @@ void UBertaDebugDraw::DrawSphereFromComponent(const USphereComponent* SphereComp
 	}
 
 	if (!UBertaDevKitSettings::Get()->bDebugDrawEnabled)
+	{
+		return;
+	}
+
+	if (!ValidateSegments(Segments, TEXT("DrawSphereFromComponent"))
+		|| !ValidateThickness(Thickness, TEXT("DrawSphereFromComponent"))
+		|| !ValidatePositiveScalar(IsValid(SphereComponent) ? SphereComponent->GetScaledSphereRadius() : 0.0f, TEXT("SphereComponent radius"), TEXT("DrawSphereFromComponent")))
 	{
 		return;
 	}
@@ -162,6 +235,11 @@ void UBertaDebugDraw::DrawLine(const UObject* WorldContextObject,
 		return;
 	}
 
+	if (!ValidateThickness(Thickness, TEXT("DrawLine")))
+	{
+		return;
+	}
+
 	const UWorld* World = ResolveWorld(WorldContextObject,
 	                                   TEXT("DrawLine"));
 	if (!World)
@@ -201,6 +279,12 @@ void UBertaDebugDraw::DrawBox(const UObject* WorldContextObject,
 		return;
 	}
 
+	if (!ValidateExtent(Extent, TEXT("DrawBox"))
+		|| !ValidateThickness(Thickness, TEXT("DrawBox")))
+	{
+		return;
+	}
+
 	const UWorld* World = ResolveWorld(WorldContextObject,
 	                                   TEXT("DrawBox"));
 	if (!World)
@@ -236,6 +320,12 @@ void UBertaDebugDraw::DrawBoxFromComponent(const UBoxComponent* BoxComponent,
 	}
 
 	if (!UBertaDevKitSettings::Get()->bDebugDrawEnabled)
+	{
+		return;
+	}
+
+	if (!ValidateExtent(IsValid(BoxComponent) ? BoxComponent->GetScaledBoxExtent() : FVector::ZeroVector, TEXT("DrawBoxFromComponent"))
+		|| !ValidateThickness(Thickness, TEXT("DrawBoxFromComponent")))
 	{
 		return;
 	}
@@ -285,6 +375,12 @@ void UBertaDebugDraw::DrawCapsule(const UObject* WorldContextObject,
 		return;
 	}
 
+	if (!ValidateCapsule(HalfHeight, Radius, TEXT("DrawCapsule"))
+		|| !ValidateThickness(Thickness, TEXT("DrawCapsule")))
+	{
+		return;
+	}
+
 	const UWorld* World = ResolveWorld(WorldContextObject,
 	                                   TEXT("DrawCapsule"));
 	if (!World)
@@ -322,6 +418,12 @@ void UBertaDebugDraw::DrawCapsuleFromComponent(const UCapsuleComponent* CapsuleC
 	}
 
 	if (!UBertaDevKitSettings::Get()->bDebugDrawEnabled)
+	{
+		return;
+	}
+
+	if (!ValidateCapsule(IsValid(CapsuleComponent) ? CapsuleComponent->GetScaledCapsuleHalfHeight() : 0.0f, IsValid(CapsuleComponent) ? CapsuleComponent->GetScaledCapsuleRadius() : 0.0f, TEXT("DrawCapsuleFromComponent"))
+		|| !ValidateThickness(Thickness, TEXT("DrawCapsuleFromComponent")))
 	{
 		return;
 	}
@@ -368,6 +470,11 @@ void UBertaDebugDraw::DrawPoint(const UObject* WorldContextObject,
 		return;
 	}
 
+	if (!ValidatePositiveScalar(Size, TEXT("Size"), TEXT("DrawPoint")))
+	{
+		return;
+	}
+
 	const UWorld* World = ResolveWorld(WorldContextObject,
 	                                   TEXT("DrawPoint"));
 	if (!World)
@@ -401,6 +508,12 @@ void UBertaDebugDraw::DrawArrow(const UObject* WorldContextObject,
 	}
 
 	if (!UBertaDevKitSettings::Get()->bDebugDrawEnabled)
+	{
+		return;
+	}
+
+	if (!ValidatePositiveScalar(ArrowSize, TEXT("ArrowSize"), TEXT("DrawArrow"))
+		|| !ValidateThickness(Thickness, TEXT("DrawArrow")))
 	{
 		return;
 	}
@@ -445,6 +558,11 @@ void UBertaDebugDraw::DrawString(const UObject* WorldContextObject,
 		return;
 	}
 
+	if (!ValidatePositiveScalar(FontScale, TEXT("FontScale"), TEXT("DrawString")))
+	{
+		return;
+	}
+
 	const UWorld* World = ResolveWorld(WorldContextObject,
 	                                   TEXT("DrawString"));
 	if (!World)
@@ -482,6 +600,12 @@ void UBertaDebugDraw::DrawCoordinateSystem(const UObject* WorldContextObject,
 	}
 
 	if (!UBertaDevKitSettings::Get()->bDebugDrawEnabled)
+	{
+		return;
+	}
+
+	if (!ValidatePositiveScalar(AxisLength, TEXT("AxisLength"), TEXT("DrawCoordinateSystem"))
+		|| !ValidateThickness(Thickness, TEXT("DrawCoordinateSystem")))
 	{
 		return;
 	}

@@ -23,6 +23,9 @@ class UBoxComponent;
  * @warning Persistent shapes accumulate every call. Avoid Duration = 0.0f inside
  *          Tick or any high-frequency event — the screen will fill up quickly.
  *          Use a positive Duration or call FlushPersistentShapes to clear them.
+ * @note Geometry sizes must be finite and positive, box extents must be finite
+ *       and non-negative, and line thickness must be finite and non-negative.
+ *       Invalid inputs log a warning and do not draw.
  */
 UCLASS()
 class BERTADEVKIT_API UBertaDebugDraw : public UBlueprintFunctionLibrary
