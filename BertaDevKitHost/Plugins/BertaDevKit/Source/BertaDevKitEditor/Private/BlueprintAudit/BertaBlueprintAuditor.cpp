@@ -107,6 +107,9 @@ namespace
 			}
 			if (const UK2Node_VariableSet* Set = Cast<UK2Node_VariableSet>(Node))
 			{
+				// Any variable-set node is a write path. Treat it as uncertain rather
+				// than claiming a const or pure recommendation for V1.
+				bWritesSelf = true;
 				if (FProperty* Property = Set->VariableReference.ResolveMember<FProperty>(Blueprint.SkeletonGeneratedClass))
 				{
 					if (Property->GetOwner<UClass>() == Blueprint.SkeletonGeneratedClass)
