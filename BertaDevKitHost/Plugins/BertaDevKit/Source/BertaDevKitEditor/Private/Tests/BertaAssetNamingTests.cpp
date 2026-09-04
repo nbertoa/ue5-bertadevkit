@@ -144,14 +144,14 @@ bool FBertaAssetNamingContentBrowserScopeTest::RunTest(const FString& Parameters
 		TestNotNull(TEXT("Asset context menu is registered"), AssetContextMenu);
 		if (AssetContextMenu)
 		{
-			TestNotNull(TEXT("Asset context menu contains BertaDevKit section"), AssetContextMenu->FindSection(TEXT("BertaDevKitAssetNaming")));
+			TestNotNull(TEXT("Asset context menu contains BertaDevKit section"), AssetContextMenu->FindSection(TEXT("BertaDevKit")));
 		}
 
 		UToolMenu* FolderContextMenu = UToolMenus::Get()->FindMenu(TEXT("ContentBrowser.FolderContextMenu"));
 		TestNotNull(TEXT("Folder context menu is registered"), FolderContextMenu);
 		if (FolderContextMenu)
 		{
-			TestNotNull(TEXT("Folder context menu contains BertaDevKit section"), FolderContextMenu->FindSection(TEXT("BertaDevKitAssetNaming")));
+			TestNotNull(TEXT("Folder context menu contains BertaDevKit section"), FolderContextMenu->FindSection(TEXT("BertaDevKit")));
 		}
 	}
 

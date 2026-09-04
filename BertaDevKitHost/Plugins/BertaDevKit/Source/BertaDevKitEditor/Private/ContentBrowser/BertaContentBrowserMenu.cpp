@@ -1,5 +1,6 @@
 #include "ContentBrowser/BertaContentBrowserMenu.h"
 
+#include "AssetActions/BertaAssetCleaner.h"
 #include "AssetActions/BertaAssetAuditor.h"
 #include "Log/BertaDevKitEditorLog.h"
 
@@ -44,6 +45,18 @@ namespace
 		}));
 		SubMenuEntry.Owner = FToolMenuOwner(BertaContentBrowserOwnerName);
 	}
+
+	void AddAssetCleanerSubMenu(FToolMenuSection& Section, const TArray<FAssetData>& Assets, const FText& TooltipScope)
+	{
+		FToolMenuEntry& SubMenuEntry = Section.AddSubMenu(TEXT("BertaAssetCleaner"), LOCTEXT("AssetCleaner", "Asset Cleaner"), FText::Format(LOCTEXT("AssetCleanerTooltip", "Asset Cleaner tools for {0}."), TooltipScope), FNewToolMenuDelegate::CreateLambda([Assets, TooltipScope](UToolMenu* Menu)
+		{
+			FToolMenuSection& SubMenuSection = Menu->FindOrAddSection(TEXT("BertaDevKitAssetCleanerActions"));
+			FToolMenuEntry AuditEntry = FToolMenuEntry::InitMenuEntry(TEXT("BertaAuditUnusedAssets"), LOCTEXT("AuditUnusedAssets", "Audit"), FText::Format(LOCTEXT("AuditUnusedAssetsTooltip", "Find unused asset candidates among {0}. No assets are modified."), TooltipScope), FSlateIcon(), FUIAction(FExecuteAction::CreateLambda([Assets]() { FBertaAssetCleaner::AuditUnusedAssets(Assets); })));
+			AuditEntry.Owner = FToolMenuOwner(BertaContentBrowserOwnerName);
+			SubMenuSection.AddEntry(AuditEntry);
+		}));
+		SubMenuEntry.Owner = FToolMenuOwner(BertaContentBrowserOwnerName);
+	}
 }
 
 void FBertaContentBrowserMenu::Register()
@@ -62,8 +75,8 @@ void FBertaContentBrowserMenu::Register()
 		return;
 	}
 
-	FToolMenuSection& AssetSection = AssetMenu->FindOrAddSection(TEXT("BertaDevKitAssetNaming"), LOCTEXT("BertaDevKit", "BertaDevKit"));
-	FToolMenuEntry& AssetDynamicEntry = AssetSection.AddDynamicEntry(TEXT("BertaAssetNamingActions"), FNewToolMenuSectionDelegate::CreateLambda([](FToolMenuSection& Section)
+	FToolMenuSection& AssetSection = AssetMenu->FindOrAddSection(TEXT("BertaDevKit"), LOCTEXT("BertaDevKit", "BertaDevKit"));
+	FToolMenuEntry& AssetDynamicEntry = AssetSection.AddDynamicEntry(TEXT("BertaDevKitActions"), FNewToolMenuSectionDelegate::CreateLambda([](FToolMenuSection& Section)
 	{
 		if (const UContentBrowserAssetContextMenuContext* Context = UContentBrowserAssetContextMenuContext::FindContextWithAssets(Section))
 		{
@@ -72,13 +85,14 @@ void FBertaContentBrowserMenu::Register()
 			if (!Assets.IsEmpty())
 			{
 				AddAssetNamingSubMenu(Section, Assets, LOCTEXT("SelectedAssets", "the selected project asset(s)"));
+				AddAssetCleanerSubMenu(Section, Assets, LOCTEXT("SelectedAssetsForCleaner", "the selected project asset(s)"));
 			}
 		}
 	}));
 	AssetDynamicEntry.Owner = FToolMenuOwner(BertaContentBrowserOwnerName);
 
-	FToolMenuSection& FolderSection = FolderMenu->FindOrAddSection(TEXT("BertaDevKitAssetNaming"), LOCTEXT("BertaDevKit", "BertaDevKit"));
-	FToolMenuEntry& FolderDynamicEntry = FolderSection.AddDynamicEntry(TEXT("BertaAssetNamingActions"), FNewToolMenuSectionDelegate::CreateLambda([](FToolMenuSection& Section)
+	FToolMenuSection& FolderSection = FolderMenu->FindOrAddSection(TEXT("BertaDevKit"), LOCTEXT("BertaDevKit", "BertaDevKit"));
+	FToolMenuEntry& FolderDynamicEntry = FolderSection.AddDynamicEntry(TEXT("BertaDevKitActions"), FNewToolMenuSectionDelegate::CreateLambda([](FToolMenuSection& Section)
 	{
 		if (const UContentBrowserFolderContext* Context = Section.FindContext<UContentBrowserFolderContext>())
 		{
@@ -91,6 +105,7 @@ void FBertaContentBrowserMenu::Register()
 			TArray<FAssetData> Assets;
 			GatherAssetsInProjectFolders(Context->GetSelectedPackagePaths(), Assets);
 			AddAssetNamingSubMenu(Section, Assets, LOCTEXT("SelectedFolders", "the selected project folder(s) recursively"));
+			AddAssetCleanerSubMenu(Section, Assets, LOCTEXT("SelectedFoldersForCleaner", "the selected project folder(s) recursively"));
 		}
 	}));
 	FolderDynamicEntry.Owner = FToolMenuOwner(BertaContentBrowserOwnerName);
