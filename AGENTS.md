@@ -67,6 +67,21 @@ Before designing functionality that could overlap an external specialized tool, 
 Keep a feature inside BertaDevKit while it remains a cohesive utility. Consider extracting it only when it becomes an
 independent product or system with substantial API, dependencies, configuration, or lifecycle of its own.
 
+## Third-Party Plugin Source and Licensing
+
+Nicolás may inspect third-party plugins he legitimately owns or can access—including source, Blueprints, assets,
+architecture, and behavior—and may modify them for a concrete project when its license permits. A private project
+repository may contain a plugin under `<Project>/Plugins/ThirdPartyPlugin/` only after verifying its license,
+collaborator-sharing terms, repository visibility, and redistribution restrictions.
+
+Never commit proprietary plugin source, content, assets, binaries, documentation, or other redistributable material to
+the public BertaDevKit repository unless its license explicitly permits redistribution. Never copy proprietary code,
+comments, assets, identifiers, or substantial implementation details into BertaDevKit. Learn from architecture,
+behavior, UX, API concepts, problems, and tradeoffs; implement any equivalent feature independently with original code
+and UE 5.8 public APIs, source, and documentation. Keep BertaDevKit independently buildable without commercial plugins
+unless Nicolás explicitly authorizes a dependency. If a license is unclear, treat the plugin as reference-only and do
+not copy or redistribute anything.
+
 ### Module Boundaries
 
 Maintain strict separation:

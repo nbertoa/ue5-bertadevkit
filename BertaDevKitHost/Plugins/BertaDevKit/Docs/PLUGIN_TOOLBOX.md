@@ -11,6 +11,12 @@ When evaluating a new need:
 
 Do not introduce a hard dependency on a listed tool without explicit authorization.
 
+## Source and Licensing Boundary
+
+These tools may be inspected as legitimate personal development references, and modified or stored in a private project repository only when their license permits it. Before committing a commercial plugin, verify its license, collaborator-sharing terms, repository visibility, and redistribution restrictions.
+
+Never place proprietary plugin source, content, assets, binaries, documentation, or copied implementation details in the public BertaDevKit repository unless redistribution is explicitly permitted. Learn from architecture, behavior, UX, API concepts, and tradeoffs; implement equivalent BertaDevKit features independently with original code and UE 5.8 public APIs/source/documentation. BertaDevKit remains independently buildable without commercial plugins unless explicitly authorized; unclear licensing means reference-only, with no copying or redistribution.
+
 ## Managed by Project Setup
 
 Project Setup may inspect installation and enablement only for the following plugins. No other external tool is managed, auto-enabled, or included in Project Setup audit results.
