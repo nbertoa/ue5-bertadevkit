@@ -4,6 +4,7 @@
 #include "Toolbar/BertaEditorToolbar.h"
 #include "Log/BertaDevKitEditorLog.h"
 
+#include "MessageLogModule.h"
 #include "Misc/CoreDelegates.h"
 
 void FBertaDevKitEditorModule::StartupModule()
@@ -42,6 +43,7 @@ void FBertaDevKitEditorModule::ShutdownModule()
 		ContentBrowserMenu->Unregister();
 		ContentBrowserMenu.Reset();
 	}
+	UnregisterBlueprintAuditMessageLog();
 
 	UE_LOG(LogBertaDevKitEditor,
 	       Log,
@@ -50,6 +52,7 @@ void FBertaDevKitEditorModule::ShutdownModule()
 
 void FBertaDevKitEditorModule::OnPostEngineInit()
 {
+	RegisterBlueprintAuditMessageLog();
 	// This delegate fires once — no need to unbind after registration.
 	// The engine guarantees it is not called again after this point.
 	if (EditorToolbar)
@@ -60,6 +63,22 @@ void FBertaDevKitEditorModule::OnPostEngineInit()
 	if (ContentBrowserMenu)
 	{
 		ContentBrowserMenu->Register();
+	}
+}
+
+void FBertaDevKitEditorModule::RegisterBlueprintAuditMessageLog()
+{
+	FMessageLogInitializationOptions Options;
+	Options.bShowPages = true;
+	Options.MaxPageCount = 10;
+	FModuleManager::LoadModuleChecked<FMessageLogModule>(TEXT("MessageLog")).RegisterLogListing(TEXT("BertaDevKitBlueprintAudit"), NSLOCTEXT("BertaDevKit", "BlueprintAuditMessageLog", "BertaDevKit Blueprint Audit"), Options);
+}
+
+void FBertaDevKitEditorModule::UnregisterBlueprintAuditMessageLog()
+{
+	if (FModuleManager::Get().IsModuleLoaded(TEXT("MessageLog")))
+	{
+		FModuleManager::GetModuleChecked<FMessageLogModule>(TEXT("MessageLog")).UnregisterLogListing(TEXT("BertaDevKitBlueprintAudit"));
 	}
 }
 

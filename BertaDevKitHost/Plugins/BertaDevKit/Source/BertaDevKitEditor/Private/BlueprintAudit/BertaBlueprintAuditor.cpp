@@ -4,6 +4,7 @@
 
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "EdGraph/EdGraph.h"
+#include "EdGraph/EdGraphPin.h"
 #include "Engine/Blueprint.h"
 #include "Engine/Level.h"
 #include "Engine/LevelScriptBlueprint.h"
@@ -16,7 +17,11 @@
 #include "K2Node_Variable.h"
 #include "K2Node_VariableGet.h"
 #include "K2Node_VariableSet.h"
+#include "EdGraphSchema_K2.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
+#include "Logging/MessageLog.h"
+#include "Logging/TokenizedMessage.h"
+#include "Misc/UObjectToken.h"
 #include "UObject/UnrealType.h"
 #include "Widgets/Notifications/SNotificationList.h"
 
@@ -27,7 +32,12 @@ namespace
 		int32 InternalReads = 0;
 		int32 InternalWrites = 0;
 		int32 ExternalUses = 0;
+		int32 ExternalDescendantUses = 0;
+		int32 ExternalNonDescendantUses = 0;
+		TSet<const UEdGraph*> InternalGraphs;
 	};
+
+	const FName BlueprintAuditLogName(TEXT("BertaDevKitBlueprintAudit"));
 
 	void Notify(const FText& Text, const SNotificationItem::ECompletionState State)
 	{
@@ -53,6 +63,42 @@ namespace
 			|| Variable.RepNotifyFunc != NAME_None
 			|| Variable.HasMetaData(TEXT("ExposeOnSpawn"))
 			|| Variable.HasMetaData(TEXT("BindWidget"));
+	}
+
+	void AddFinding(FMessageLog& MessageLog, UBlueprint& Blueprint, const FText& Text, EMessageSeverity::Type Severity = EMessageSeverity::Info)
+	{
+		TSharedRef<FTokenizedMessage> Message = FTokenizedMessage::Create(Severity);
+		Message->AddToken(FUObjectToken::Create(&Blueprint, FText::FromString(Blueprint.GetName())));
+		Message->AddToken(FTextToken::Create(FText::FromString(TEXT("  "))));
+		Message->AddToken(FTextToken::Create(Text));
+		MessageLog.AddMessage(Message);
+	}
+
+	bool IsDescendantConsumer(const UBlueprint& Consumer, const UBlueprint& Target)
+	{
+		return Consumer.SkeletonGeneratedClass && Target.SkeletonGeneratedClass && Consumer.SkeletonGeneratedClass != Target.SkeletonGeneratedClass && Consumer.SkeletonGeneratedClass->IsChildOf(Target.SkeletonGeneratedClass);
+	}
+
+	UK2Node_FunctionEntry* FindFunctionEntry(const UEdGraph& Graph)
+	{
+		for (UEdGraphNode* Node : Graph.Nodes)
+		{
+			if (UK2Node_FunctionEntry* Entry = Cast<UK2Node_FunctionEntry>(Node))
+			{
+				return Entry;
+			}
+		}
+		return nullptr;
+	}
+
+	bool IsMeaningfulFunctionInput(const UEdGraphPin& Pin, const UFunction& Function)
+	{
+		if (Pin.Direction != EGPD_Output || Pin.PinType.PinCategory == UEdGraphSchema_K2::PC_Exec || Pin.bHidden || Pin.bOrphanedPin)
+		{
+			return false;
+		}
+		const FProperty* Property = FindFProperty<FProperty>(&Function, Pin.PinName);
+		return Property && Property->HasAnyPropertyFlags(CPF_Parm) && !Property->HasAnyPropertyFlags(CPF_ReturnParm | CPF_OutParm);
 	}
 
 	bool IsDeclaredFunction(const UBlueprint& Blueprint, const UEdGraph& Graph, UFunction*& OutFunction)
@@ -210,7 +256,9 @@ void FBertaBlueprintAuditor::Audit(const TArray<FAssetData>& Assets)
 	TArray<UBlueprint*> Consumers;
 	bool bReferenceUniverseComplete = false;
 	GatherProjectBlueprints(Consumers, bReferenceUniverseComplete);
-	int32 UnusedVariables = 0, UnusedFunctions = 0, PrivateCandidates = 0, ConstCandidates = 0, PureCandidates = 0, Skipped = 0;
+	int32 UnusedVariables = 0, UnusedFunctions = 0, PrivateCandidates = 0, ProtectedCandidates = 0, LocalCandidates = 0, ConstCandidates = 0, PureCandidates = 0, UnusedInputs = 0, Skipped = 0;
+	FMessageLog MessageLog(BlueprintAuditLogName);
+	MessageLog.NewPage(FText::Format(NSLOCTEXT("BertaDevKit", "BlueprintAuditPage", "Blueprint Audit {0}"), FText::AsDateTime(FDateTime::Now())));
 	UE_LOG(LogBertaDevKitEditor, Log, TEXT("[BlueprintAudit] Started: %d target Blueprint(s), %d reference consumer(s), universe complete: %s."), Targets.Num(), Consumers.Num(), bReferenceUniverseComplete ? TEXT("true") : TEXT("false"));
 
 	for (UBlueprint* Target : Targets)
@@ -245,7 +293,7 @@ void FBertaBlueprintAuditor::Audit(const TArray<FAssetData>& Assets)
 		{
 			if (!Consumer) { bReferenceUniverseComplete = false; continue; }
 			// A descendant override is an external extension point even when no call node exists.
-			if (Consumer != Target && Consumer->ParentClass && Consumer->ParentClass->IsChildOf(Target->SkeletonGeneratedClass))
+			if (IsDescendantConsumer(*Consumer, *Target))
 			{
 				for (UEdGraph* FunctionGraph : Consumer->FunctionGraphs)
 				{
@@ -254,6 +302,7 @@ void FBertaBlueprintAuditor::Audit(const TArray<FAssetData>& Assets)
 						if (FMemberUse* Use = Functions.Find(Target->SkeletonGeneratedClass->FindFunctionByName(FunctionGraph->GetFName())))
 						{
 							++Use->ExternalUses;
+							++Use->ExternalDescendantUses;
 						}
 					}
 				}
@@ -274,8 +323,13 @@ void FBertaBlueprintAuditor::Audit(const TArray<FAssetData>& Assets)
 								if (Consumer == Target)
 								{
 									if (VariableNode->IsA<UK2Node_VariableSet>()) { ++Use->InternalWrites; } else { ++Use->InternalReads; }
+									Use->InternalGraphs.Add(Graph);
 								}
-								else { ++Use->ExternalUses; }
+								else
+								{
+									++Use->ExternalUses;
+									if (IsDescendantConsumer(*Consumer, *Target)) { ++Use->ExternalDescendantUses; } else { ++Use->ExternalNonDescendantUses; }
+								}
 							}
 						}
 					}
@@ -285,7 +339,8 @@ void FBertaBlueprintAuditor::Audit(const TArray<FAssetData>& Assets)
 						{
 							if (FMemberUse* Use = Functions.Find(Function))
 							{
-								if (Consumer == Target) { ++Use->InternalReads; } else { ++Use->ExternalUses; }
+								if (Consumer == Target) { ++Use->InternalReads; }
+								else { ++Use->ExternalUses; if (IsDescendantConsumer(*Consumer, *Target)) { ++Use->ExternalDescendantUses; } else { ++Use->ExternalNonDescendantUses; } }
 							}
 						}
 					}
@@ -297,7 +352,8 @@ void FBertaBlueprintAuditor::Audit(const TArray<FAssetData>& Assets)
 							{
 								if (FMemberUse* Use = Functions.Find(Function))
 								{
-									if (Consumer == Target) { ++Use->InternalReads; } else { ++Use->ExternalUses; }
+									if (Consumer == Target) { ++Use->InternalReads; }
+									else { ++Use->ExternalUses; if (IsDescendantConsumer(*Consumer, *Target)) { ++Use->ExternalDescendantUses; } else { ++Use->ExternalNonDescendantUses; } }
 								}
 							}
 						}
@@ -316,11 +372,24 @@ void FBertaBlueprintAuditor::Audit(const TArray<FAssetData>& Assets)
 			{
 				++UnusedVariables;
 				UE_LOG(LogBertaDevKitEditor, Log, TEXT("  [Info] Variable \"%s\" -> Unused Variable (reads: 0, writes: 0, external static Blueprint references: 0)."), *Variable.VarName.ToString());
+				AddFinding(MessageLog, *Target, FText::Format(NSLOCTEXT("BertaDevKit", "UnusedVariable", "[Info] Variable \"{0}\" -> Unused Variable (reads: 0, writes: 0)."), FText::FromName(Variable.VarName)));
+			}
+			else if (bReferenceUniverseComplete && Use->InternalGraphs.Num() == 1 && Use->ExternalUses == 0)
+			{
+				const UEdGraph* OnlyGraph = *Use->InternalGraphs.CreateConstIterator();
+				UFunction* OwnerFunction = OnlyGraph ? Target->SkeletonGeneratedClass->FindFunctionByName(OnlyGraph->GetFName()) : nullptr;
+				if (OwnerFunction && IsDeclaredFunction(*Target, *OnlyGraph, OwnerFunction))
+				{
+					++LocalCandidates;
+					UE_LOG(LogBertaDevKitEditor, Log, TEXT("  [Recommendation] Variable \"%s\" -> Candidate Local Variable (used only inside function \"%s\"; external static Blueprint references: 0)."), *Variable.VarName.ToString(), *OwnerFunction->GetName());
+					AddFinding(MessageLog, *Target, FText::Format(NSLOCTEXT("BertaDevKit", "CandidateLocal", "[Recommendation] Variable \"{0}\" -> Candidate Local Variable. Used only inside function \"{1}\". External static Blueprint references: 0."), FText::FromName(Variable.VarName), FText::FromString(OwnerFunction->GetName())));
+				}
 			}
 			if (bReferenceUniverseComplete && !Variable.HasMetaData(TEXT("BlueprintPrivate")) && !Property->HasMetaData(TEXT("BlueprintPrivate")) && Use->ExternalUses == 0)
 			{
 				++PrivateCandidates;
 				UE_LOG(LogBertaDevKitEditor, Log, TEXT("  [Recommendation] Variable \"%s\" -> Candidate Private (internal usages: %d, 0 external static Blueprint references found)."), *Variable.VarName.ToString(), Use->InternalReads + Use->InternalWrites);
+				AddFinding(MessageLog, *Target, FText::Format(NSLOCTEXT("BertaDevKit", "CandidatePrivateVariable", "[Recommendation] Variable \"{0}\" -> Candidate Private. 0 external static Blueprint references found."), FText::FromName(Variable.VarName)));
 			}
 		}
 		for (UEdGraph* Graph : Target->FunctionGraphs)
@@ -333,25 +402,49 @@ void FBertaBlueprintAuditor::Audit(const TArray<FAssetData>& Assets)
 			{
 				++UnusedFunctions;
 				UE_LOG(LogBertaDevKitEditor, Log, TEXT("  [Info] Function \"%s\" -> Unused Function (internal calls: 0, external static Blueprint calls: 0)."), *Function->GetName());
+				AddFinding(MessageLog, *Target, FText::Format(NSLOCTEXT("BertaDevKit", "UnusedFunction", "[Info] Function \"{0}\" -> Unused Function."), FText::FromString(Function->GetName())));
 			}
 			if (bReferenceUniverseComplete && !Function->HasAnyFunctionFlags(FUNC_Private) && Use->ExternalUses == 0)
 			{
 				++PrivateCandidates;
 				UE_LOG(LogBertaDevKitEditor, Log, TEXT("  [Recommendation] Function \"%s\" -> Candidate Private (0 external static Blueprint calls found)."), *Function->GetName());
+				AddFinding(MessageLog, *Target, FText::Format(NSLOCTEXT("BertaDevKit", "CandidatePrivateFunction", "[Recommendation] Function \"{0}\" -> Candidate Private. 0 external static Blueprint calls found."), FText::FromString(Function->GetName())));
+			}
+			else if (bReferenceUniverseComplete && !Function->HasAnyFunctionFlags(FUNC_Private) && Use->ExternalDescendantUses > 0 && Use->ExternalNonDescendantUses == 0)
+			{
+				++ProtectedCandidates;
+				UE_LOG(LogBertaDevKitEditor, Log, TEXT("  [Recommendation] Function \"%s\" -> Candidate Protected (all %d external static Blueprint callers are descendants)."), *Function->GetName(), Use->ExternalDescendantUses);
+				AddFinding(MessageLog, *Target, FText::Format(NSLOCTEXT("BertaDevKit", "CandidateProtectedFunction", "[Recommendation] Function \"{0}\" -> Candidate Protected. All external static Blueprint callers are descendants ({1})."), FText::FromString(Function->GetName()), FText::AsNumber(Use->ExternalDescendantUses)));
+			}
+			if (UK2Node_FunctionEntry* Entry = FindFunctionEntry(*Graph))
+			{
+				for (UEdGraphPin* Pin : Entry->Pins)
+				{
+					if (Pin && IsMeaningfulFunctionInput(*Pin, *Function) && Pin->LinkedTo.IsEmpty())
+					{
+						++UnusedInputs;
+						UE_LOG(LogBertaDevKitEditor, Log, TEXT("  [Info] Function \"%s\", Input \"%s\" -> Unused Function Input."), *Function->GetName(), *Pin->PinName.ToString());
+						AddFinding(MessageLog, *Target, FText::Format(NSLOCTEXT("BertaDevKit", "UnusedFunctionInput", "[Info] Function \"{0}\", Input \"{1}\" -> Unused Function Input."), FText::FromString(Function->GetName()), FText::FromName(Pin->PinName)));
+					}
+				}
 			}
 			bool bWritesSelf = false, bImpureSelfCall = false;
 			if (!Function->HasAnyFunctionFlags(FUNC_Const) && HasOnlyConservativeNodes(*Graph, *Target, bWritesSelf, bImpureSelfCall) && !bWritesSelf && !bImpureSelfCall)
 			{
 				++ConstCandidates;
 				UE_LOG(LogBertaDevKitEditor, Log, TEXT("  [Recommendation] Function \"%s\" -> Candidate Const (no detected mutation of Self)."), *Function->GetName());
+				AddFinding(MessageLog, *Target, FText::Format(NSLOCTEXT("BertaDevKit", "CandidateConst", "[Recommendation] Function \"{0}\" -> Candidate Const. No detected mutation of Self."), FText::FromString(Function->GetName())));
 				if (!Function->HasAnyFunctionFlags(FUNC_BlueprintPure) && HasMeaningfulOutput(*Function))
 				{
 					++PureCandidates;
 					UE_LOG(LogBertaDevKitEditor, Log, TEXT("  [Advisory] Function \"%s\" -> Advisory: Candidate Pure (no detected side effects; changing to Pure can change evaluation timing/count. Review manually)."), *Function->GetName());
+					AddFinding(MessageLog, *Target, FText::Format(NSLOCTEXT("BertaDevKit", "CandidatePure", "[Advisory] Function \"{0}\" -> Candidate Pure. Changing to Pure can change evaluation timing/count. Review manually."), FText::FromString(Function->GetName())));
 				}
 			}
 		}
 	}
-	UE_LOG(LogBertaDevKitEditor, Log, TEXT("[BlueprintAudit] Complete: targets=%d consumers=%d unused variables=%d unused functions=%d private candidates=%d const candidates=%d pure advisories=%d skipped=%d."), Targets.Num(), Consumers.Num(), UnusedVariables, UnusedFunctions, PrivateCandidates, ConstCandidates, PureCandidates, Skipped);
-	Notify(FText::Format(NSLOCTEXT("BertaDevKit", "BlueprintAuditComplete", "Blueprint Audit: {0} target(s), {1} finding(s). See Output Log."), FText::AsNumber(Targets.Num()), FText::AsNumber(UnusedVariables + UnusedFunctions + PrivateCandidates + ConstCandidates + PureCandidates)), SNotificationItem::CS_Success);
+	const int32 Findings = UnusedVariables + UnusedFunctions + PrivateCandidates + ProtectedCandidates + LocalCandidates + ConstCandidates + PureCandidates + UnusedInputs;
+	UE_LOG(LogBertaDevKitEditor, Log, TEXT("[BlueprintAudit] Complete: targets=%d consumers=%d unused variables=%d unused functions=%d private candidates=%d protected candidates=%d local variable candidates=%d const candidates=%d pure advisories=%d unused function inputs=%d skipped=%d."), Targets.Num(), Consumers.Num(), UnusedVariables, UnusedFunctions, PrivateCandidates, ProtectedCandidates, LocalCandidates, ConstCandidates, PureCandidates, UnusedInputs, Skipped);
+	MessageLog.Flush();
+	Notify(FText::Format(NSLOCTEXT("BertaDevKit", "BlueprintAuditComplete", "Blueprint Audit: {0} target(s), {1} finding(s). See Message Log / Output Log."), FText::AsNumber(Targets.Num()), FText::AsNumber(Findings)), SNotificationItem::CS_Success);
 }

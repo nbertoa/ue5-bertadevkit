@@ -23,6 +23,8 @@ private:
 	 * This is the correct point to register menu extensions — not StartupModule() directly.
 	 */
 	void OnPostEngineInit();
+	void RegisterBlueprintAuditMessageLog();
+	void UnregisterBlueprintAuditMessageLog();
 
 	/** Owns the Tools menu entry for BertaDevKit. Null before StartupModule, valid after. */
 	TUniquePtr<FBertaEditorToolbar> EditorToolbar;
