@@ -40,7 +40,7 @@ namespace
 		}
 	}
 
-	bool IsProjectAsset(const FAssetData& Asset)
+	bool IsBlueprintAuditProjectAsset(const FAssetData& Asset)
 	{
 		const FString Path = Asset.PackagePath.ToString();
 		return Path == TEXT("/Game") || Path.StartsWith(TEXT("/Game/"));
@@ -193,7 +193,7 @@ void FBertaBlueprintAuditor::Audit(const TArray<FAssetData>& Assets)
 	TArray<UBlueprint*> Targets;
 	for (const FAssetData& Asset : Assets)
 	{
-		if (IsProjectAsset(Asset))
+		if (IsBlueprintAuditProjectAsset(Asset))
 		{
 			if (UBlueprint* Blueprint = Cast<UBlueprint>(Asset.GetAsset()))
 			{
