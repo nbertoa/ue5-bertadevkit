@@ -2,8 +2,8 @@
 
 #include "Log/BertaDevKitEditorLog.h"
 
-#include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetRegistry/AssetIdentifier.h"
+#include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetViewUtils.h"
 #include "Engine/AssetManager.h"
 #include "Engine/World.h"
@@ -17,6 +17,12 @@
 
 namespace
 {
+	struct FInspectionResult
+	{
+		TArray<FBertaAssetCleanerPackageRecord> Packages;
+		FBertaAssetCleanerGraphAnalysis Graph;
+	};
+
 	bool ContainsPackagePathSegment(const FString& PackageName, const TCHAR* Segment)
 	{
 		return PackageName.Contains(FString::Printf(TEXT("/%s/"), Segment), ESearchCase::IgnoreCase);
@@ -35,99 +41,159 @@ namespace
 		FNotificationInfo Info(Message);
 		Info.bFireAndForget = true;
 		Info.ExpireDuration = 4.0f;
-
 		if (const TSharedPtr<SNotificationItem> Item = FSlateNotificationManager::Get().AddNotification(Info))
 		{
 			Item->SetCompletionState(State);
 		}
 	}
 
-	struct FInspectionSummary
+	bool InspectAssets(const TArray<FAssetData>& Assets, const TCHAR* OperationName, FInspectionResult& OutResult)
 	{
-		int32 ReferencedCount = 0;
-		int32 UnusedCandidateCount = 0;
-		int32 ProtectedCount = 0;
-		int32 SkippedCount = 0;
-	};
-
-	void AddToSummary(const FBertaAssetCleanerClassificationResult& Result, FInspectionSummary& InOutSummary)
-	{
-		switch (Result.Classification)
+		OutResult = FInspectionResult();
+		IAssetRegistry& Registry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+		if (Registry.IsGathering())
 		{
-		case EBertaAssetCleanerClassification::Referenced:
-			++InOutSummary.ReferencedCount;
-			break;
-		case EBertaAssetCleanerClassification::UnusedCandidate:
-			++InOutSummary.UnusedCandidateCount;
-			break;
-		case EBertaAssetCleanerClassification::Protected:
-			++InOutSummary.ProtectedCount;
-			break;
-		case EBertaAssetCleanerClassification::Skipped:
-			++InOutSummary.SkippedCount;
-			break;
-		}
-	}
-
-	bool InspectAssets(const TArray<FAssetData>& Assets, const TCHAR* OperationName, TArray<FBertaAssetCleanerAssetResult>& OutResults, FInspectionSummary& OutSummary)
-	{
-		OutResults.Reset();
-		OutSummary = FInspectionSummary();
-
-		IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
-		if (AssetRegistry.IsGathering())
-		{
-			UE_LOG(LogBertaDevKitEditor, Warning, TEXT("[AssetCleaner] %s aborted because the Asset Registry is still gathering."), OperationName);
-			ShowNotification(LOCTEXT("AssetRegistryGathering", "Asset Cleaner cannot run while the Asset Registry is gathering. Try again when scanning completes."), SNotificationItem::CS_None);
+			UE_LOG(LogBertaDevKitEditor, Warning, TEXT("[AssetCleaner] %s aborted because the Asset Registry is gathering."), OperationName);
+			ShowNotification(LOCTEXT("RegistryGathering", "Asset Cleaner cannot run while the Asset Registry is gathering. Try again when scanning completes."), SNotificationItem::CS_None);
 			return false;
 		}
 
-		UAssetManager* AssetManager = UAssetManager::GetIfInitialized();
-		OutResults.Reserve(Assets.Num());
-		for (const FAssetData& AssetData : Assets)
+		TMap<FName, int32> PackageIndices;
+		for (const FAssetData& Asset : Assets)
 		{
-			TArray<FAssetIdentifier> Referencers;
-			const bool bReferencerQuerySucceeded = AssetRegistry.GetReferencers(
-				FAssetIdentifier(AssetData.PackageName),
-				Referencers,
-				UE::AssetRegistry::EDependencyCategory::All,
-				UE::AssetRegistry::FDependencyQuery());
-
-			FBertaAssetCleanerInspection Inspection;
-			Inspection.bReferencerQuerySucceeded = bReferencerQuerySucceeded;
-			Inspection.ReferencerCount = Referencers.Num();
-			Inspection.bPrimaryAssetQueryAvailable = AssetManager && AssetManager->HasInitialScanCompleted();
-			if (Inspection.bPrimaryAssetQueryAvailable)
+			int32* ExistingIndex = PackageIndices.Find(Asset.PackageName);
+			if (!ExistingIndex)
 			{
-				Inspection.bIsRegisteredPrimaryAsset = AssetManager->GetPrimaryAssetIdForPath(AssetData.GetSoftObjectPath()).IsValid();
+				const int32 NewIndex = OutResult.Packages.AddDefaulted();
+				OutResult.Packages[NewIndex].PackageName = Asset.PackageName;
+				PackageIndices.Add(Asset.PackageName, NewIndex);
+				ExistingIndex = PackageIndices.Find(Asset.PackageName);
 			}
-
-			FBertaAssetCleanerAssetResult& Result = OutResults.AddDefaulted_GetRef();
-			Result.AssetData = AssetData;
-			Result.Classification = FBertaAssetCleaner::ClassifyAsset(AssetData, Inspection);
-			AddToSummary(Result.Classification, OutSummary);
+			OutResult.Packages[*ExistingIndex].Assets.Add(Asset);
 		}
 
+		UAssetManager* AssetManager = UAssetManager::GetIfInitialized();
+		for (FBertaAssetCleanerPackageRecord& Package : OutResult.Packages)
+		{
+			for (const FAssetData& Asset : Package.Assets)
+			{
+				FBertaAssetCleanerInspection Inspection;
+				Inspection.bReferencerQuerySucceeded = true;
+				Inspection.bPrimaryAssetQueryAvailable = AssetManager && AssetManager->HasInitialScanCompleted();
+				Inspection.bIsRegisteredPrimaryAsset = Inspection.bPrimaryAssetQueryAvailable && AssetManager->GetPrimaryAssetIdForPath(Asset.GetSoftObjectPath()).IsValid();
+				const FBertaAssetCleanerClassificationResult Classification = FBertaAssetCleaner::ClassifyAsset(Asset, Inspection);
+				if (Classification.Classification == EBertaAssetCleanerClassification::Protected)
+				{
+					Package.bProtected = true;
+					Package.Reason = Classification.Reason;
+				}
+				else if (Classification.Classification == EBertaAssetCleanerClassification::Skipped)
+				{
+					Package.bSkipped = true;
+					Package.Reason = Classification.Reason;
+				}
+			}
+
+			TArray<FAssetIdentifier> Referencers;
+			if (!Registry.GetReferencers(FAssetIdentifier(Package.PackageName), Referencers, UE::AssetRegistry::EDependencyCategory::All, UE::AssetRegistry::FDependencyQuery()))
+			{
+				Package.bSkipped = true;
+				Package.Reason = TEXT("Asset Registry referencer query failed");
+			}
+			else
+			{
+				for (const FAssetIdentifier& Referencer : Referencers)
+				{
+					if (Referencer.PackageName.IsNone())
+					{
+						Package.bHasExternalReferencer = true;
+					}
+					else if (Referencer.PackageName != Package.PackageName)
+					{
+						Package.ReferencerPackages.Add(Referencer.PackageName);
+						if (!PackageIndices.Contains(Referencer.PackageName))
+						{
+							Package.bHasExternalReferencer = true;
+						}
+					}
+				}
+			}
+
+			TArray<FAssetIdentifier> Dependencies;
+			if (!Registry.GetDependencies(FAssetIdentifier(Package.PackageName), Dependencies, UE::AssetRegistry::EDependencyCategory::All, UE::AssetRegistry::FDependencyQuery()))
+			{
+				Package.bDependencyQuerySucceeded = false;
+				OutResult.Graph.bComplete = false;
+			}
+			else
+			{
+				for (const FAssetIdentifier& Dependency : Dependencies)
+				{
+					if (Dependency.PackageName.IsNone())
+					{
+						OutResult.Graph.bComplete = false;
+					}
+					else if (Dependency.PackageName != Package.PackageName)
+					{
+						Package.DependencyPackages.Add(Dependency.PackageName);
+					}
+				}
+			}
+		}
+
+		const FBertaAssetCleanerGraphAnalysis ComputedGraph = FBertaAssetCleaner::AnalyzePackageGraph(OutResult.Packages);
+		OutResult.Graph.LivePackages = ComputedGraph.LivePackages;
+		OutResult.Graph.OrphanPackages = ComputedGraph.OrphanPackages;
+		OutResult.Graph.OrphanGroups = ComputedGraph.OrphanGroups;
+		OutResult.Graph.bComplete = OutResult.Graph.bComplete && ComputedGraph.bComplete;
 		return true;
 	}
 
-	void LogInspectionDetails(const TArray<FBertaAssetCleanerAssetResult>& InspectionResults)
+	void LogResults(const FInspectionResult& Result, const TCHAR* Operation)
 	{
-		for (const FBertaAssetCleanerAssetResult& Result : InspectionResults)
+		int32 ProtectedCount = 0;
+		int32 SkippedCount = 0;
+		for (const FBertaAssetCleanerPackageRecord& Package : Result.Packages)
 		{
-			switch (Result.Classification.Classification)
+			if (Package.bProtected)
 			{
-			case EBertaAssetCleanerClassification::UnusedCandidate:
-				UE_LOG(LogBertaDevKitEditor, Warning, TEXT("[AssetCleaner] UNUSED CANDIDATE: %s (%s)"), *Result.AssetData.GetObjectPathString(), *Result.AssetData.AssetClassPath.ToString());
-				break;
-			case EBertaAssetCleanerClassification::Protected:
-				UE_LOG(LogBertaDevKitEditor, Log, TEXT("[AssetCleaner] PROTECTED: %s (%s) - %s"), *Result.AssetData.GetObjectPathString(), *Result.AssetData.AssetClassPath.ToString(), *Result.Classification.Reason);
-				break;
-			case EBertaAssetCleanerClassification::Skipped:
-				UE_LOG(LogBertaDevKitEditor, Warning, TEXT("[AssetCleaner] SKIPPED: %s - %s"), *Result.AssetData.GetObjectPathString(), *Result.Classification.Reason);
-				break;
-			case EBertaAssetCleanerClassification::Referenced:
-				break;
+				++ProtectedCount;
+				UE_LOG(LogBertaDevKitEditor, Log, TEXT("[AssetCleaner] PROTECTED: %s - %s"), *Package.PackageName.ToString(), *Package.Reason);
+			}
+			if (Package.bSkipped)
+			{
+				++SkippedCount;
+				UE_LOG(LogBertaDevKitEditor, Warning, TEXT("[AssetCleaner] SKIPPED: %s - %s"), *Package.PackageName.ToString(), *Package.Reason);
+			}
+		}
+		if (!Result.Graph.bComplete)
+		{
+			UE_LOG(LogBertaDevKitEditor, Warning, TEXT("[AssetCleaner] %s graph analysis is incomplete; graph-derived orphan candidates are unavailable."), Operation);
+		}
+		for (int32 GroupIndex = 0; GroupIndex < Result.Graph.OrphanGroups.Num(); ++GroupIndex)
+		{
+			const TArray<FName>& Group = Result.Graph.OrphanGroups[GroupIndex];
+			UE_LOG(LogBertaDevKitEditor, Warning, TEXT("[AssetCleaner] ORPHAN GROUP %d: %d package(s)"), GroupIndex + 1, Group.Num());
+			for (const FName PackageName : Group)
+			{
+				UE_LOG(LogBertaDevKitEditor, Warning, TEXT("  %s"), *PackageName.ToString());
+			}
+		}
+		UE_LOG(LogBertaDevKitEditor, Log, TEXT("[AssetCleaner] %s complete: %d orphan group(s), %d orphan candidate package(s), %d live package(s), %d protected, %d skipped."), Operation, Result.Graph.OrphanGroups.Num(), Result.Graph.OrphanPackages.Num(), Result.Graph.LivePackages.Num(), ProtectedCount, SkippedCount);
+	}
+
+	void CollectCandidateAssets(const FInspectionResult& Result, TArray<FAssetData>& OutCandidates)
+	{
+		OutCandidates.Reset();
+		if (!Result.Graph.bComplete)
+		{
+			return;
+		}
+		for (const FBertaAssetCleanerPackageRecord& Package : Result.Packages)
+		{
+			if (Result.Graph.OrphanPackages.Contains(Package.PackageName))
+			{
+				OutCandidates.Append(Package.Assets);
 			}
 		}
 	}
@@ -135,162 +201,175 @@ namespace
 
 FBertaAssetCleanerClassificationResult FBertaAssetCleaner::ClassifyAsset(const FAssetData& AssetData, const FBertaAssetCleanerInspection& Inspection)
 {
-	if (!Inspection.bReferencerQuerySucceeded)
-	{
-		return { EBertaAssetCleanerClassification::Skipped, TEXT("Asset Registry referencer query failed") };
-	}
-
-	if (Inspection.ReferencerCount > 0)
-	{
-		return { EBertaAssetCleanerClassification::Referenced, FString() };
-	}
-
-	if (AssetData.AssetClassPath == UWorld::StaticClass()->GetClassPathName())
-	{
-		return { EBertaAssetCleanerClassification::Protected, TEXT("World/map asset") };
-	}
-
-	if (AssetData.AssetClassPath == UObjectRedirector::StaticClass()->GetClassPathName())
-	{
-		return { EBertaAssetCleanerClassification::Protected, TEXT("Object redirector") };
-	}
-
-	if (IsGeneratedWorldStoragePackage(AssetData))
-	{
-		return { EBertaAssetCleanerClassification::Protected, TEXT("World Partition or external generated storage") };
-	}
-
-	if (!Inspection.bPrimaryAssetQueryAvailable)
-	{
-		return { EBertaAssetCleanerClassification::Skipped, TEXT("Asset Manager is unavailable; primary asset registration could not be checked") };
-	}
-
-	if (Inspection.bIsRegisteredPrimaryAsset)
-	{
-		return { EBertaAssetCleanerClassification::Protected, TEXT("Registered Primary Asset") };
-	}
-
+	if (!Inspection.bReferencerQuerySucceeded) return { EBertaAssetCleanerClassification::Skipped, TEXT("Asset Registry referencer query failed") };
+	if (Inspection.ReferencerCount > 0) return { EBertaAssetCleanerClassification::Referenced, FString() };
+	if (AssetData.AssetClassPath == UWorld::StaticClass()->GetClassPathName()) return { EBertaAssetCleanerClassification::Protected, TEXT("World/map asset") };
+	if (AssetData.AssetClassPath == UObjectRedirector::StaticClass()->GetClassPathName()) return { EBertaAssetCleanerClassification::Protected, TEXT("Object redirector") };
+	if (IsGeneratedWorldStoragePackage(AssetData)) return { EBertaAssetCleanerClassification::Protected, TEXT("World Partition or external generated storage") };
+	if (!Inspection.bPrimaryAssetQueryAvailable) return { EBertaAssetCleanerClassification::Skipped, TEXT("Asset Manager is unavailable; primary asset registration could not be checked") };
+	if (Inspection.bIsRegisteredPrimaryAsset) return { EBertaAssetCleanerClassification::Protected, TEXT("Registered Primary Asset") };
 	return { EBertaAssetCleanerClassification::UnusedCandidate, FString() };
+}
+
+FBertaAssetCleanerGraphAnalysis FBertaAssetCleaner::AnalyzePackageGraph(const TArray<FBertaAssetCleanerPackageRecord>& Records)
+{
+	FBertaAssetCleanerGraphAnalysis Result;
+	TMap<FName, const FBertaAssetCleanerPackageRecord*> ByName;
+	for (const FBertaAssetCleanerPackageRecord& Record : Records)
+	{
+		ByName.Add(Record.PackageName, &Record);
+		Result.bComplete &= Record.bDependencyQuerySucceeded;
+	}
+	if (!Result.bComplete) return Result;
+
+	TArray<FName> Queue;
+	for (const FBertaAssetCleanerPackageRecord& Record : Records)
+	{
+		if (Record.bProtected || Record.bSkipped || Record.bHasExternalReferencer)
+		{
+			Result.LivePackages.Add(Record.PackageName);
+			Queue.Add(Record.PackageName);
+		}
+	}
+	for (int32 Index = 0; Index < Queue.Num(); ++Index)
+	{
+		const FBertaAssetCleanerPackageRecord* Record = ByName.FindChecked(Queue[Index]);
+		for (const FName Dependency : Record->DependencyPackages)
+		{
+			if (ByName.Contains(Dependency) && !Result.LivePackages.Contains(Dependency))
+			{
+				Result.LivePackages.Add(Dependency);
+				Queue.Add(Dependency);
+			}
+		}
+	}
+	for (const FBertaAssetCleanerPackageRecord& Record : Records)
+	{
+		if (!Record.bProtected && !Record.bSkipped && !Result.LivePackages.Contains(Record.PackageName)) Result.OrphanPackages.Add(Record.PackageName);
+	}
+
+	TSet<FName> Visited;
+	TArray<FName> OrderedOrphans = Result.OrphanPackages.Array();
+	OrderedOrphans.Sort([](const FName& A, const FName& B) { return A.LexicalLess(B); });
+	for (const FName Start : OrderedOrphans)
+	{
+		if (Visited.Contains(Start)) continue;
+		Visited.Add(Start);
+		TArray<FName> Group;
+		TArray<FName> Work = { Start };
+		for (int32 Index = 0; Index < Work.Num(); ++Index)
+		{
+			const FName Current = Work[Index];
+			Group.Add(Current);
+			for (const FBertaAssetCleanerPackageRecord& Other : Records)
+			{
+				const bool bConnected = Other.PackageName == Current || Other.DependencyPackages.Contains(Current) || ByName.FindChecked(Current)->DependencyPackages.Contains(Other.PackageName);
+				if (bConnected && Result.OrphanPackages.Contains(Other.PackageName) && !Visited.Contains(Other.PackageName))
+				{
+					Visited.Add(Other.PackageName);
+					Work.Add(Other.PackageName);
+				}
+			}
+		}
+		Group.Sort([](const FName& A, const FName& B) { return A.LexicalLess(B); });
+		Result.OrphanGroups.Add(MoveTemp(Group));
+	}
+	return Result;
 }
 
 void FBertaAssetCleaner::AuditUnusedAssets(const TArray<FAssetData>& Assets)
 {
-	TArray<FBertaAssetCleanerAssetResult> InspectionResults;
-	FInspectionSummary Summary;
-	if (!InspectAssets(Assets, TEXT("Audit"), InspectionResults, Summary))
-	{
-		return;
-	}
-
-	LogInspectionDetails(InspectionResults);
-	UE_LOG(LogBertaDevKitEditor, Log, TEXT("[AssetCleaner] Audit complete: %d unused candidate(s), %d protected, %d referenced, %d skipped."), Summary.UnusedCandidateCount, Summary.ProtectedCount, Summary.ReferencedCount, Summary.SkippedCount);
-	if (Summary.UnusedCandidateCount == 0 && Summary.SkippedCount == 0)
-	{
-		ShowNotification(LOCTEXT("NoUnusedCandidates", "Asset Cleaner: No unused candidates found. No assets were modified."), SNotificationItem::CS_Success);
-	}
-	else
-	{
-		ShowNotification(FText::Format(LOCTEXT("AuditSummary", "Asset Cleaner: {0} unused candidate(s), {1} protected, {2} skipped. See Output Log. No assets were modified."), FText::AsNumber(Summary.UnusedCandidateCount), FText::AsNumber(Summary.ProtectedCount), FText::AsNumber(Summary.SkippedCount)), Summary.UnusedCandidateCount > 0 ? SNotificationItem::CS_Success : SNotificationItem::CS_None);
-	}
+	FInspectionResult Result;
+	if (!InspectAssets(Assets, TEXT("Audit"), Result)) return;
+	LogResults(Result, TEXT("Audit"));
+	ShowNotification(Result.Graph.bComplete ? FText::Format(LOCTEXT("AuditSummary", "Asset Cleaner: {0} orphan candidate package(s). See Output Log. No assets were modified."), FText::AsNumber(Result.Graph.OrphanPackages.Num())) : LOCTEXT("AuditIncomplete", "Asset Cleaner: Graph analysis is incomplete. No cleanup candidates were produced."), Result.Graph.bComplete ? SNotificationItem::CS_Success : SNotificationItem::CS_None);
 }
 
 void FBertaAssetCleaner::CleanUnusedAssets(const TArray<FAssetData>& Assets)
 {
-	TArray<FBertaAssetCleanerAssetResult> InspectionResults;
-	FInspectionSummary Summary;
-	if (!InspectAssets(Assets, TEXT("Clean"), InspectionResults, Summary))
-	{
-		return;
-	}
-
-	LogInspectionDetails(InspectionResults);
-	UE_LOG(LogBertaDevKitEditor, Log, TEXT("[AssetCleaner] Clean preflight: %d current unused candidate(s), %d protected, %d referenced, %d skipped."), Summary.UnusedCandidateCount, Summary.ProtectedCount, Summary.ReferencedCount, Summary.SkippedCount);
-
+	FInspectionResult Result;
+	if (!InspectAssets(Assets, TEXT("Clean preflight"), Result)) return;
+	LogResults(Result, TEXT("Clean preflight"));
 	TArray<FAssetData> Candidates;
-	CollectUnusedCandidateAssets(InspectionResults, Candidates);
+	CollectCandidateAssets(Result, Candidates);
 	if (Candidates.IsEmpty())
 	{
-		ShowNotification(LOCTEXT("NoUnusedCandidatesToClean", "Asset Cleaner: No unused candidates to clean."), SNotificationItem::CS_Success);
+		ShowNotification(LOCTEXT("NoOrphans", "Asset Cleaner: No current orphan candidates to clean."), SNotificationItem::CS_None);
 		return;
 	}
-
-	TArray<UObject*> LoadedObjects;
-	const AssetViewUtils::FLoadAssetsSettings LoadSettings{
-		.bFollowRedirectors = false,
-		.bAllowCancel = true,
-	};
-	const AssetViewUtils::ELoadAssetsResult LoadResult = AssetViewUtils::LoadAssetsIfNeeded(Candidates, LoadedObjects, LoadSettings);
-	if (LoadResult == AssetViewUtils::ELoadAssetsResult::Cancelled)
-	{
-		UE_LOG(LogBertaDevKitEditor, Log, TEXT("[AssetCleaner] Clean canceled while loading %d current unused candidate(s)."), Candidates.Num());
-		return;
-	}
-
-	TArray<UObject*> LoadedCandidates;
-	CollectLoadedCandidateObjects(Candidates, LoadedObjects, LoadedCandidates);
-	TSet<FName> LoadedCandidatePaths;
-	for (const UObject* LoadedCandidate : LoadedCandidates)
-	{
-		LoadedCandidatePaths.Add(*LoadedCandidate->GetPathName());
-	}
-
+	IAssetRegistry& Registry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+	TSet<FName> CandidateObjectPaths;
+	TSet<FName> CandidatePackages;
 	for (const FAssetData& Candidate : Candidates)
 	{
-		if (!LoadedCandidatePaths.Contains(*Candidate.GetObjectPathString()))
+		CandidateObjectPaths.Add(*Candidate.GetObjectPathString());
+		CandidatePackages.Add(Candidate.PackageName);
+	}
+	TSet<FName> ChangedPackages;
+	for (const FName PackageName : CandidatePackages)
+	{
+		TArray<FAssetData> CurrentPackageAssets;
+		if (!Registry.GetAssetsByPackageName(PackageName, CurrentPackageAssets))
 		{
-			UE_LOG(LogBertaDevKitEditor, Warning, TEXT("[AssetCleaner] SKIPPED: %s - failed to load current unused candidate for native deletion."), *Candidate.GetObjectPathString());
+			ChangedPackages.Add(PackageName);
+			UE_LOG(LogBertaDevKitEditor, Warning, TEXT("[AssetCleaner] SKIPPED: %s - package could not be revalidated before deletion."), *PackageName.ToString());
+			continue;
+		}
+		for (const FAssetData& CurrentAsset : CurrentPackageAssets)
+		{
+			if (!CandidateObjectPaths.Contains(*CurrentAsset.GetObjectPathString()))
+			{
+				ChangedPackages.Add(PackageName);
+				UE_LOG(LogBertaDevKitEditor, Warning, TEXT("[AssetCleaner] SKIPPED: %s - package now contains an additional asset outside the current orphan analysis."), *PackageName.ToString());
+				break;
+			}
 		}
 	}
-
+	Candidates.RemoveAll([&ChangedPackages](const FAssetData& Candidate) { return ChangedPackages.Contains(Candidate.PackageName); });
+	if (Candidates.IsEmpty())
+	{
+		ShowNotification(LOCTEXT("NoRevalidatedOrphans", "Asset Cleaner: No current orphan candidates could be safely revalidated for deletion."), SNotificationItem::CS_None);
+		return;
+	}
+	TArray<UObject*> Loaded;
+	const AssetViewUtils::FLoadAssetsSettings Settings{ .bFollowRedirectors = false, .bAllowCancel = true };
+	if (AssetViewUtils::LoadAssetsIfNeeded(Candidates, Loaded, Settings) == AssetViewUtils::ELoadAssetsResult::Cancelled) return;
+	TArray<UObject*> LoadedCandidates;
+	CollectLoadedCandidateObjects(Candidates, Loaded, LoadedCandidates);
+	TSet<FName> LoadedPaths;
+	for (const UObject* Object : LoadedCandidates) LoadedPaths.Add(*Object->GetPathName());
+	TSet<FName> FailedPackages;
+	for (const FAssetData& Candidate : Candidates)
+	{
+		if (!LoadedPaths.Contains(*Candidate.GetObjectPathString()))
+		{
+			FailedPackages.Add(Candidate.PackageName);
+			UE_LOG(LogBertaDevKitEditor, Warning, TEXT("[AssetCleaner] SKIPPED: %s - a package asset failed to load for native deletion."), *Candidate.GetObjectPathString());
+		}
+	}
+	LoadedCandidates.RemoveAll([&FailedPackages](const UObject* Object) { return FailedPackages.Contains(Object->GetOutermost()->GetFName()); });
 	if (LoadedCandidates.IsEmpty())
 	{
-		ShowNotification(LOCTEXT("NoLoadedCandidatesToClean", "Asset Cleaner: No unused candidates could be loaded for deletion."), SNotificationItem::CS_None);
+		ShowNotification(LOCTEXT("NoLoadedOrphans", "Asset Cleaner: No current orphan candidates could be loaded for deletion."), SNotificationItem::CS_None);
 		return;
 	}
-
-	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
-	if (AssetRegistry.IsGathering())
+	if (Registry.IsGathering())
 	{
-		UE_LOG(LogBertaDevKitEditor, Warning, TEXT("[AssetCleaner] Clean aborted before native deletion because the Asset Registry is gathering."));
-		ShowNotification(LOCTEXT("AssetRegistryGatheringBeforeDeletion", "Asset Cleaner cannot clean while the Asset Registry is gathering. Try again when scanning completes."), SNotificationItem::CS_Fail);
+		UE_LOG(LogBertaDevKitEditor, Warning, TEXT("[AssetCleaner] Clean aborted before native deletion because the Asset Registry began gathering."));
+		ShowNotification(LOCTEXT("RegistryGatheringBeforeDelete", "Asset Cleaner cannot clean while the Asset Registry is gathering. Try again when scanning completes."), SNotificationItem::CS_None);
 		return;
 	}
-
-	const int32 DeletedCount = AssetViewUtils::DeleteAssets(LoadedCandidates);
-	UE_LOG(LogBertaDevKitEditor, Log, TEXT("[AssetCleaner] Clean complete: %d of %d loaded candidate asset(s) deleted by Unreal's native deletion workflow."), DeletedCount, LoadedCandidates.Num());
-	ShowNotification(FText::Format(LOCTEXT("CleanComplete", "Asset Cleaner: Unreal deleted {0} of {1} candidate asset(s). See Output Log."), FText::AsNumber(DeletedCount), FText::AsNumber(LoadedCandidates.Num())), DeletedCount > 0 ? SNotificationItem::CS_Success : SNotificationItem::CS_None);
-}
-
-void FBertaAssetCleaner::CollectUnusedCandidateAssets(const TArray<FBertaAssetCleanerAssetResult>& InspectionResults, TArray<FAssetData>& OutCandidates)
-{
-	OutCandidates.Reset();
-	for (const FBertaAssetCleanerAssetResult& Result : InspectionResults)
-	{
-		if (Result.Classification.Classification == EBertaAssetCleanerClassification::UnusedCandidate)
-		{
-			OutCandidates.Add(Result.AssetData);
-		}
-	}
+	const int32 Deleted = AssetViewUtils::DeleteAssets(LoadedCandidates);
+	UE_LOG(LogBertaDevKitEditor, Log, TEXT("[AssetCleaner] Clean complete: %d of %d candidate asset(s) deleted by Unreal's native deletion workflow."), Deleted, LoadedCandidates.Num());
+	ShowNotification(FText::Format(LOCTEXT("CleanSummary", "Asset Cleaner: Unreal deleted {0} of {1} current orphan candidate asset(s). See Output Log."), FText::AsNumber(Deleted), FText::AsNumber(LoadedCandidates.Num())), Deleted > 0 ? SNotificationItem::CS_Success : SNotificationItem::CS_None);
 }
 
 void FBertaAssetCleaner::CollectLoadedCandidateObjects(const TArray<FAssetData>& Candidates, TConstArrayView<UObject*> LoadedObjects, TArray<UObject*>& OutLoadedCandidates)
 {
 	OutLoadedCandidates.Reset();
 	TSet<FName> CandidatePaths;
-	for (const FAssetData& Candidate : Candidates)
-	{
-		CandidatePaths.Add(*Candidate.GetObjectPathString());
-	}
-
-	TSet<UObject*> SeenCandidates;
-	for (UObject* LoadedObject : LoadedObjects)
-	{
-		if (LoadedObject && CandidatePaths.Contains(*LoadedObject->GetPathName()) && !SeenCandidates.Contains(LoadedObject))
-		{
-			SeenCandidates.Add(LoadedObject);
-			OutLoadedCandidates.Add(LoadedObject);
-		}
-	}
+	for (const FAssetData& Candidate : Candidates) CandidatePaths.Add(*Candidate.GetObjectPathString());
+	for (UObject* Object : LoadedObjects) if (Object && CandidatePaths.Contains(*Object->GetPathName()) && !OutLoadedCandidates.Contains(Object)) OutLoadedCandidates.Add(Object);
 }
 
 #undef LOCTEXT_NAMESPACE

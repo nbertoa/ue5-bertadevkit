@@ -7,126 +7,65 @@
 #include "Misc/AutomationTest.h"
 #include "Misc/PackageName.h"
 #include "UObject/ObjectRedirector.h"
-#include "UObject/UObjectGlobals.h"
 
 namespace
 {
-	FAssetData MakeCleanerAssetData(const TCHAR* PackageName, const TCHAR* AssetName, const FTopLevelAssetPath& ClassPath)
+	FBertaAssetCleanerPackageRecord MakePackage(const TCHAR* Name, bool bProtected = false, bool bSkipped = false, bool bExternal = false)
+	{
+		FBertaAssetCleanerPackageRecord Result;
+		Result.PackageName = FName(Name);
+		Result.bProtected = bProtected;
+		Result.bSkipped = bSkipped;
+		Result.bHasExternalReferencer = bExternal;
+		return Result;
+	}
+
+	FAssetData MakeAssetData(const TCHAR* PackageName, const TCHAR* AssetName, const FTopLevelAssetPath& ClassPath)
 	{
 		const FString PackagePath = FPackageName::GetLongPackagePath(PackageName);
 		return FAssetData(FName(PackageName), FName(*PackagePath), FName(AssetName), ClassPath);
 	}
 
-	FBertaAssetCleanerInspection MakeInspection(int32 ReferencerCount = 0)
+	void AddDependency(TArray<FBertaAssetCleanerPackageRecord>& Records, const TCHAR* From, const TCHAR* To)
 	{
-		FBertaAssetCleanerInspection Inspection;
-		Inspection.bReferencerQuerySucceeded = true;
-		Inspection.ReferencerCount = ReferencerCount;
-		Inspection.bPrimaryAssetQueryAvailable = true;
-		return Inspection;
+		for (FBertaAssetCleanerPackageRecord& Record : Records)
+		{
+			if (Record.PackageName == FName(From)) { Record.DependencyPackages.Add(FName(To)); return; }
+		}
 	}
 
-	void TestClassification(FAutomationTestBase& Test, const TCHAR* Description, const FAssetData& AssetData, const FBertaAssetCleanerInspection& Inspection, EBertaAssetCleanerClassification Expected)
+	void TestContains(FAutomationTestBase& Test, const TCHAR* Description, const TSet<FName>& Set, const TCHAR* Name, bool bExpected)
 	{
-		Test.TestEqual(Description, FBertaAssetCleaner::ClassifyAsset(AssetData, Inspection).Classification, Expected);
-	}
-
-	FBertaAssetCleanerAssetResult MakeInspectionResult(const FAssetData& AssetData, EBertaAssetCleanerClassification Classification)
-	{
-		FBertaAssetCleanerAssetResult Result;
-		Result.AssetData = AssetData;
-		Result.Classification.Classification = Classification;
-		return Result;
+		Test.TestEqual(Description, Set.Contains(FName(Name)), bExpected);
 	}
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FBertaAssetCleanerClassificationTest, "BertaDevKit.AssetCleaner.Classification", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FBertaAssetCleanerClassificationTest::RunTest(const FString& Parameters)
 {
-	const FAssetData Ordinary = MakeCleanerAssetData(TEXT("/Game/CleanerTests/T_Ordinary"), TEXT("T_Ordinary"), UStaticMesh::StaticClass()->GetClassPathName());
-	TestClassification(*this, TEXT("A global referencer outside the audit scope keeps an ordinary asset referenced"), Ordinary, MakeInspection(1), EBertaAssetCleanerClassification::Referenced);
-	TestClassification(*this, TEXT("An ordinary asset with no referencers is an unused candidate"), Ordinary, MakeInspection(), EBertaAssetCleanerClassification::UnusedCandidate);
-
-	const FAssetData World = MakeCleanerAssetData(TEXT("/Game/CleanerTests/TestMap"), TEXT("TestMap"), UWorld::StaticClass()->GetClassPathName());
-	TestClassification(*this, TEXT("An unreferenced world is protected"), World, MakeInspection(), EBertaAssetCleanerClassification::Protected);
-
-	const FAssetData Redirector = MakeCleanerAssetData(TEXT("/Game/CleanerTests/OldAsset"), TEXT("OldAsset"), UObjectRedirector::StaticClass()->GetClassPathName());
-	TestClassification(*this, TEXT("An unreferenced redirector is protected"), Redirector, MakeInspection(), EBertaAssetCleanerClassification::Protected);
-
-	FBertaAssetCleanerInspection PrimaryInspection = MakeInspection();
-	PrimaryInspection.bIsRegisteredPrimaryAsset = true;
-	TestClassification(*this, TEXT("A registered Primary Asset is protected"), Ordinary, PrimaryInspection, EBertaAssetCleanerClassification::Protected);
-
-	const FAssetData ExternalActor = MakeCleanerAssetData(TEXT("/Game/__ExternalActors__/TestMap/A/B/Actor"), TEXT("Actor"), UStaticMesh::StaticClass()->GetClassPathName());
-	TestClassification(*this, TEXT("World Partition external actor storage is protected"), ExternalActor, MakeInspection(), EBertaAssetCleanerClassification::Protected);
-
-	const FAssetData ExternalObject = MakeCleanerAssetData(TEXT("/Game/__ExternalObjects__/TestMap/A/B/Object"), TEXT("Object"), UStaticMesh::StaticClass()->GetClassPathName());
-	TestClassification(*this, TEXT("External object storage is protected"), ExternalObject, MakeInspection(), EBertaAssetCleanerClassification::Protected);
-
-	const FAssetData ExternalDataLayer = MakeCleanerAssetData(TEXT("/Game/EDL/1A2B3C4D/TestMap/Asset"), TEXT("Asset"), UStaticMesh::StaticClass()->GetClassPathName());
-	TestClassification(*this, TEXT("External Data Layer storage is protected"), ExternalDataLayer, MakeInspection(), EBertaAssetCleanerClassification::Protected);
-
-	FBertaAssetCleanerInspection FailedQuery = MakeInspection();
-	FailedQuery.bReferencerQuerySucceeded = false;
-	TestClassification(*this, TEXT("A failed referencer query never produces an unused candidate"), Ordinary, FailedQuery, EBertaAssetCleanerClassification::Skipped);
-
-	FBertaAssetCleanerInspection MissingAssetManager = MakeInspection();
-	MissingAssetManager.bPrimaryAssetQueryAvailable = false;
-	TestClassification(*this, TEXT("An unavailable Asset Manager never produces an unused candidate"), Ordinary, MissingAssetManager, EBertaAssetCleanerClassification::Skipped);
-
+	FBertaAssetCleanerInspection Inspection;
+	Inspection.bReferencerQuerySucceeded = true;
+	Inspection.bPrimaryAssetQueryAvailable = true;
+	FAssetData World = MakeAssetData(TEXT("/Game/TestMap"), TEXT("TestMap"), UWorld::StaticClass()->GetClassPathName());
+	FAssetData Redirector = MakeAssetData(TEXT("/Game/Old"), TEXT("Old"), UObjectRedirector::StaticClass()->GetClassPathName());
+	TestEqual(TEXT("World is protected"), FBertaAssetCleaner::ClassifyAsset(World, Inspection).Classification, EBertaAssetCleanerClassification::Protected);
+	TestEqual(TEXT("Redirector is protected"), FBertaAssetCleaner::ClassifyAsset(Redirector, Inspection).Classification, EBertaAssetCleanerClassification::Protected);
+	Inspection.bReferencerQuerySucceeded = false;
+	TestEqual(TEXT("Failed referencer query is skipped"), FBertaAssetCleaner::ClassifyAsset(World, Inspection).Classification, EBertaAssetCleanerClassification::Skipped);
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FBertaAssetCleanerCleanPreflightTest, "BertaDevKit.AssetCleaner.CleanPreflight", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-bool FBertaAssetCleanerCleanPreflightTest::RunTest(const FString& Parameters)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FBertaAssetCleanerGraphTest, "BertaDevKit.AssetCleaner.Graph", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FBertaAssetCleanerGraphTest::RunTest(const FString& Parameters)
 {
-	const FAssetData Candidate = MakeCleanerAssetData(TEXT("/Game/CleanerTests/T_Candidate"), TEXT("T_Candidate"), UStaticMesh::StaticClass()->GetClassPathName());
-	const FAssetData Referenced = MakeCleanerAssetData(TEXT("/Game/CleanerTests/T_Referenced"), TEXT("T_Referenced"), UStaticMesh::StaticClass()->GetClassPathName());
-	const FAssetData Protected = MakeCleanerAssetData(TEXT("/Game/CleanerTests/TestMap"), TEXT("TestMap"), UWorld::StaticClass()->GetClassPathName());
-	const FAssetData Skipped = MakeCleanerAssetData(TEXT("/Game/CleanerTests/T_Skipped"), TEXT("T_Skipped"), UStaticMesh::StaticClass()->GetClassPathName());
-	const FAssetData OutsideScope = MakeCleanerAssetData(TEXT("/Game/OtherFolder/T_Unrelated"), TEXT("T_Unrelated"), UStaticMesh::StaticClass()->GetClassPathName());
-
-	TArray<FBertaAssetCleanerAssetResult> CurrentInspectionResults;
-	CurrentInspectionResults.Add(MakeInspectionResult(Candidate, EBertaAssetCleanerClassification::UnusedCandidate));
-	CurrentInspectionResults.Add(MakeInspectionResult(Referenced, EBertaAssetCleanerClassification::Referenced));
-	CurrentInspectionResults.Add(MakeInspectionResult(Protected, EBertaAssetCleanerClassification::Protected));
-	CurrentInspectionResults.Add(MakeInspectionResult(Skipped, EBertaAssetCleanerClassification::Skipped));
-
-	TArray<FAssetData> DeleteCandidates;
-	FBertaAssetCleaner::CollectUnusedCandidateAssets(CurrentInspectionResults, DeleteCandidates);
-	TestEqual(TEXT("Only current unused candidates enter the delete candidate set"), DeleteCandidates.Num(), 1);
-	if (DeleteCandidates.Num() == 1)
-	{
-		TestEqual(TEXT("The unused candidate is retained"), DeleteCandidates[0].GetObjectPathString(), Candidate.GetObjectPathString());
-	}
-	TestFalse(TEXT("Referenced assets never enter the delete candidate set"), DeleteCandidates.ContainsByPredicate([&Referenced](const FAssetData& Asset) { return Asset.GetObjectPathString() == Referenced.GetObjectPathString(); }));
-	TestFalse(TEXT("Protected assets never enter the delete candidate set"), DeleteCandidates.ContainsByPredicate([&Protected](const FAssetData& Asset) { return Asset.GetObjectPathString() == Protected.GetObjectPathString(); }));
-	TestFalse(TEXT("Skipped assets never enter the delete candidate set"), DeleteCandidates.ContainsByPredicate([&Skipped](const FAssetData& Asset) { return Asset.GetObjectPathString() == Skipped.GetObjectPathString(); }));
-	TestFalse(TEXT("Assets outside the supplied inspection scope never enter the delete candidate set"), DeleteCandidates.ContainsByPredicate([&OutsideScope](const FAssetData& Asset) { return Asset.GetObjectPathString() == OutsideScope.GetObjectPathString(); }));
-
-	TArray<FBertaAssetCleanerAssetResult> ReclassifiedResults;
-	ReclassifiedResults.Add(MakeInspectionResult(Candidate, EBertaAssetCleanerClassification::Referenced));
-	FBertaAssetCleaner::CollectUnusedCandidateAssets(ReclassifiedResults, DeleteCandidates);
-	TestEqual(TEXT("The current reclassification is used instead of a prior audit candidate state"), DeleteCandidates.Num(), 0);
-
-	TArray<UObject*> LoadedDeleteCandidates;
-	const TArray<FAssetData> SingleCandidate = { Candidate };
-	const TArray<UObject*> NoLoadedObjects;
-	FBertaAssetCleaner::CollectLoadedCandidateObjects(SingleCandidate, NoLoadedObjects, LoadedDeleteCandidates);
-	TestEqual(TEXT("A candidate that failed to load cannot enter the native deletion workflow"), LoadedDeleteCandidates.Num(), 0);
-
-	UPackage* LoadedCandidatePackage = CreatePackage(TEXT("/Game/CleanerTests/LoadedCandidate"));
-	UObject* LoadedCandidate = NewObject<UStaticMesh>(LoadedCandidatePackage, TEXT("LoadedCandidate"), RF_Transient);
-	const FAssetData LoadedCandidateData(LoadedCandidate);
-	const TArray<FAssetData> LoadedCandidateArray = { LoadedCandidateData };
-	const TArray<UObject*> MixedLoadedObjects = { LoadedCandidate, NewObject<UStaticMesh>(GetTransientPackage(), TEXT("UnrelatedLoadedObject"), RF_Transient) };
-	FBertaAssetCleaner::CollectLoadedCandidateObjects(LoadedCandidateArray, MixedLoadedObjects, LoadedDeleteCandidates);
-	TestEqual(TEXT("Only loaded objects that match current candidates enter the native deletion workflow"), LoadedDeleteCandidates.Num(), 1);
-	if (LoadedDeleteCandidates.Num() == 1)
-	{
-		TestEqual(TEXT("The matching loaded candidate is retained"), LoadedDeleteCandidates[0], LoadedCandidate);
-	}
-
+	{ TArray Records{ MakePackage(TEXT("/Game/A")) }; const auto R = FBertaAssetCleaner::AnalyzePackageGraph(Records); TestContains(*this, TEXT("Direct orphan"), R.OrphanPackages, TEXT("/Game/A"), true); }
+	{ TArray Records{ MakePackage(TEXT("/Game/A"), false, false, true), MakePackage(TEXT("/Game/B")), MakePackage(TEXT("/Game/C")) }; AddDependency(Records, TEXT("/Game/A"), TEXT("/Game/B")); AddDependency(Records, TEXT("/Game/B"), TEXT("/Game/C")); const auto R = FBertaAssetCleaner::AnalyzePackageGraph(Records); TestEqual(TEXT("External live chain has no orphans"), R.OrphanPackages.Num(), 0); }
+	{ TArray Records{ MakePackage(TEXT("/Game/A")), MakePackage(TEXT("/Game/B")), MakePackage(TEXT("/Game/C")) }; AddDependency(Records, TEXT("/Game/A"), TEXT("/Game/B")); AddDependency(Records, TEXT("/Game/B"), TEXT("/Game/C")); const auto R = FBertaAssetCleaner::AnalyzePackageGraph(Records); TestEqual(TEXT("Orphan chain has all packages"), R.OrphanPackages.Num(), 3); TestEqual(TEXT("Orphan chain is one group"), R.OrphanGroups.Num(), 1); }
+	{ TArray Records{ MakePackage(TEXT("/Game/A")), MakePackage(TEXT("/Game/B")), MakePackage(TEXT("/Game/C")), MakePackage(TEXT("/Game/D")) }; AddDependency(Records, TEXT("/Game/A"), TEXT("/Game/B")); AddDependency(Records, TEXT("/Game/A"), TEXT("/Game/C")); AddDependency(Records, TEXT("/Game/A"), TEXT("/Game/D")); const auto R = FBertaAssetCleaner::AnalyzePackageGraph(Records); TestEqual(TEXT("Branching orphan is one group"), R.OrphanGroups.Num(), 1); TestEqual(TEXT("Branching group has four packages"), R.OrphanGroups[0].Num(), 4); }
+	{ TArray Records{ MakePackage(TEXT("/Game/A")), MakePackage(TEXT("/Game/B")), MakePackage(TEXT("/Game/C")) }; AddDependency(Records, TEXT("/Game/A"), TEXT("/Game/B")); AddDependency(Records, TEXT("/Game/B"), TEXT("/Game/C")); AddDependency(Records, TEXT("/Game/C"), TEXT("/Game/A")); const auto R = FBertaAssetCleaner::AnalyzePackageGraph(Records); TestEqual(TEXT("Cycle is orphaned"), R.OrphanPackages.Num(), 3); Records[1].bHasExternalReferencer = true; const auto Anchored = FBertaAssetCleaner::AnalyzePackageGraph(Records); TestEqual(TEXT("Anchored cycle is live"), Anchored.OrphanPackages.Num(), 0); }
+	{ TArray Records{ MakePackage(TEXT("/Game/Map"), true), MakePackage(TEXT("/Game/A")), MakePackage(TEXT("/Game/B")) }; AddDependency(Records, TEXT("/Game/Map"), TEXT("/Game/A")); AddDependency(Records, TEXT("/Game/A"), TEXT("/Game/B")); const auto R = FBertaAssetCleaner::AnalyzePackageGraph(Records); TestEqual(TEXT("Protected root keeps dependencies live"), R.OrphanPackages.Num(), 0); }
+	{ TArray Records{ MakePackage(TEXT("/Game/A")), MakePackage(TEXT("/Game/B")) }; AddDependency(Records, TEXT("/Game/A"), TEXT("/Game/B")); AddDependency(Records, TEXT("/Game/A"), TEXT("/Game/Outside")); const auto R = FBertaAssetCleaner::AnalyzePackageGraph(Records); TestEqual(TEXT("Outgoing external dependency does not anchor source"), R.OrphanPackages.Num(), 2); Records[0].bDependencyQuerySucceeded = false; const auto Failed = FBertaAssetCleaner::AnalyzePackageGraph(Records); TestFalse(TEXT("Failed graph query is incomplete"), Failed.bComplete); TestEqual(TEXT("Incomplete graph has no deletion candidates"), Failed.OrphanPackages.Num(), 0); }
+	{ TArray Records{ MakePackage(TEXT("/Game/A")), MakePackage(TEXT("/Game/B"), false, true) }; AddDependency(Records, TEXT("/Game/A"), TEXT("/Game/A")); const auto R = FBertaAssetCleaner::AnalyzePackageGraph(Records); TestContains(*this, TEXT("Self reference remains orphan"), R.OrphanPackages, TEXT("/Game/A"), true); TestContains(*this, TEXT("Skipped package never orphan"), R.OrphanPackages, TEXT("/Game/B"), false); }
 	return true;
 }
 

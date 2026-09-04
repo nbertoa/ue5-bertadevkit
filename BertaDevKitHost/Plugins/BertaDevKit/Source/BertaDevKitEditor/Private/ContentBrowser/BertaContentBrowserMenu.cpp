@@ -55,7 +55,7 @@ namespace
 			AuditEntry.Owner = FToolMenuOwner(BertaContentBrowserOwnerName);
 			SubMenuSection.AddEntry(AuditEntry);
 
-			FToolMenuEntry CleanEntry = FToolMenuEntry::InitMenuEntry(TEXT("BertaCleanUnusedAssets"), LOCTEXT("CleanUnusedAssets", "Clean Unused Assets"), LOCTEXT("CleanUnusedAssetsTooltip", "Revalidate unused asset candidates and open Unreal's native deletion dialog. No force delete is performed."), FSlateIcon(), FUIAction(FExecuteAction::CreateLambda([Assets]() { FBertaAssetCleaner::CleanUnusedAssets(Assets); })));
+			FToolMenuEntry CleanEntry = FToolMenuEntry::InitMenuEntry(TEXT("BertaCleanUnusedAssets"), LOCTEXT("CleanUnusedAssets", "Clean Unused Assets"), LOCTEXT("CleanUnusedAssetsTooltip", "Revalidate orphan asset candidates and open Unreal's native deletion workflow. No force delete is performed."), FSlateIcon(), FUIAction(FExecuteAction::CreateLambda([Assets]() { FBertaAssetCleaner::CleanUnusedAssets(Assets); })));
 			CleanEntry.Owner = FToolMenuOwner(BertaContentBrowserOwnerName);
 			SubMenuSection.AddEntry(CleanEntry);
 		}));
