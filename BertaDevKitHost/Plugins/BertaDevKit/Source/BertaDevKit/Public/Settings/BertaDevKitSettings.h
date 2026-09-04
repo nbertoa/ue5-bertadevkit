@@ -82,7 +82,7 @@ public:
 	bool bValidateStaticMeshComponents;
 
 	/**
-	 * Opt-in project policy that flags actors placed beyond the configured world bounds threshold.
+	 * Opt-in project policy that flags actors whose spatial component bounds extend beyond the configured world bounds threshold.
 	 */
 	UPROPERTY(Config,
 		EditAnywhere,

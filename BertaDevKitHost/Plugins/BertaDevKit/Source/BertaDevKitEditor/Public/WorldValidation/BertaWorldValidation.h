@@ -35,8 +35,9 @@ private:
 	static bool ValidateStaticMeshComponents(const AActor* Actor);
 
 	/**
-	 * Flags the actor if its root component location exceeds the configured world bounds threshold
-	 * on any axis. Returns true if a violation was found.
+	 * Flags the actor if its component bounds exceed the configured world bounds threshold on any
+	 * axis, falling back to its location when no component bounds are available. Returns true if a
+	 * violation was found.
 	 */
 	static bool ValidateWorldBounds(const AActor* Actor,
 	                                float BoundsThreshold);

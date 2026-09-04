@@ -6,6 +6,7 @@
 #include "Engine/StaticMeshActor.h"
 #include "Framework/Notifications/NotificationManager.h"
 #include "Log/BertaDevKitEditorLog.h"
+#include "Math/Box.h"
 #include "Settings/BertaDevKitSettings.h"
 #include "Widgets/Notifications/SNotificationList.h"
 
@@ -208,9 +209,33 @@ bool UBertaWorldValidation::ValidateStaticMeshComponents(const AActor* Actor)
 bool UBertaWorldValidation::ValidateWorldBounds(const AActor* Actor,
                                                 const float BoundsThreshold)
 {
+	// Include non-colliding visual components, but do not recursively absorb child actors.
+	const FBox ComponentBounds = Actor->GetComponentsBoundingBox(true, false);
+	if (ComponentBounds.IsValid)
+	{
+		const bool bOutOfBounds = ComponentBounds.Min.X < -BoundsThreshold || ComponentBounds.Max.X > BoundsThreshold
+			|| ComponentBounds.Min.Y < -BoundsThreshold || ComponentBounds.Max.Y > BoundsThreshold
+			|| ComponentBounds.Min.Z < -BoundsThreshold || ComponentBounds.Max.Z > BoundsThreshold;
+
+		if (!bOutOfBounds)
+		{
+			return false;
+		}
+
+		UE_LOG(LogBertaDevKitEditor,
+		       Warning,
+		       TEXT("[BertaWorldValidation] Actor component bounds out of world bounds — Actor: '%s', Bounds Min: %s, Bounds Max: %s, Threshold: %.1f cm"),
+		       *Actor->GetActorLabel(),
+		       *ComponentBounds.Min.ToString(),
+		       *ComponentBounds.Max.ToString(),
+		       BoundsThreshold);
+
+		return true;
+	}
+
 	const FVector Location = Actor->GetActorLocation();
 
-	// Check each axis independently so that a violation on any one axis is flagged.
+	// Actors without registered primitive-component bounds retain the pivot-location fallback.
 	const bool bOutOfBounds = FMath::Abs(Location.X) > BoundsThreshold || FMath::Abs(Location.Y) > BoundsThreshold || FMath::Abs(Location.Z) > BoundsThreshold;
 
 	if (!bOutOfBounds)
@@ -220,7 +245,7 @@ bool UBertaWorldValidation::ValidateWorldBounds(const AActor* Actor,
 
 	UE_LOG(LogBertaDevKitEditor,
 	       Warning,
-	       TEXT("[BertaWorldValidation] Actor out of world bounds — Actor: '%s', Location: %s, Threshold: %.1f cm"),
+	       TEXT("[BertaWorldValidation] Actor location out of world bounds (no component bounds) — Actor: '%s', Location: %s, Threshold: %.1f cm"),
 	       *Actor->GetActorLabel(),
 	       *Location.ToString(),
 	       BoundsThreshold);
