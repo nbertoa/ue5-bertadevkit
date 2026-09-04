@@ -8,11 +8,7 @@ public class BertaDevKitHost : ModuleRules
 
 		PublicDependencyModuleNames.AddRange(new string[]
 		{
-			"Core",
-			"CoreUObject",
-			"Engine",
-			"InputCore",
-			"EnhancedInput"
+			"Core"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });
