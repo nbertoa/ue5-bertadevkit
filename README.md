@@ -2,67 +2,56 @@
 
 **Personal Unreal Engine 5.8 toolkit for R&D, prototyping, debugging, editor automation, and everyday development.**
 
-BertaDevKit collects reusable Unreal Engine utilities that remove recurring friction from development: debugging helpers, Blueprint-friendly C++ libraries, world queries, math utilities, asset tooling, and editor validation.
-
-The goal is not to become a gameplay framework. The goal is to turn repeated development work into small, maintainable tools that can be reused across projects.
-
-> **Current engine target:** Unreal Engine 5.8 only.
-
-## What Belongs in BertaDevKit
-
-A utility is a good fit when it:
-
-* removes repeated boilerplate or setup;
-* improves debugging, visualization, validation, or prototyping;
-* is reusable without knowledge of a specific game;
-* has a clear responsibility and is cheaper to maintain here than as a separate plugin.
-
-BertaDevKit intentionally avoids speculative abstractions, project-specific gameplay systems, and compatibility layers for older Unreal versions.
+BertaDevKit collects small, reusable Unreal Engine utilities for debugging, Blueprint-friendly C++ helpers, world queries, math, asset tooling, validation, and Editor workflows. It is personal, UE 5.8-only tooling—not a gameplay framework or a general-purpose commercial product.
 
 ## Features
 
 ### Runtime
 
-| System              | Purpose                                                                                                                                     |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `UBertaDebugUtils`  | Blueprint-friendly logging to screen and/or Output Log, with context, verbosity, named categories, and per-call gating.                     |
-| `UBertaDebugDraw`   | Debug spheres, lines, boxes, capsules, points, arrows, strings, coordinate systems, component-based helpers, and persistent-shape flushing. |
-| `UBertaScreenStats` | Named on-screen development stats for floats, ints, bools, strings, and vectors. Updating the same name replaces the existing value.        |
-| `UBertaMathUtils`   | Remapping, easing, angular helpers, snapping, point distribution, and lightweight prediction utilities.                                     |
-| `UBertaWorldUtils`  | Actor queries, traces, player/camera access, and delayed-action timer helpers.                                                              |
+| System | Purpose |
+| --- | --- |
+| `UBertaDebugUtils` | Blueprint-friendly screen and Output Log messages with context, verbosity, categories, and per-call gating. |
+| `UBertaDebugDraw` | Development debug drawing for common primitives, components, strings, coordinate systems, and persistent-shape flushing. |
+| `UBertaScreenStats` | Named development screen stats for common value types; updating a name replaces its displayed value. |
+| `UBertaMathUtils` | Remapping, easing, angular helpers, snapping, distributions, and lightweight prediction helpers. |
+| `UBertaWorldUtils` | Actor queries, traces, player/camera access, and delayed-action timer helpers. |
 
-Debug-facing Blueprint APIs use Unreal's `DevelopmentOnly` metadata where appropriate.
+Debug-facing Blueprint nodes use Unreal's `DevelopmentOnly` metadata where appropriate. This signals intended development use; it is not a blanket claim about all Runtime code or runtime cost.
 
 ### Editor
 
-| System                 | Purpose                                                                                                                                                      |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Asset Naming           | Audits asset naming conventions, reports violations through native UE Data Validation, and can rename them using BertaDevKit prefix rules.                    |
-| Asset Scope Resolution | Operates on selected assets first, then the active Content Browser folder, then `/Game` as fallback.                                                         |
-| Editor Tools Menu      | Provides **Run Asset Audit**, **Fix Asset Naming**, and **Run World Validation** under the Unreal Editor Tools menu.                                         |
-| World Validation       | Checks the currently open level for configurable issues such as missing Static Mesh assets, world-bound violations, light mobility, and invalid actor scale. |
+**Asset Naming** audits BertaDevKit naming conventions and can apply a reviewed rename batch. It is available from the Tools menu and Content Browser context menus for selected assets or folders. It also participates in UE Data Validation. After a successful rename, redirectors created by that batch can be offered for cleanup through Unreal's native redirector workflow.
 
-Asset Naming is available through native Content Browser right-click actions for selected assets and folders.
+**Asset Cleaner** identifies conservative unused/orphan asset candidates. Its audit is read-only; cleanup revalidates candidates and opens Unreal's native deletion workflow. It never force-deletes assets.
+
+**Project Setup** is an opt-in audit/apply utility for a curated allowlist of preferred project and per-project Editor defaults. It previews changes before applying them, configures supported optional plugins when installed, and reports missing optional plugins without failing the rest of the operation. It does not mutate projects at plugin startup.
+
+**Blueprint Audit** is a read-only, conservative static linter and code-review assistant for selected Blueprint assets or Content Browser folders. It reports static findings such as unused variables/functions, private or protected access reviews, single-function member reviews for possible localization, const and pure recommendations, and unused function inputs. Findings require manual review: static analysis cannot prove runtime/reflection use, a single-function member may intentionally retain state between calls, and making a function Pure can change evaluation timing and count. Blueprint findings appear in Output Log and in the native **BertaDevKit Blueprint Audit** Message Log; Blueprint asset tokens are clickable. Blueprint Audit has no Fix, Fix All, or graph-rewriting action.
+
+**World Validation** checks the open Editor level against enabled project policy checks, including static-mesh assignment, configured world bounds, light mobility, and actor scale. It reports violations without changing actors.
+
+### Editor access
+
+The main Editor actions are under **Tools → BertaDevKit**, including Asset Naming audit/fix, World Validation, and the Project Setup audit/apply submenu. Content Browser right-click menus provide Asset Naming, Asset Cleaner, and Blueprint Audit submenus for project assets and folders.
 
 ## Architecture
 
 BertaDevKit has a strict Runtime / Editor separation:
 
-* `BertaDevKit` — Runtime utilities that may be used by game code and Blueprints.
-* `BertaDevKitEditor` — Editor-only automation, asset tooling, menus, and validation.
+* `BertaDevKit` — Runtime utilities available to game code and Blueprints.
+* `BertaDevKitEditor` — Editor-only menus, audits, automation, asset tooling, and validation.
 
 Runtime never depends on the Editor module.
 
-The repository also contains a host project used to develop and test the plugin:
+The repository contains a host project for development and verification:
 
 ```text
 ue5-bertadevkit/
 ├── README.md
 └── BertaDevKitHost/
     ├── BertaDevKitHost.uproject
-    ├── Content/                     # Test assets and DebugMap
     └── Plugins/
-        └── BertaDevKit/             # Actual plugin root
+        └── BertaDevKit/             # Actual distributable plugin root
             ├── BertaDevKit.uplugin
             ├── Config/
             ├── Content/
@@ -72,32 +61,13 @@ ue5-bertadevkit/
                 └── BertaDevKitEditor/
 ```
 
-`BertaDevKitHost` is the development/test harness. The distributable plugin itself starts at:
-
-```text
-BertaDevKitHost/Plugins/BertaDevKit/
-```
+`BertaDevKitHost` is the development/test harness. The distributable plugin starts at `BertaDevKitHost/Plugins/BertaDevKit/`.
 
 ## Configuration
 
-Plugin settings are available under:
+Runtime plugin settings are under **Project Settings → Plugins → BertaDevKit** and persist in `Config/DefaultBertaDevKit.ini`. They configure debug systems and World Validation, including its individual checks.
 
-**Project Settings → Plugins → BertaDevKit**
-
-Current settings include master switches for:
-
-* Debug Log
-* Debug Draw
-* Screen Stats
-* World Validation
-
-World Validation also exposes configuration for its individual checks.
-
-Settings are stored in:
-
-```text
-Config/DefaultBertaDevKit.ini
-```
+Project Setup is separate: it is an explicit Editor tool that applies its own curated allowlist, rather than a collection of `UBertaDevKitSettings` options.
 
 ## Development
 
@@ -107,23 +77,15 @@ Config/DefaultBertaDevKit.ini
 * A C++ toolchain supported by Unreal Engine 5.8
 * Git LFS
 
-### Clone the Repository
+### Clone and build
 
 ```bash
 git clone https://github.com/nbertoa/ue5-bertadevkit.git
 ```
 
-Open:
+Open `BertaDevKitHost/BertaDevKitHost.uproject` for the development host.
 
-```text
-BertaDevKitHost/BertaDevKitHost.uproject
-```
-
-The host project currently enables `BlueprintAssist` and `ElectronicNodes` for local development. They are **not BertaDevKit dependencies**. Disable those entries in `BertaDevKitHost.uproject` if they are not installed on your machine.
-
-### Build
-
-The primary editor development target is:
+The primary Editor development target is:
 
 ```text
 BertaDevKitHostEditor Win64 Development
@@ -135,19 +97,9 @@ For example:
 <UE_5.8>/Engine/Build/BatchFiles/Build.bat BertaDevKitHostEditor Win64 Development -Project="<repo>/BertaDevKitHost/BertaDevKitHost.uproject" -WaitMutex
 ```
 
-### Tests
+Automation coverage includes Runtime math/world helpers and Editor Asset Naming/Asset Cleaner behavior. Run affected Automation Tests when appropriate. Editor, Blueprint, and visual changes also require manual verification in Unreal; a successful C++ build alone does not prove behavior.
 
-Development Automation Tests include the `BertaDevKit.Math.*` and `BertaDevKit.AssetNaming.*` suites.
-
-For editor and Blueprint-facing functionality, the host project contains:
-
-```text
-/Game/Maps/DebugMap
-```
-
-Use it for smoke testing logging, debug drawing, and editor tooling when those systems change.
-
-## Using BertaDevKit in Another Project
+## Using BertaDevKit in another project
 
 Copy:
 
@@ -161,48 +113,16 @@ into:
 <YourProject>/Plugins/BertaDevKit/
 ```
 
-Then:
+Then target UE 5.8, regenerate project files if needed, build, enable **BertaDevKit** in the Plugins window, and configure runtime settings under **Project Settings → Plugins → BertaDevKit**.
 
-1. make sure the project targets Unreal Engine 5.8;
-2. regenerate project files when required;
-3. build the project;
-4. enable **BertaDevKit** in the Plugins window;
-5. configure it under **Project Settings → Plugins → BertaDevKit**.
+The repository root is a development host around the plugin; cloning the repository directly as `<YourProject>/Plugins/BertaDevKit` is not the intended installation layout.
 
-The repository root is a development host around the plugin, so cloning the entire repository directly as `<YourProject>/Plugins/BertaDevKit` is not the intended installation layout.
+## Log categories
 
-## Verification Standard
-
-For meaningful plugin changes, the expected baseline is:
-
-1. build `BertaDevKitHostEditor Win64 Development`;
-2. run the affected Automation Tests;
-3. smoke test `DebugMap` when Blueprint, visual, or Editor behavior changes;
-4. review new warnings and module dependencies;
-5. inspect the complete diff before integration.
-
-A successful compile alone is not treated as proof of behavioral correctness.
-
-## Design Principles
-
-BertaDevKit favors:
-
-* small, cohesive APIs;
-* explicit ownership and lifecycle;
-* C++ for stable contracts and implementation;
-* Blueprint for composition and iteration;
-* minimal Runtime dependencies;
-* safe Editor / Runtime boundaries;
-* reusable tools backed by real development needs.
-
-It deliberately does not aim to replace specialized plugins or grow into a monolithic gameplay framework.
-
-## Log Categories
-
-| Category               | Scope                         |
-| ---------------------- | ----------------------------- |
-| `LogBertaDevKit`       | Runtime utilities and systems |
-| `LogBertaDebug`        | Debug logging and drawing     |
+| Category | Scope |
+| --- | --- |
+| `LogBertaDevKit` | Runtime utilities and systems |
+| `LogBertaDebug` | Debug logging and drawing |
 | `LogBertaDevKitEditor` | Editor tooling and validation |
 
 ## About
