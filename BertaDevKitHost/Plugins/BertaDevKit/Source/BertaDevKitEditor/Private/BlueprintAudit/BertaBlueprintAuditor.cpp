@@ -1,4 +1,5 @@
 #include "BlueprintAudit/BertaBlueprintAuditor.h"
+#include "BlueprintAudit/BertaBlueprintAuditMetrics.h"
 
 #include "Log/BertaDevKitEditorLog.h"
 
@@ -83,6 +84,14 @@ namespace
 		Message->AddToken(FUObjectToken::Create(&Blueprint, FText::FromString(Blueprint.GetName())));
 		Message->AddToken(FTextToken::Create(FText::FromString(TEXT("  "))));
 		Message->AddToken(FTextToken::Create(Text));
+		MessageLog.AddMessage(Message);
+	}
+
+	void AddMetricsSummary(FMessageLog& MessageLog, UBlueprint& Blueprint, const FString& Summary)
+	{
+		TSharedRef<FTokenizedMessage> Message = FTokenizedMessage::Create(EMessageSeverity::Info);
+		Message->AddToken(FUObjectToken::Create(&Blueprint, FText::FromString(Blueprint.GetName())));
+		Message->AddToken(FTextToken::Create(FText::FromString(TEXT("  [Metrics] ") + Summary)));
 		MessageLog.AddMessage(Message);
 	}
 
@@ -268,7 +277,7 @@ void FBertaBlueprintAuditor::Audit(const TArray<FAssetData>& Assets)
 	TArray<UBlueprint*> Consumers;
 	bool bReferenceUniverseComplete = false;
 	GatherProjectBlueprints(Consumers, bReferenceUniverseComplete);
-	int32 UnusedVariables = 0, UnusedFunctions = 0, PrivateCandidates = 0, ProtectedCandidates = 0, LocalCandidates = 0, ConstCandidates = 0, PureCandidates = 0, UnusedInputs = 0, Skipped = 0;
+	int32 UnusedVariables = 0, UnusedFunctions = 0, PrivateCandidates = 0, ProtectedCandidates = 0, LocalCandidates = 0, ConstCandidates = 0, PureCandidates = 0, UnusedInputs = 0, MaintainabilityReviews = 0, Skipped = 0;
 	FMessageLog MessageLog(BlueprintAuditLogName);
 	MessageLog.NewPage(FText::Format(NSLOCTEXT("BertaDevKit", "BlueprintAuditPage", "Blueprint Audit {0}"), FText::AsDateTime(FDateTime::Now())));
 	UE_LOG(LogBertaDevKitEditor, Log, TEXT("[BlueprintAudit] Started: %d target Blueprint(s), %d reference consumer(s), universe complete: %s."), Targets.Num(), Consumers.Num(), bReferenceUniverseComplete ? TEXT("true") : TEXT("false"));
@@ -280,6 +289,39 @@ void FBertaBlueprintAuditor::Audit(const TArray<FAssetData>& Assets)
 			++Skipped;
 			continue;
 		}
+		TArray<FBertaBlueprintGraphMetrics> GraphMetrics;
+		BertaBlueprintAuditMetrics::Collect(*Target, GraphMetrics);
+		int32 TotalMeaningfulNodes = 0;
+		for (const FBertaBlueprintGraphMetrics& Metrics : GraphMetrics)
+		{
+			TotalMeaningfulNodes += Metrics.MeaningfulNodeCount;
+			TArray<EBertaBlueprintMaintainabilityReview> Reviews;
+			BertaBlueprintAuditMetrics::EvaluateReviews(Metrics, Reviews);
+			for (const EBertaBlueprintMaintainabilityReview Review : Reviews)
+			{
+				++MaintainabilityReviews;
+				const FString GraphName = Metrics.Graph ? Metrics.Graph->GetName() : TEXT("Unknown");
+				const bool bDecisionReview = Review == EBertaBlueprintMaintainabilityReview::HighDecisionCount;
+				const int32 ActualValue = bDecisionReview ? Metrics.ConditionalDecisionCount : Metrics.MeaningfulNodeCount;
+				const int32 Threshold = bDecisionReview ? 12 : BertaBlueprintAuditMetrics::GetSizeThreshold(Metrics.Kind);
+				UE_LOG(LogBertaDevKitEditor, Log, TEXT("  [Review] %s \"%s\" -> %s (%d; review threshold is %d)."), BertaBlueprintAuditMetrics::GetGraphKindLabel(Metrics.Kind), *GraphName, BertaBlueprintAuditMetrics::GetReviewLabel(Review), ActualValue, Threshold);
+				AddFinding(MessageLog, *Target, FText::Format(NSLOCTEXT("BertaDevKit", "BlueprintMaintainabilityReview", "[Review] {0} \"{1}\" -> {2}. Actual value: {3}; review threshold is {4}. Consider whether part of this logic has a clearer reusable responsibility."), FText::FromString(BertaBlueprintAuditMetrics::GetGraphKindLabel(Metrics.Kind)), FText::FromString(GraphName), FText::FromString(BertaBlueprintAuditMetrics::GetReviewLabel(Review)), FText::AsNumber(ActualValue), FText::AsNumber(Threshold)));
+			}
+		}
+		GraphMetrics.Sort([](const FBertaBlueprintGraphMetrics& Left, const FBertaBlueprintGraphMetrics& Right)
+		{
+			return Left.MeaningfulNodeCount != Right.MeaningfulNodeCount
+				? Left.MeaningfulNodeCount > Right.MeaningfulNodeCount
+				: Left.Graph->GetName() < Right.Graph->GetName();
+		});
+		FString MetricsSummary = FString::Printf(TEXT("Graphs=%d, meaningful nodes=%d. Largest:"), GraphMetrics.Num(), TotalMeaningfulNodes);
+		for (int32 Index = 0; Index < FMath::Min(3, GraphMetrics.Num()); ++Index)
+		{
+			const FBertaBlueprintGraphMetrics& Metrics = GraphMetrics[Index];
+			MetricsSummary += FString::Printf(TEXT("%s%s (%s) - %d nodes / %d decisions"), Index == 0 ? TEXT(" ") : TEXT("; "), *Metrics.Graph->GetName(), BertaBlueprintAuditMetrics::GetGraphKindLabel(Metrics.Kind), Metrics.MeaningfulNodeCount, Metrics.ConditionalDecisionCount);
+		}
+		UE_LOG(LogBertaDevKitEditor, Log, TEXT("[BlueprintAudit] %s [Metrics] %s"), *Target->GetPathName(), *MetricsSummary);
+		AddMetricsSummary(MessageLog, *Target, MetricsSummary);
 		TMap<FProperty*, FMemberUse> Variables;
 		TMap<UFunction*, FMemberUse> Functions;
 		for (const FBPVariableDescription& Variable : Target->NewVariables)
@@ -456,8 +498,8 @@ void FBertaBlueprintAuditor::Audit(const TArray<FAssetData>& Assets)
 			}
 		}
 	}
-	const int32 Findings = UnusedVariables + UnusedFunctions + PrivateCandidates + ProtectedCandidates + LocalCandidates + ConstCandidates + PureCandidates + UnusedInputs;
-	UE_LOG(LogBertaDevKitEditor, Log, TEXT("[BlueprintAudit] Complete: targets=%d consumers=%d unused variables=%d unused functions=%d private candidates=%d protected candidates=%d local variable candidates=%d const candidates=%d pure advisories=%d unused function inputs=%d skipped=%d."), Targets.Num(), Consumers.Num(), UnusedVariables, UnusedFunctions, PrivateCandidates, ProtectedCandidates, LocalCandidates, ConstCandidates, PureCandidates, UnusedInputs, Skipped);
+	const int32 Findings = UnusedVariables + UnusedFunctions + PrivateCandidates + ProtectedCandidates + LocalCandidates + ConstCandidates + PureCandidates + UnusedInputs + MaintainabilityReviews;
+	UE_LOG(LogBertaDevKitEditor, Log, TEXT("[BlueprintAudit] Complete: targets=%d consumers=%d unused variables=%d unused functions=%d private candidates=%d protected candidates=%d local variable candidates=%d const candidates=%d pure advisories=%d unused function inputs=%d maintainability reviews=%d skipped=%d."), Targets.Num(), Consumers.Num(), UnusedVariables, UnusedFunctions, PrivateCandidates, ProtectedCandidates, LocalCandidates, ConstCandidates, PureCandidates, UnusedInputs, MaintainabilityReviews, Skipped);
 	MessageLog.Flush();
 	Notify(FText::Format(NSLOCTEXT("BertaDevKit", "BlueprintAuditComplete", "Blueprint Audit: {0} target(s), {1} finding(s). See Message Log / Output Log."), FText::AsNumber(Targets.Num()), FText::AsNumber(Findings)), SNotificationItem::CS_Success);
 }
