@@ -139,6 +139,8 @@ namespace
 		UE_LOG(LogBertaDevKitEditor, Log, TEXT("[Plugin Toolbox] Reminder-only tools - not audited or auto-enabled:"));
 		UE_LOG(LogBertaDevKitEditor, Log, TEXT("[Plugin Toolbox] LE Extended Standard Library - general Blueprint utilities."));
 		UE_LOG(LogBertaDevKitEditor, Log, TEXT("[Plugin Toolbox] [Owned] HTTP & JSON Blueprint Utility - HTTP, JSON, WebSockets, and external APIs."));
+		UE_LOG(LogBertaDevKitEditor, Log, TEXT("[Plugin Toolbox] Graph Printer - export/copy Unreal graphs for documentation and review."));
+		UE_LOG(LogBertaDevKitEditor, Log, TEXT("[Plugin Toolbox] State Tree Tools - reusable StateTree actions/integrations; check before writing custom tasks."));
 		UE_LOG(LogBertaDevKitEditor, Log, TEXT("[Plugin Toolbox] GAS Companion - GAS workflows."));
 		UE_LOG(LogBertaDevKitEditor, Log, TEXT("[Plugin Toolbox] Combo Graph - combo/action systems."));
 		UE_LOG(LogBertaDevKitEditor, Log, TEXT("[Plugin Toolbox] PCG Extended Toolkit - advanced PCG workflows."));
