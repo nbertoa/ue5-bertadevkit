@@ -325,6 +325,45 @@ Comments should explain intent, constraints, or non-obvious behavior rather than
 Keep README-level documentation durable. Avoid duplicating counts, private implementation details, or facts likely to
 change frequently.
 
+## Unreal Editor Execution Policy
+
+Do not launch any Unreal Editor process unless Nicolás explicitly authorizes it for the current task.
+
+This includes:
+
+* `UnrealEditor.exe`;
+* `UnrealEditor-Cmd.exe`;
+* commandlets launched through an Unreal Editor executable;
+* PIE or Standalone sessions;
+* Unreal Automation Tests that require starting Unreal;
+* interactive Editor, Content Browser, Slate, UI, or `DebugMap` smoke tests.
+
+By default, Codex may:
+
+* inspect and modify source files;
+* inspect Unreal Engine source;
+* run Git commands authorized by the task;
+* perform static analysis;
+* compile through UBT / `Build.bat`;
+* review compiler warnings, IWYU, dependencies, and the final diff;
+* add or update Automation Tests without executing them.
+
+Generic instructions such as `run tests`, `run Automation Tests`, `verify`, `smoke test`, or `build/test` do not
+authorize launching Unreal.
+
+Authorization to modify, build, test, commit, push, or integrate does not authorize launching Unreal.
+
+Only an explicit instruction from Nicolás equivalent to `launch Unreal and test it` authorizes starting an Unreal
+process.
+
+When behavioral verification requires Unreal:
+
+1. do not launch Unreal automatically;
+2. complete all available static and compile-time verification;
+3. mark the Unreal verification as pending;
+4. provide Nicolás with exact manual test steps.
+5. do not claim the behavior was verified until evidence is available.
+
 ## Verification
 
 Match verification effort to risk.
@@ -346,15 +385,22 @@ documented commands or behavior.
 
 Baseline when relevant:
 
-1. Build `BertaDevKitHostEditor Win64 Development` with UE 5.8.
-2. Run affected Unreal Automation Tests.
+1. Build `BertaDevKitHostEditor Win64 Development` with UE 5.8 through UBT.
+2. Add or update affected Unreal Automation Tests when appropriate, but do not launch Unreal to execute them unless
+   Nicolás explicitly authorizes it.
 3. Review new warnings.
 4. Review headers, IWYU, and module dependencies.
 5. Inspect the complete final diff.
 
 ### Blueprint, Editor tooling, or visual behavior
 
-When relevant, additionally smoke test:
+Do not automatically launch Unreal Editor for smoke testing. When Editor, Blueprint, Content Browser, Slate, PIE, or
+visual verification is required:
+
+1. provide Nicolás with exact manual verification steps;
+2. mark that behavioral verification as pending until Nicolás reports the result.
+
+`/Game/Maps/DebugMap` may be used by Nicolás for manual smoke testing:
 
 ```text
 /Game/Maps/DebugMap
@@ -396,34 +442,44 @@ Review the full diff, including error paths and partial states, before consideri
 
 ## Git Policy
 
-Treat these as separate stages:
+Use this normal implementation flow:
 
 ```text
 discuss
 → investigate
 → modify
-→ build/test
+→ build
+→ review
 → commit
 → push
 ```
 
-Authorization for one stage does not authorize the next.
+For an explicitly authorized implementation task, Codex should by default commit and push directly to `main` when the
+work is complete, provided that:
 
-Unless explicitly requested:
+* the permitted build verification passed;
+* the complete diff review found no defects that make integration unsafe;
+* no unrelated user changes are included;
+* repository state allows a clean integration.
 
-* do not create branches;
-* do not commit;
-* do not push;
-* do not open pull requests;
-* do not reset or discard user work;
-* do not modify unrelated files.
+Do not create branches or pull requests unless Nicolás explicitly requests them.
 
-After an implementation:
+A discussion, investigation, diagnosis, or review does not authorize modification, commit, or push.
+
+Do not reset, rebase, discard, overwrite, or otherwise destroy Nicolás's work.
+
+Pending manual Unreal verification does not automatically prevent commit/push. Complete all verification allowed by the
+Unreal execution policy, report the manual verification as pending, and judge integration according to the actual risk
+of the change.
+
+After an integrated implementation:
 
 * summarize the final diff;
-* report verification performed;
-* report remaining risks or unverified behavior;
-* suggest a Conventional Commit message in English.
+* report build and verification performed;
+* report pending manual verification;
+* report the Conventional Commit used;
+* report the commit SHA;
+* confirm whether the push to `main` succeeded.
 
 ## Confidentiality and Portability
 
