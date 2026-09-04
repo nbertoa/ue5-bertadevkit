@@ -56,13 +56,25 @@ namespace
 		return Path == TEXT("/Game") || Path.StartsWith(TEXT("/Game/"));
 	}
 
-	bool IsSpecialVariable(const FBPVariableDescription& Variable)
+	bool HasNonGraphVariableSemantics(const FBPVariableDescription& Variable)
 	{
-		const uint64 UnsafeFlags = CPF_Edit | CPF_Net | CPF_RepNotify | CPF_ExposeOnSpawn;
+		const uint64 UnsafeFlags = CPF_Edit | CPF_Net | CPF_RepNotify | CPF_ExposeOnSpawn | CPF_Config | CPF_SaveGame | CPF_Interp;
 		return (Variable.PropertyFlags & UnsafeFlags) != 0
 			|| Variable.RepNotifyFunc != NAME_None
 			|| Variable.HasMetaData(TEXT("ExposeOnSpawn"))
-			|| Variable.HasMetaData(TEXT("BindWidget"));
+			|| Variable.HasMetaData(TEXT("BindWidget"))
+			|| Variable.HasMetaData(TEXT("FieldNotify"));
+	}
+
+	bool IsUnsafePrivateVariableCandidate(const FBPVariableDescription& Variable, const FProperty& Property)
+	{
+		const uint64 AccessUnsafeFlags = CPF_Edit | CPF_Net | CPF_RepNotify | CPF_ExposeOnSpawn;
+		return (Variable.PropertyFlags & AccessUnsafeFlags) != 0
+			|| Variable.RepNotifyFunc != NAME_None
+			|| Variable.HasMetaData(TEXT("ExposeOnSpawn"))
+			|| Variable.HasMetaData(TEXT("BindWidget"))
+			|| Variable.HasMetaData(TEXT("BlueprintPrivate"))
+			|| Property.HasMetaData(TEXT("BlueprintPrivate"));
 	}
 
 	void AddFinding(FMessageLog& MessageLog, UBlueprint& Blueprint, const FText& Text, EMessageSeverity::Type Severity = EMessageSeverity::Info)
@@ -367,25 +379,26 @@ void FBertaBlueprintAuditor::Audit(const TArray<FAssetData>& Assets)
 		{
 			FProperty* Property = FindFProperty<FProperty>(Target->SkeletonGeneratedClass, Variable.VarName);
 			const FMemberUse* Use = Variables.Find(Property);
-			if (!Use || IsSpecialVariable(Variable)) { continue; }
-			if (bReferenceUniverseComplete && Use->InternalReads == 0 && Use->InternalWrites == 0 && Use->ExternalUses == 0)
+			if (!Use) { continue; }
+			const bool bHasNonGraphSemantics = HasNonGraphVariableSemantics(Variable);
+			if (!bHasNonGraphSemantics && bReferenceUniverseComplete && Use->InternalReads == 0 && Use->InternalWrites == 0 && Use->ExternalUses == 0)
 			{
 				++UnusedVariables;
 				UE_LOG(LogBertaDevKitEditor, Log, TEXT("  [Info] Variable \"%s\" -> Unused Variable (reads: 0, writes: 0, external static Blueprint references: 0)."), *Variable.VarName.ToString());
 				AddFinding(MessageLog, *Target, FText::Format(NSLOCTEXT("BertaDevKit", "UnusedVariable", "[Info] Variable \"{0}\" -> Unused Variable (reads: 0, writes: 0)."), FText::FromName(Variable.VarName)));
 			}
-			else if (bReferenceUniverseComplete && Use->InternalGraphs.Num() == 1 && Use->ExternalUses == 0)
+			else if (!bHasNonGraphSemantics && bReferenceUniverseComplete && Use->InternalGraphs.Num() == 1 && Use->ExternalUses == 0)
 			{
 				const UEdGraph* OnlyGraph = *Use->InternalGraphs.CreateConstIterator();
 				UFunction* OwnerFunction = OnlyGraph ? Target->SkeletonGeneratedClass->FindFunctionByName(OnlyGraph->GetFName()) : nullptr;
 				if (OwnerFunction && IsDeclaredFunction(*Target, *OnlyGraph, OwnerFunction))
 				{
 					++LocalCandidates;
-					UE_LOG(LogBertaDevKitEditor, Log, TEXT("  [Recommendation] Variable \"%s\" -> Candidate Local Variable (used only inside function \"%s\"; external static Blueprint references: 0)."), *Variable.VarName.ToString(), *OwnerFunction->GetName());
-					AddFinding(MessageLog, *Target, FText::Format(NSLOCTEXT("BertaDevKit", "CandidateLocal", "[Recommendation] Variable \"{0}\" -> Candidate Local Variable. Used only inside function \"{1}\". External static Blueprint references: 0."), FText::FromName(Variable.VarName), FText::FromString(OwnerFunction->GetName())));
+					UE_LOG(LogBertaDevKitEditor, Log, TEXT("  [Recommendation] Variable \"%s\" -> Review for Local Variable (single-function member used only inside \"%s\"; it may intentionally retain state between calls; external static Blueprint references: 0)."), *Variable.VarName.ToString(), *OwnerFunction->GetName());
+					AddFinding(MessageLog, *Target, FText::Format(NSLOCTEXT("BertaDevKit", "CandidateLocal", "[Recommendation] Variable \"{0}\" -> Review for Local Variable. Used only inside function \"{1}\"; it may intentionally retain state between calls. External static Blueprint references: 0."), FText::FromName(Variable.VarName), FText::FromString(OwnerFunction->GetName())));
 				}
 			}
-			if (bReferenceUniverseComplete && !Variable.HasMetaData(TEXT("BlueprintPrivate")) && !Property->HasMetaData(TEXT("BlueprintPrivate")) && Use->ExternalUses == 0)
+			if (bReferenceUniverseComplete && !IsUnsafePrivateVariableCandidate(Variable, *Property) && Use->ExternalUses == 0)
 			{
 				++PrivateCandidates;
 				UE_LOG(LogBertaDevKitEditor, Log, TEXT("  [Recommendation] Variable \"%s\" -> Candidate Private (internal usages: %d, 0 external static Blueprint references found)."), *Variable.VarName.ToString(), Use->InternalReads + Use->InternalWrites);
@@ -410,7 +423,7 @@ void FBertaBlueprintAuditor::Audit(const TArray<FAssetData>& Assets)
 				UE_LOG(LogBertaDevKitEditor, Log, TEXT("  [Recommendation] Function \"%s\" -> Candidate Private (0 external static Blueprint calls found)."), *Function->GetName());
 				AddFinding(MessageLog, *Target, FText::Format(NSLOCTEXT("BertaDevKit", "CandidatePrivateFunction", "[Recommendation] Function \"{0}\" -> Candidate Private. 0 external static Blueprint calls found."), FText::FromString(Function->GetName())));
 			}
-			else if (bReferenceUniverseComplete && !Function->HasAnyFunctionFlags(FUNC_Private) && Use->ExternalDescendantUses > 0 && Use->ExternalNonDescendantUses == 0)
+			else if (bReferenceUniverseComplete && !Function->HasAnyFunctionFlags(FUNC_Private | FUNC_Protected) && Use->ExternalDescendantUses > 0 && Use->ExternalNonDescendantUses == 0)
 			{
 				++ProtectedCandidates;
 				UE_LOG(LogBertaDevKitEditor, Log, TEXT("  [Recommendation] Function \"%s\" -> Candidate Protected (all %d external static Blueprint callers are descendants)."), *Function->GetName(), Use->ExternalDescendantUses);
