@@ -2,6 +2,7 @@
 
 #include "Features/IModularFeatures.h"
 #include "GenericPlatform/GenericInputDeviceMap.h"
+#include "GenericPlatform/IInputInterface.h"
 #include "GenericPlatform/GenericPlatformInputDeviceMapper.h"
 #include "GenericPlatform/InputDeviceRegistry.h"
 #include "HAL/PlatformProcess.h"
@@ -23,6 +24,7 @@ namespace
 	constexpr int32 LeftStickDeadZone = 7849;
 	constexpr int32 RightStickDeadZone = 8689;
 	constexpr float TriggerThreshold = 30.0f / 255.0f;
+	constexpr Uint32 RumbleDurationMilliseconds = 1000;
 
 	const FGamepadKeyNames::Type GamepadButtonKeys[NumGamepadButtons] =
 	{
@@ -62,6 +64,11 @@ namespace
 		return static_cast<float>(AxisValue) / 32767.0f;
 	}
 
+	Uint16 ToRumbleMagnitude(const float Value)
+	{
+		return static_cast<Uint16>(FMath::RoundToInt(FMath::Clamp(Value, 0.0f, 1.0f) * 65535.0f));
+	}
+
 	FString ToUnrealString(const char* String)
 	{
 		return String ? UTF8_TO_TCHAR(String) : FString();
@@ -90,6 +97,9 @@ namespace
 		Sint16 RightYAnalog = 0;
 		Sint16 LeftTriggerAnalog = 0;
 		Sint16 RightTriggerAnalog = 0;
+		FForceFeedbackValues ForceFeedback;
+		bool bSupportsRumble = false;
+		bool bRumbleFailureLogged = false;
 	};
 }
 
@@ -209,11 +219,113 @@ class FBertaDualSenseInputDevice final : public IInputDevice
 		}
 
 		virtual bool Exec(UWorld* InWorld, const TCHAR* Cmd, FOutputDevice& Ar) override { return false; }
-		virtual void SetChannelValue(int32 ControllerId, FForceFeedbackChannelType ChannelType, float Value) override {}
-		virtual void SetChannelValues(int32 ControllerId, const FForceFeedbackValues& Values) override {}
-		virtual bool SupportsForceFeedback(int32 ControllerId) override { return false; }
+		virtual bool IsGamepadAttached() const override { return !ConnectedDevices.IsEmpty(); }
+		virtual void SetChannelValue(int32 ControllerId, FForceFeedbackChannelType ChannelType, float Value) override
+		{
+			const FPlatformUserId PlatformUserId = GetPlatformUserForControllerId(ControllerId);
+			if (!PlatformUserId.IsValid())
+			{
+				return;
+			}
+
+			for (TPair<SDL_JoystickID, FConnectedDualSense>& Pair : ConnectedDevices)
+			{
+				FConnectedDualSense& ConnectedDevice = Pair.Value;
+				if (ConnectedDevice.PlatformUserId == PlatformUserId && ConnectedDevice.bSupportsRumble)
+				{
+					SetForceFeedbackChannel(ConnectedDevice.ForceFeedback, ChannelType, Value);
+					ApplyRumble(ConnectedDevice);
+				}
+			}
+		}
+
+		virtual void SetChannelValues(int32 ControllerId, const FForceFeedbackValues& Values) override
+		{
+			const FPlatformUserId PlatformUserId = GetPlatformUserForControllerId(ControllerId);
+			if (!PlatformUserId.IsValid())
+			{
+				return;
+			}
+
+			for (TPair<SDL_JoystickID, FConnectedDualSense>& Pair : ConnectedDevices)
+			{
+				FConnectedDualSense& ConnectedDevice = Pair.Value;
+				if (ConnectedDevice.PlatformUserId == PlatformUserId && ConnectedDevice.bSupportsRumble)
+				{
+					ConnectedDevice.ForceFeedback.LeftLarge = FMath::Clamp(Values.LeftLarge, 0.0f, 1.0f);
+					ConnectedDevice.ForceFeedback.LeftSmall = FMath::Clamp(Values.LeftSmall, 0.0f, 1.0f);
+					ConnectedDevice.ForceFeedback.RightLarge = FMath::Clamp(Values.RightLarge, 0.0f, 1.0f);
+					ConnectedDevice.ForceFeedback.RightSmall = FMath::Clamp(Values.RightSmall, 0.0f, 1.0f);
+					ApplyRumble(ConnectedDevice);
+				}
+			}
+		}
+
+		virtual bool SupportsForceFeedback(int32 ControllerId) override
+		{
+			const FPlatformUserId PlatformUserId = GetPlatformUserForControllerId(ControllerId);
+			if (!PlatformUserId.IsValid())
+			{
+				return false;
+			}
+
+			for (const TPair<SDL_JoystickID, FConnectedDualSense>& Pair : ConnectedDevices)
+			{
+				if (Pair.Value.PlatformUserId == PlatformUserId && Pair.Value.bSupportsRumble)
+				{
+					return true;
+				}
+			}
+
+			return false;
+		}
 
 	private:
+		FPlatformUserId GetPlatformUserForControllerId(const int32 ControllerId) const
+		{
+			IPlatformInputDeviceMapper& DeviceMapper = IPlatformInputDeviceMapper::Get();
+			FPlatformUserId PlatformUserId = PLATFORMUSERID_NONE;
+			FInputDeviceId InputDeviceId = INPUTDEVICEID_NONE;
+			return DeviceMapper.RemapControllerIdToPlatformUserAndDevice(ControllerId, PlatformUserId, InputDeviceId) ? PlatformUserId : PLATFORMUSERID_NONE;
+		}
+
+		static void SetForceFeedbackChannel(FForceFeedbackValues& ForceFeedback, const FForceFeedbackChannelType ChannelType, const float Value)
+		{
+			const float ClampedValue = FMath::Clamp(Value, 0.0f, 1.0f);
+			switch (ChannelType)
+			{
+			case FForceFeedbackChannelType::LEFT_LARGE:
+				ForceFeedback.LeftLarge = ClampedValue;
+				break;
+			case FForceFeedbackChannelType::LEFT_SMALL:
+				ForceFeedback.LeftSmall = ClampedValue;
+				break;
+			case FForceFeedbackChannelType::RIGHT_LARGE:
+				ForceFeedback.RightLarge = ClampedValue;
+				break;
+			case FForceFeedbackChannelType::RIGHT_SMALL:
+				ForceFeedback.RightSmall = ClampedValue;
+				break;
+			}
+		}
+
+		void ApplyRumble(FConnectedDualSense& ConnectedDevice)
+		{
+			const Uint16 LowFrequencyMagnitude = ToRumbleMagnitude(FMath::Max(ConnectedDevice.ForceFeedback.LeftLarge, ConnectedDevice.ForceFeedback.RightLarge));
+			const Uint16 HighFrequencyMagnitude = ToRumbleMagnitude(FMath::Max(ConnectedDevice.ForceFeedback.LeftSmall, ConnectedDevice.ForceFeedback.RightSmall));
+			if (!SDL_RumbleGamepad(ConnectedDevice.Gamepad, LowFrequencyMagnitude, HighFrequencyMagnitude, RumbleDurationMilliseconds))
+			{
+				if (!ConnectedDevice.bRumbleFailureLogged)
+				{
+					ConnectedDevice.bRumbleFailureLogged = true;
+					UE_LOG(LogBertaDualSense, Warning, TEXT("SDL_RumbleGamepad failed for InputDeviceId %d: %s"), ConnectedDevice.InputDeviceId.GetId(), UTF8_TO_TCHAR(SDL_GetError()));
+				}
+			}
+			else
+			{
+				ConnectedDevice.bRumbleFailureLogged = false;
+			}
+		}
 		void SendControllerEvents(FConnectedDualSense& ConnectedDevice)
 		{
 			bool CurrentButtonStates[NumGamepadButtons] = { false };
@@ -334,21 +446,31 @@ class FBertaDualSenseInputDevice final : public IInputDevice
 			ConnectedDevice.Gamepad = Gamepad;
 			ConnectedDevice.InputDeviceId = InputDeviceId;
 			ConnectedDevice.PlatformUserId = PlatformUserId;
+			const SDL_PropertiesID GamepadProperties = SDL_GetGamepadProperties(Gamepad);
+			ConnectedDevice.bSupportsRumble = SDL_GetBooleanProperty(GamepadProperties, SDL_PROP_GAMEPAD_CAP_RUMBLE_BOOLEAN, false);
 			UE_LOG(LogBertaDualSense, Log, TEXT("Connected %s (SDL instance %u, VID=%04X PID=%04X, Serial='%s', Path='%s') as InputDeviceId %d for PlatformUserId %d; SDL_OpenGamepad took %.3f ms."), *ToUnrealString(SDL_GetGamepadName(Gamepad)), InstanceId, VendorId, ProductId, *Serial, *ToUnrealString(SDL_GetGamepadPath(Gamepad)), InputDeviceId.GetId(), PlatformUserId.GetInternalId(), OpenDurationMilliseconds);
 		}
 
 		void DisconnectDevice(const SDL_JoystickID InstanceId, FConnectedDualSense& ConnectedDevice)
 		{
 			FlushInputState(ConnectedDevice);
+			StopRumble(ConnectedDevice);
 
 			IPlatformInputDeviceMapper& DeviceMapper = IPlatformInputDeviceMapper::Get();
-			UE_LOG(LogBertaDualSense, Log, TEXT("Disconnecting DualSense SDL instance %u from InputDeviceId %d: mapping device as disconnected."), InstanceId, ConnectedDevice.InputDeviceId.GetId());
 			DeviceMapper.Internal_MapInputDeviceToUser(ConnectedDevice.InputDeviceId, DeviceMapper.GetUserForUnpairedInputDevices(), EInputDeviceConnectionState::Disconnected);
-			UE_LOG(LogBertaDualSense, Log, TEXT("Disconnected DualSense SDL instance %u from InputDeviceId %d in the input-device mapper."), InstanceId, ConnectedDevice.InputDeviceId.GetId());
-			UE_LOG(LogBertaDualSense, Log, TEXT("Closing DualSense SDL gamepad for instance %u."), InstanceId);
 			SDL_CloseGamepad(ConnectedDevice.Gamepad);
-			UE_LOG(LogBertaDualSense, Log, TEXT("Closed DualSense SDL gamepad for instance %u."), InstanceId);
 			UE_LOG(LogBertaDualSense, Log, TEXT("Disconnected DualSense SDL instance %u from InputDeviceId %d."), InstanceId, ConnectedDevice.InputDeviceId.GetId());
+		}
+
+		void StopRumble(FConnectedDualSense& ConnectedDevice)
+		{
+			const bool bRumbleWasActive = ConnectedDevice.ForceFeedback.LeftLarge != 0.0f || ConnectedDevice.ForceFeedback.LeftSmall != 0.0f || ConnectedDevice.ForceFeedback.RightLarge != 0.0f || ConnectedDevice.ForceFeedback.RightSmall != 0.0f;
+			ConnectedDevice.ForceFeedback = FForceFeedbackValues();
+			if (ConnectedDevice.bSupportsRumble && bRumbleWasActive)
+			{
+				ApplyRumble(ConnectedDevice);
+			}
+			ConnectedDevice.bRumbleFailureLogged = false;
 		}
 
 		void FlushInputState(FConnectedDualSense& ConnectedDevice)
