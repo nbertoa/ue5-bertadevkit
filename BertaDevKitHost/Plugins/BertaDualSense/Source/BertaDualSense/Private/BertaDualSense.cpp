@@ -561,13 +561,17 @@ class FBertaDualSenseInputDevice final : public IInputDevice
 			ConnectedDevice.InputDeviceId = InputDeviceId;
 			ConnectedDevice.ProductId = ProductId;
 			ConnectedDevice.PlatformUserId = PlatformUserId;
+			ConnectedDevice.bAccelerometerEnabled = SDL_GamepadHasSensor(Gamepad, SDL_SENSOR_ACCEL) && SDL_SetGamepadSensorEnabled(Gamepad, SDL_SENSOR_ACCEL, true);
+			ConnectedDevice.bGyroscopeEnabled = SDL_GamepadHasSensor(Gamepad, SDL_SENSOR_GYRO) && SDL_SetGamepadSensorEnabled(Gamepad, SDL_SENSOR_GYRO, true);
+
 			const SDL_PropertiesID GamepadProperties = SDL_GetGamepadProperties(Gamepad);
 			ConnectedDevice.bSupportsRumble = SDL_GetBooleanProperty(GamepadProperties, SDL_PROP_GAMEPAD_CAP_RUMBLE_BOOLEAN, false);
 			ConnectedDevice.bSupportsRgbLed = SDL_GetBooleanProperty(GamepadProperties, SDL_PROP_GAMEPAD_CAP_RGB_LED_BOOLEAN, false);
 			ConnectedDevice.bSupportsPlayerLed = SDL_GetBooleanProperty(GamepadProperties, SDL_PROP_GAMEPAD_CAP_PLAYER_LED_BOOLEAN, false);
-			ConnectedDevice.bAccelerometerEnabled = SDL_GamepadHasSensor(Gamepad, SDL_SENSOR_ACCEL) && SDL_SetGamepadSensorEnabled(Gamepad, SDL_SENSOR_ACCEL, true);
-			ConnectedDevice.bGyroscopeEnabled = SDL_GamepadHasSensor(Gamepad, SDL_SENSOR_GYRO) && SDL_SetGamepadSensorEnabled(Gamepad, SDL_SENSOR_GYRO, true);
-			if (ConnectedDevice.bSupportsPlayerLed) SDL_SetGamepadPlayerIndex(Gamepad, DeviceMapper.GetUserIndexForPlatformUser(PlatformUserId));
+			if (ConnectedDevice.bSupportsPlayerLed && !SDL_SetGamepadPlayerIndex(Gamepad, DeviceMapper.GetUserIndexForPlatformUser(PlatformUserId)))
+			{
+				UE_LOG(LogBertaDualSense, Warning, TEXT("SDL_SetGamepadPlayerIndex failed for InputDeviceId %d: %s"), InputDeviceId.GetId(), UTF8_TO_TCHAR(SDL_GetError()));
+			}
 			ConnectedDevice.bHasTouchpad = SDL_GetNumGamepadTouchpads(Gamepad) > 0;
 			if (ConnectedDevice.bHasTouchpad)
 			{
