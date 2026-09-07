@@ -11,6 +11,7 @@ public:
 	virtual bool SupportsDynamicReloading() override { return false; }
 
 private:
+	void* SDL3DllHandle = nullptr;
 	bool bSDLGamepadSubsystemInitialized = false;
 	bool bInputDeviceModularFeatureRegistered = false;
 };
