@@ -56,13 +56,35 @@ namespace
 
 			int GamepadCount = 0;
 			SDL_JoystickID* GamepadIds = SDL_GetGamepads(&GamepadCount);
+			if (!GamepadIds)
+			{
+				if (!bGamepadEnumerationFailureLogged)
+				{
+					bGamepadEnumerationFailureLogged = true;
+					UE_LOG(LogBertaDualSense, Error, TEXT("SDL_GetGamepads failed; preserving current DualSense connections: %s"), UTF8_TO_TCHAR(SDL_GetError()));
+				}
+				return;
+			}
+
+			bGamepadEnumerationFailureLogged = false;
 			TSet<SDL_JoystickID> PresentGamepads;
 
-			for (int Index = 0; GamepadIds && Index < GamepadCount; ++Index)
+			for (int Index = 0; Index < GamepadCount; ++Index)
 			{
-				const SDL_JoystickID InstanceId = GamepadIds[Index];
-				PresentGamepads.Add(InstanceId);
+				PresentGamepads.Add(GamepadIds[Index]);
+			}
 
+			for (auto It = ConnectedDevices.CreateIterator(); It; ++It)
+			{
+				if (!PresentGamepads.Contains(It.Key()))
+				{
+					DisconnectDevice(It.Key(), It.Value());
+					It.RemoveCurrent();
+				}
+			}
+
+			for (const SDL_JoystickID InstanceId : PresentGamepads)
+			{
 				if (ConnectedDevices.Contains(InstanceId))
 				{
 					continue;
@@ -87,15 +109,6 @@ namespace
 			}
 
 			SDL_free(GamepadIds);
-
-			for (auto It = ConnectedDevices.CreateIterator(); It; ++It)
-			{
-				if (!PresentGamepads.Contains(It.Key()))
-				{
-					DisconnectDevice(It.Key(), It.Value());
-					It.RemoveCurrent();
-				}
-			}
 
 			RemoveNoLongerPresent(OpenFailures, PresentGamepads);
 			RemoveNoLongerPresent(UnavailableIdentityLogged, PresentGamepads);
@@ -193,6 +206,7 @@ namespace
 		TMap<SDL_JoystickID, FConnectedDualSense> ConnectedDevices;
 		TSet<SDL_JoystickID> OpenFailures;
 		TSet<SDL_JoystickID> UnavailableIdentityLogged;
+		bool bGamepadEnumerationFailureLogged = false;
 	};
 }
 
