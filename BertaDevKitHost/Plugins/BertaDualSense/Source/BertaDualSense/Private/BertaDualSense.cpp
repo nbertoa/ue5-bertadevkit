@@ -100,6 +100,13 @@ namespace
 		FForceFeedbackValues ForceFeedback;
 		bool bSupportsRumble = false;
 		bool bRumbleFailureLogged = false;
+		bool bHasTouchpad = false;
+		int32 TouchpadFingerCount = 0;
+		int32 PrimaryTouchpadFinger = INDEX_NONE;
+		bool bTouchpadTouched = false;
+		float TouchpadX = 0.0f;
+		float TouchpadY = 0.0f;
+		bool bTouchpadQueryFailureLogged = false;
 	};
 }
 
@@ -368,6 +375,7 @@ class FBertaDualSenseInputDevice final : public IInputDevice
 			SendAnalog(ConnectedDevice, FGamepadKeyNames::RightAnalogY, RightY, -NormalizeSignedAxis(RightY), ConnectedDevice.RightYAnalog, RightStickDeadZone);
 			SendAnalog(ConnectedDevice, FGamepadKeyNames::LeftTriggerAnalog, LeftTrigger, NormalizeTriggerAxis(LeftTrigger), ConnectedDevice.LeftTriggerAnalog, TriggerThreshold * 32767.0f);
 			SendAnalog(ConnectedDevice, FGamepadKeyNames::RightTriggerAnalog, RightTrigger, NormalizeTriggerAxis(RightTrigger), ConnectedDevice.RightTriggerAnalog, TriggerThreshold * 32767.0f);
+			SendTouchpadEvents(ConnectedDevice);
 
 			const double CurrentTime = FPlatformTime::Seconds();
 			for (int32 ButtonIndex = 0; ButtonIndex < NumGamepadButtons; ++ButtonIndex)
@@ -401,6 +409,74 @@ class FBertaDualSenseInputDevice final : public IInputDevice
 				MessageHandler->OnControllerAnalog(Key, ConnectedDevice.PlatformUserId, ConnectedDevice.InputDeviceId, NewNormalizedValue);
 			}
 			PreviousRawValue = NewRawValue;
+		}
+
+		void SendTouchpadEvents(FConnectedDualSense& ConnectedDevice)
+		{
+			if (!ConnectedDevice.bHasTouchpad)
+			{
+				return;
+			}
+
+			struct FTouchpadFingerState { bool bDown; float X; float Y; };
+			TArray<FTouchpadFingerState, TInlineAllocator<2>> Fingers;
+			Fingers.SetNum(ConnectedDevice.TouchpadFingerCount);
+			for (int32 FingerIndex = 0; FingerIndex < ConnectedDevice.TouchpadFingerCount; ++FingerIndex)
+			{
+				float Pressure = 0.0f;
+				if (!SDL_GetGamepadTouchpadFinger(ConnectedDevice.Gamepad, 0, FingerIndex, &Fingers[FingerIndex].bDown, &Fingers[FingerIndex].X, &Fingers[FingerIndex].Y, &Pressure))
+				{
+					if (!ConnectedDevice.bTouchpadQueryFailureLogged)
+					{
+						ConnectedDevice.bTouchpadQueryFailureLogged = true;
+						UE_LOG(LogBertaDualSense, Warning, TEXT("SDL_GetGamepadTouchpadFinger failed for InputDeviceId %d: %s"), ConnectedDevice.InputDeviceId.GetId(), UTF8_TO_TCHAR(SDL_GetError()));
+					}
+					return;
+				}
+			}
+			ConnectedDevice.bTouchpadQueryFailureLogged = false;
+
+			if (ConnectedDevice.PrimaryTouchpadFinger == INDEX_NONE || !Fingers[ConnectedDevice.PrimaryTouchpadFinger].bDown)
+			{
+				ConnectedDevice.PrimaryTouchpadFinger = INDEX_NONE;
+				for (int32 FingerIndex = 0; FingerIndex < Fingers.Num(); ++FingerIndex)
+				{
+					if (Fingers[FingerIndex].bDown)
+					{
+						ConnectedDevice.PrimaryTouchpadFinger = FingerIndex;
+						break;
+					}
+				}
+			}
+
+			const bool bTouched = ConnectedDevice.PrimaryTouchpadFinger != INDEX_NONE;
+			if (bTouched)
+			{
+				const FTouchpadFingerState& PrimaryFinger = Fingers[ConnectedDevice.PrimaryTouchpadFinger];
+				if (!ConnectedDevice.bTouchpadTouched)
+				{
+					MessageHandler->OnControllerButtonPressed(FGamepadKeyNames::SpecialLeft_Touched, ConnectedDevice.PlatformUserId, ConnectedDevice.InputDeviceId, false);
+				}
+				if (!ConnectedDevice.bTouchpadTouched || PrimaryFinger.X != ConnectedDevice.TouchpadX)
+				{
+					MessageHandler->OnControllerAnalog(FGamepadKeyNames::SpecialLeft_X, ConnectedDevice.PlatformUserId, ConnectedDevice.InputDeviceId, PrimaryFinger.X);
+				}
+				if (!ConnectedDevice.bTouchpadTouched || PrimaryFinger.Y != ConnectedDevice.TouchpadY)
+				{
+					MessageHandler->OnControllerAnalog(FGamepadKeyNames::SpecialLeft_Y, ConnectedDevice.PlatformUserId, ConnectedDevice.InputDeviceId, PrimaryFinger.Y);
+				}
+				ConnectedDevice.TouchpadX = PrimaryFinger.X;
+				ConnectedDevice.TouchpadY = PrimaryFinger.Y;
+			}
+			else if (ConnectedDevice.bTouchpadTouched)
+			{
+				MessageHandler->OnControllerButtonReleased(FGamepadKeyNames::SpecialLeft_Touched, ConnectedDevice.PlatformUserId, ConnectedDevice.InputDeviceId, false);
+				MessageHandler->OnControllerAnalog(FGamepadKeyNames::SpecialLeft_X, ConnectedDevice.PlatformUserId, ConnectedDevice.InputDeviceId, 0.0f);
+				MessageHandler->OnControllerAnalog(FGamepadKeyNames::SpecialLeft_Y, ConnectedDevice.PlatformUserId, ConnectedDevice.InputDeviceId, 0.0f);
+				ConnectedDevice.TouchpadX = 0.0f;
+				ConnectedDevice.TouchpadY = 0.0f;
+			}
+			ConnectedDevice.bTouchpadTouched = bTouched;
 		}
 		void ConnectDevice(const SDL_JoystickID InstanceId, const Uint16 VendorId, const Uint16 ProductId)
 		{
@@ -448,18 +524,40 @@ class FBertaDualSenseInputDevice final : public IInputDevice
 			ConnectedDevice.PlatformUserId = PlatformUserId;
 			const SDL_PropertiesID GamepadProperties = SDL_GetGamepadProperties(Gamepad);
 			ConnectedDevice.bSupportsRumble = SDL_GetBooleanProperty(GamepadProperties, SDL_PROP_GAMEPAD_CAP_RUMBLE_BOOLEAN, false);
+			ConnectedDevice.bHasTouchpad = SDL_GetNumGamepadTouchpads(Gamepad) > 0;
+			if (ConnectedDevice.bHasTouchpad)
+			{
+				ConnectedDevice.TouchpadFingerCount = SDL_GetNumGamepadTouchpadFingers(Gamepad, 0);
+				ConnectedDevice.bHasTouchpad = ConnectedDevice.TouchpadFingerCount > 0;
+			}
 			UE_LOG(LogBertaDualSense, Log, TEXT("Connected %s (SDL instance %u, VID=%04X PID=%04X, Serial='%s', Path='%s') as InputDeviceId %d for PlatformUserId %d; SDL_OpenGamepad took %.3f ms."), *ToUnrealString(SDL_GetGamepadName(Gamepad)), InstanceId, VendorId, ProductId, *Serial, *ToUnrealString(SDL_GetGamepadPath(Gamepad)), InputDeviceId.GetId(), PlatformUserId.GetInternalId(), OpenDurationMilliseconds);
 		}
 
 		void DisconnectDevice(const SDL_JoystickID InstanceId, FConnectedDualSense& ConnectedDevice)
 		{
 			FlushInputState(ConnectedDevice);
+			FlushTouchpadState(ConnectedDevice);
 			StopRumble(ConnectedDevice);
 
 			IPlatformInputDeviceMapper& DeviceMapper = IPlatformInputDeviceMapper::Get();
 			DeviceMapper.Internal_MapInputDeviceToUser(ConnectedDevice.InputDeviceId, DeviceMapper.GetUserForUnpairedInputDevices(), EInputDeviceConnectionState::Disconnected);
 			SDL_CloseGamepad(ConnectedDevice.Gamepad);
 			UE_LOG(LogBertaDualSense, Log, TEXT("Disconnected DualSense SDL instance %u from InputDeviceId %d."), InstanceId, ConnectedDevice.InputDeviceId.GetId());
+		}
+
+		void FlushTouchpadState(FConnectedDualSense& ConnectedDevice)
+		{
+			if (ConnectedDevice.bTouchpadTouched)
+			{
+				MessageHandler->OnControllerButtonReleased(FGamepadKeyNames::SpecialLeft_Touched, ConnectedDevice.PlatformUserId, ConnectedDevice.InputDeviceId, false);
+				MessageHandler->OnControllerAnalog(FGamepadKeyNames::SpecialLeft_X, ConnectedDevice.PlatformUserId, ConnectedDevice.InputDeviceId, 0.0f);
+				MessageHandler->OnControllerAnalog(FGamepadKeyNames::SpecialLeft_Y, ConnectedDevice.PlatformUserId, ConnectedDevice.InputDeviceId, 0.0f);
+			}
+			ConnectedDevice.PrimaryTouchpadFinger = INDEX_NONE;
+			ConnectedDevice.bTouchpadTouched = false;
+			ConnectedDevice.TouchpadX = 0.0f;
+			ConnectedDevice.TouchpadY = 0.0f;
+			ConnectedDevice.bTouchpadQueryFailureLogged = false;
 		}
 
 		void StopRumble(FConnectedDualSense& ConnectedDevice)
