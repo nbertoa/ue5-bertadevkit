@@ -7,6 +7,7 @@
 #include "HAL/PlatformProcess.h"
 #include "HAL/PlatformTime.h"
 #include "Interfaces/IPluginManager.h"
+#include "Misc/ConfigCacheIni.h"
 #include "Misc/CoreDelegates.h"
 #include "Misc/Paths.h"
 #include "SDL3/SDL.h"
@@ -18,6 +19,48 @@ namespace
 	constexpr Uint16 SonyVendorId = 0x054C;
 	constexpr Uint16 DualSenseProductId = 0x0CE6;
 	constexpr Uint16 DualSenseEdgeProductId = 0x0DF2;
+	constexpr int32 NumGamepadButtons = 24;
+	constexpr int32 LeftStickDeadZone = 7849;
+	constexpr int32 RightStickDeadZone = 8689;
+	constexpr float TriggerThreshold = 30.0f / 255.0f;
+
+	const FGamepadKeyNames::Type GamepadButtonKeys[NumGamepadButtons] =
+	{
+		FGamepadKeyNames::FaceButtonBottom,
+		FGamepadKeyNames::FaceButtonRight,
+		FGamepadKeyNames::FaceButtonLeft,
+		FGamepadKeyNames::FaceButtonTop,
+		FGamepadKeyNames::LeftShoulder,
+		FGamepadKeyNames::RightShoulder,
+		FGamepadKeyNames::SpecialRight,
+		FGamepadKeyNames::SpecialLeft,
+		FGamepadKeyNames::LeftThumb,
+		FGamepadKeyNames::RightThumb,
+		FGamepadKeyNames::LeftTriggerThreshold,
+		FGamepadKeyNames::RightTriggerThreshold,
+		FGamepadKeyNames::DPadUp,
+		FGamepadKeyNames::DPadDown,
+		FGamepadKeyNames::DPadLeft,
+		FGamepadKeyNames::DPadRight,
+		FGamepadKeyNames::LeftStickUp,
+		FGamepadKeyNames::LeftStickDown,
+		FGamepadKeyNames::LeftStickLeft,
+		FGamepadKeyNames::LeftStickRight,
+		FGamepadKeyNames::RightStickUp,
+		FGamepadKeyNames::RightStickDown,
+		FGamepadKeyNames::RightStickLeft,
+		FGamepadKeyNames::RightStickRight,
+	};
+
+	float NormalizeSignedAxis(const Sint16 AxisValue)
+	{
+		return static_cast<float>(AxisValue) / (AxisValue <= 0 ? 32768.0f : 32767.0f);
+	}
+
+	float NormalizeTriggerAxis(const Sint16 AxisValue)
+	{
+		return static_cast<float>(AxisValue) / 32767.0f;
+	}
 
 	FString ToUnrealString(const char* String)
 	{
@@ -39,6 +82,14 @@ namespace
 		SDL_Gamepad* Gamepad = nullptr;
 		FInputDeviceId InputDeviceId = INPUTDEVICEID_NONE;
 		FPlatformUserId PlatformUserId = PLATFORMUSERID_NONE;
+		bool ButtonStates[NumGamepadButtons] = { false };
+		double NextRepeatTime[NumGamepadButtons] = { 0.0 };
+		Sint16 LeftXAnalog = 0;
+		Sint16 LeftYAnalog = 0;
+		Sint16 RightXAnalog = 0;
+		Sint16 RightYAnalog = 0;
+		Sint16 LeftTriggerAnalog = 0;
+		Sint16 RightTriggerAnalog = 0;
 	};
 }
 
@@ -48,6 +99,8 @@ class FBertaDualSenseInputDevice final : public IInputDevice
 		explicit FBertaDualSenseInputDevice(const TSharedRef<FGenericApplicationMessageHandler>& InMessageHandler)
 			: MessageHandler(InMessageHandler)
 		{
+			GConfig->GetFloat(TEXT("/Script/Engine.InputSettings"), TEXT("InitialButtonRepeatDelay"), InitialButtonRepeatDelay, GInputIni);
+			GConfig->GetFloat(TEXT("/Script/Engine.InputSettings"), TEXT("ButtonRepeatDelay"), ButtonRepeatDelay, GInputIni);
 		}
 
 		virtual ~FBertaDualSenseInputDevice() override
@@ -137,7 +190,18 @@ class FBertaDualSenseInputDevice final : public IInputDevice
 			RemoveNoLongerPresent(OpenFailures, PresentGamepads);
 			RemoveNoLongerPresent(UnavailableIdentityLogged, PresentGamepads);
 		}
-		virtual void SendControllerEvents() override {}
+		virtual void SendControllerEvents() override
+		{
+			if (bShutdown)
+			{
+				return;
+			}
+
+			for (TPair<SDL_JoystickID, FConnectedDualSense>& Pair : ConnectedDevices)
+			{
+				SendControllerEvents(Pair.Value);
+			}
+		}
 
 		virtual void SetMessageHandler(const TSharedRef<FGenericApplicationMessageHandler>& InMessageHandler) override
 		{
@@ -150,6 +214,82 @@ class FBertaDualSenseInputDevice final : public IInputDevice
 		virtual bool SupportsForceFeedback(int32 ControllerId) override { return false; }
 
 	private:
+		void SendControllerEvents(FConnectedDualSense& ConnectedDevice)
+		{
+			bool CurrentButtonStates[NumGamepadButtons] = { false };
+			CurrentButtonStates[0] = SDL_GetGamepadButton(ConnectedDevice.Gamepad, SDL_GAMEPAD_BUTTON_SOUTH);
+			CurrentButtonStates[1] = SDL_GetGamepadButton(ConnectedDevice.Gamepad, SDL_GAMEPAD_BUTTON_EAST);
+			CurrentButtonStates[2] = SDL_GetGamepadButton(ConnectedDevice.Gamepad, SDL_GAMEPAD_BUTTON_WEST);
+			CurrentButtonStates[3] = SDL_GetGamepadButton(ConnectedDevice.Gamepad, SDL_GAMEPAD_BUTTON_NORTH);
+			CurrentButtonStates[4] = SDL_GetGamepadButton(ConnectedDevice.Gamepad, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
+			CurrentButtonStates[5] = SDL_GetGamepadButton(ConnectedDevice.Gamepad, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
+			CurrentButtonStates[6] = SDL_GetGamepadButton(ConnectedDevice.Gamepad, SDL_GAMEPAD_BUTTON_START);
+			CurrentButtonStates[7] = SDL_GetGamepadButton(ConnectedDevice.Gamepad, SDL_GAMEPAD_BUTTON_BACK);
+			CurrentButtonStates[8] = SDL_GetGamepadButton(ConnectedDevice.Gamepad, SDL_GAMEPAD_BUTTON_LEFT_STICK);
+			CurrentButtonStates[9] = SDL_GetGamepadButton(ConnectedDevice.Gamepad, SDL_GAMEPAD_BUTTON_RIGHT_STICK);
+			CurrentButtonStates[12] = SDL_GetGamepadButton(ConnectedDevice.Gamepad, SDL_GAMEPAD_BUTTON_DPAD_UP);
+			CurrentButtonStates[13] = SDL_GetGamepadButton(ConnectedDevice.Gamepad, SDL_GAMEPAD_BUTTON_DPAD_DOWN);
+			CurrentButtonStates[14] = SDL_GetGamepadButton(ConnectedDevice.Gamepad, SDL_GAMEPAD_BUTTON_DPAD_LEFT);
+			CurrentButtonStates[15] = SDL_GetGamepadButton(ConnectedDevice.Gamepad, SDL_GAMEPAD_BUTTON_DPAD_RIGHT);
+
+			const Sint16 LeftX = SDL_GetGamepadAxis(ConnectedDevice.Gamepad, SDL_GAMEPAD_AXIS_LEFTX);
+			const Sint16 LeftY = SDL_GetGamepadAxis(ConnectedDevice.Gamepad, SDL_GAMEPAD_AXIS_LEFTY);
+			const Sint16 RightX = SDL_GetGamepadAxis(ConnectedDevice.Gamepad, SDL_GAMEPAD_AXIS_RIGHTX);
+			const Sint16 RightY = SDL_GetGamepadAxis(ConnectedDevice.Gamepad, SDL_GAMEPAD_AXIS_RIGHTY);
+			const Sint16 LeftTrigger = SDL_GetGamepadAxis(ConnectedDevice.Gamepad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER);
+			const Sint16 RightTrigger = SDL_GetGamepadAxis(ConnectedDevice.Gamepad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER);
+
+			CurrentButtonStates[10] = NormalizeTriggerAxis(LeftTrigger) > TriggerThreshold;
+			CurrentButtonStates[11] = NormalizeTriggerAxis(RightTrigger) > TriggerThreshold;
+			CurrentButtonStates[16] = LeftY < -LeftStickDeadZone;
+			CurrentButtonStates[17] = LeftY > LeftStickDeadZone;
+			CurrentButtonStates[18] = LeftX < -LeftStickDeadZone;
+			CurrentButtonStates[19] = LeftX > LeftStickDeadZone;
+			CurrentButtonStates[20] = RightY < -RightStickDeadZone;
+			CurrentButtonStates[21] = RightY > RightStickDeadZone;
+			CurrentButtonStates[22] = RightX < -RightStickDeadZone;
+			CurrentButtonStates[23] = RightX > RightStickDeadZone;
+
+			SendAnalog(ConnectedDevice, FGamepadKeyNames::LeftAnalogX, LeftX, NormalizeSignedAxis(LeftX), ConnectedDevice.LeftXAnalog, LeftStickDeadZone);
+			SendAnalog(ConnectedDevice, FGamepadKeyNames::LeftAnalogY, LeftY, -NormalizeSignedAxis(LeftY), ConnectedDevice.LeftYAnalog, LeftStickDeadZone);
+			SendAnalog(ConnectedDevice, FGamepadKeyNames::RightAnalogX, RightX, NormalizeSignedAxis(RightX), ConnectedDevice.RightXAnalog, RightStickDeadZone);
+			SendAnalog(ConnectedDevice, FGamepadKeyNames::RightAnalogY, RightY, -NormalizeSignedAxis(RightY), ConnectedDevice.RightYAnalog, RightStickDeadZone);
+			SendAnalog(ConnectedDevice, FGamepadKeyNames::LeftTriggerAnalog, LeftTrigger, NormalizeTriggerAxis(LeftTrigger), ConnectedDevice.LeftTriggerAnalog, TriggerThreshold * 32767.0f);
+			SendAnalog(ConnectedDevice, FGamepadKeyNames::RightTriggerAnalog, RightTrigger, NormalizeTriggerAxis(RightTrigger), ConnectedDevice.RightTriggerAnalog, TriggerThreshold * 32767.0f);
+
+			const double CurrentTime = FPlatformTime::Seconds();
+			for (int32 ButtonIndex = 0; ButtonIndex < NumGamepadButtons; ++ButtonIndex)
+			{
+				if (CurrentButtonStates[ButtonIndex] != ConnectedDevice.ButtonStates[ButtonIndex])
+				{
+					if (CurrentButtonStates[ButtonIndex])
+					{
+						MessageHandler->OnControllerButtonPressed(GamepadButtonKeys[ButtonIndex], ConnectedDevice.PlatformUserId, ConnectedDevice.InputDeviceId, false);
+						ConnectedDevice.NextRepeatTime[ButtonIndex] = CurrentTime + InitialButtonRepeatDelay;
+					}
+					else
+					{
+						MessageHandler->OnControllerButtonReleased(GamepadButtonKeys[ButtonIndex], ConnectedDevice.PlatformUserId, ConnectedDevice.InputDeviceId, false);
+					}
+				}
+				else if (CurrentButtonStates[ButtonIndex] && ConnectedDevice.NextRepeatTime[ButtonIndex] <= CurrentTime)
+				{
+					MessageHandler->OnControllerButtonPressed(GamepadButtonKeys[ButtonIndex], ConnectedDevice.PlatformUserId, ConnectedDevice.InputDeviceId, true);
+					ConnectedDevice.NextRepeatTime[ButtonIndex] = CurrentTime + ButtonRepeatDelay;
+				}
+
+				ConnectedDevice.ButtonStates[ButtonIndex] = CurrentButtonStates[ButtonIndex];
+			}
+		}
+
+		void SendAnalog(const FConnectedDualSense& ConnectedDevice, const FGamepadKeyNames::Type Key, const Sint16 NewRawValue, const float NewNormalizedValue, Sint16& PreviousRawValue, const float HeldThreshold)
+		{
+			if (PreviousRawValue != NewRawValue || FMath::Abs(static_cast<int32>(NewRawValue)) > HeldThreshold)
+			{
+				MessageHandler->OnControllerAnalog(Key, ConnectedDevice.PlatformUserId, ConnectedDevice.InputDeviceId, NewNormalizedValue);
+			}
+			PreviousRawValue = NewRawValue;
+		}
 		void ConnectDevice(const SDL_JoystickID InstanceId, const Uint16 VendorId, const Uint16 ProductId)
 		{
 			const double OpenStartTime = FPlatformTime::Seconds();
@@ -199,6 +339,8 @@ class FBertaDualSenseInputDevice final : public IInputDevice
 
 		void DisconnectDevice(const SDL_JoystickID InstanceId, FConnectedDualSense& ConnectedDevice)
 		{
+			FlushInputState(ConnectedDevice);
+
 			IPlatformInputDeviceMapper& DeviceMapper = IPlatformInputDeviceMapper::Get();
 			UE_LOG(LogBertaDualSense, Log, TEXT("Disconnecting DualSense SDL instance %u from InputDeviceId %d: mapping device as disconnected."), InstanceId, ConnectedDevice.InputDeviceId.GetId());
 			DeviceMapper.Internal_MapInputDeviceToUser(ConnectedDevice.InputDeviceId, DeviceMapper.GetUserForUnpairedInputDevices(), EInputDeviceConnectionState::Disconnected);
@@ -207,6 +349,35 @@ class FBertaDualSenseInputDevice final : public IInputDevice
 			SDL_CloseGamepad(ConnectedDevice.Gamepad);
 			UE_LOG(LogBertaDualSense, Log, TEXT("Closed DualSense SDL gamepad for instance %u."), InstanceId);
 			UE_LOG(LogBertaDualSense, Log, TEXT("Disconnected DualSense SDL instance %u from InputDeviceId %d."), InstanceId, ConnectedDevice.InputDeviceId.GetId());
+		}
+
+		void FlushInputState(FConnectedDualSense& ConnectedDevice)
+		{
+			for (int32 ButtonIndex = 0; ButtonIndex < NumGamepadButtons; ++ButtonIndex)
+			{
+				if (ConnectedDevice.ButtonStates[ButtonIndex])
+				{
+					MessageHandler->OnControllerButtonReleased(GamepadButtonKeys[ButtonIndex], ConnectedDevice.PlatformUserId, ConnectedDevice.InputDeviceId, false);
+				}
+				ConnectedDevice.ButtonStates[ButtonIndex] = false;
+				ConnectedDevice.NextRepeatTime[ButtonIndex] = 0.0;
+			}
+
+			FlushAnalog(FGamepadKeyNames::LeftAnalogX, ConnectedDevice, ConnectedDevice.LeftXAnalog);
+			FlushAnalog(FGamepadKeyNames::LeftAnalogY, ConnectedDevice, ConnectedDevice.LeftYAnalog);
+			FlushAnalog(FGamepadKeyNames::RightAnalogX, ConnectedDevice, ConnectedDevice.RightXAnalog);
+			FlushAnalog(FGamepadKeyNames::RightAnalogY, ConnectedDevice, ConnectedDevice.RightYAnalog);
+			FlushAnalog(FGamepadKeyNames::LeftTriggerAnalog, ConnectedDevice, ConnectedDevice.LeftTriggerAnalog);
+			FlushAnalog(FGamepadKeyNames::RightTriggerAnalog, ConnectedDevice, ConnectedDevice.RightTriggerAnalog);
+		}
+
+		void FlushAnalog(const FGamepadKeyNames::Type Key, const FConnectedDualSense& ConnectedDevice, Sint16& PreviousRawValue)
+		{
+			if (PreviousRawValue != 0)
+			{
+				MessageHandler->OnControllerAnalog(Key, ConnectedDevice.PlatformUserId, ConnectedDevice.InputDeviceId, 0.0f);
+			}
+			PreviousRawValue = 0;
 		}
 
 		void DisconnectAllDevices()
@@ -234,6 +405,8 @@ class FBertaDualSenseInputDevice final : public IInputDevice
 		TMap<SDL_JoystickID, FConnectedDualSense> ConnectedDevices;
 		TSet<SDL_JoystickID> OpenFailures;
 		TSet<SDL_JoystickID> UnavailableIdentityLogged;
+		float InitialButtonRepeatDelay = 0.2f;
+		float ButtonRepeatDelay = 0.1f;
 		bool bGamepadEnumerationFailureLogged = false;
 		bool bShutdown = false;
 };
