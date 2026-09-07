@@ -39,9 +39,10 @@ namespace
 		FInputDeviceId InputDeviceId = INPUTDEVICEID_NONE;
 		FPlatformUserId PlatformUserId = PLATFORMUSERID_NONE;
 	};
+}
 
-	class FBertaDualSenseInputDevice final : public IInputDevice
-	{
+class FBertaDualSenseInputDevice final : public IInputDevice
+{
 	public:
 		explicit FBertaDualSenseInputDevice(const TSharedRef<FGenericApplicationMessageHandler>& InMessageHandler)
 			: MessageHandler(InMessageHandler)
@@ -50,11 +51,30 @@ namespace
 
 		virtual ~FBertaDualSenseInputDevice() override
 		{
+			Shutdown();
+		}
+
+		void Shutdown()
+		{
+			if (bShutdown)
+			{
+				return;
+			}
+
+			bShutdown = true;
 			DisconnectAllDevices();
+			OpenFailures.Empty();
+			UnavailableIdentityLogged.Empty();
+			bGamepadEnumerationFailureLogged = false;
 		}
 
 		virtual void Tick(float DeltaTime) override
 		{
+			if (bShutdown)
+			{
+				return;
+			}
+
 			SDL_UpdateGamepads();
 
 			int GamepadCount = 0;
@@ -210,8 +230,8 @@ namespace
 		TSet<SDL_JoystickID> OpenFailures;
 		TSet<SDL_JoystickID> UnavailableIdentityLogged;
 		bool bGamepadEnumerationFailureLogged = false;
-	};
-}
+		bool bShutdown = false;
+};
 
 void FBertaDualSenseModule::StartupModule()
 {
@@ -256,6 +276,15 @@ void FBertaDualSenseModule::ShutdownModule()
 		bInputDeviceModularFeatureRegistered = false;
 	}
 
+	for (const TWeakPtr<FBertaDualSenseInputDevice>& InputDevice : CreatedInputDevices)
+	{
+		if (const TSharedPtr<FBertaDualSenseInputDevice> PinnedInputDevice = InputDevice.Pin())
+		{
+			PinnedInputDevice->Shutdown();
+		}
+	}
+	CreatedInputDevices.Empty();
+
 	if (bSDLGamepadSubsystemInitialized)
 	{
 		SDL_QuitSubSystem(SDL_INIT_GAMEPAD);
@@ -277,7 +306,14 @@ TSharedPtr<IInputDevice> FBertaDualSenseModule::CreateInputDevice(const TSharedR
 		return nullptr;
 	}
 
-	return MakeShared<FBertaDualSenseInputDevice>(InMessageHandler);
+	CreatedInputDevices.RemoveAll([](const TWeakPtr<FBertaDualSenseInputDevice>& InputDevice)
+	{
+		return !InputDevice.IsValid();
+	});
+
+	const TSharedRef<FBertaDualSenseInputDevice> InputDevice = MakeShared<FBertaDualSenseInputDevice>(InMessageHandler);
+	CreatedInputDevices.Add(InputDevice);
+	return InputDevice;
 }
 
 IMPLEMENT_MODULE(FBertaDualSenseModule, BertaDualSense)
