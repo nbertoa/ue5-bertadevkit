@@ -21,7 +21,10 @@ namespace
 	constexpr Uint16 SonyVendorId = 0x054C;
 	constexpr Uint16 DualSenseProductId = 0x0CE6;
 	constexpr Uint16 DualSenseEdgeProductId = 0x0DF2;
-	constexpr int32 NumGamepadButtons = 24;
+	constexpr int32 NumGamepadButtons = 27;
+	constexpr int32 TouchpadClickButtonIndex = 24;
+	constexpr int32 PsButtonIndex = 25;
+	constexpr int32 MicrophoneButtonIndex = 26;
 	constexpr int32 LeftStickDeadZone = 7849;
 	constexpr int32 RightStickDeadZone = 8689;
 	constexpr float TriggerThreshold = 30.0f / 255.0f;
@@ -61,6 +64,9 @@ namespace
 		FGamepadKeyNames::RightStickDown,
 		FGamepadKeyNames::RightStickLeft,
 		FGamepadKeyNames::RightStickRight,
+		FName(TEXT("BertaDualSense_TouchpadClick")),
+		FName(TEXT("BertaDualSense_PSButton")),
+		FName(TEXT("BertaDualSense_MicrophoneButton")),
 	};
 
 	float NormalizeSignedAxis(const Sint16 AxisValue)
@@ -406,6 +412,9 @@ class FBertaDualSenseInputDevice final : public IInputDevice
 			CurrentButtonStates[13] = SDL_GetGamepadButton(ConnectedDevice.Gamepad, SDL_GAMEPAD_BUTTON_DPAD_DOWN);
 			CurrentButtonStates[14] = SDL_GetGamepadButton(ConnectedDevice.Gamepad, SDL_GAMEPAD_BUTTON_DPAD_LEFT);
 			CurrentButtonStates[15] = SDL_GetGamepadButton(ConnectedDevice.Gamepad, SDL_GAMEPAD_BUTTON_DPAD_RIGHT);
+			CurrentButtonStates[TouchpadClickButtonIndex] = SDL_GetGamepadButton(ConnectedDevice.Gamepad, SDL_GAMEPAD_BUTTON_TOUCHPAD);
+			CurrentButtonStates[PsButtonIndex] = SDL_GetGamepadButton(ConnectedDevice.Gamepad, SDL_GAMEPAD_BUTTON_GUIDE);
+			CurrentButtonStates[MicrophoneButtonIndex] = SDL_GetGamepadButton(ConnectedDevice.Gamepad, SDL_GAMEPAD_BUTTON_MISC1);
 
 			const Sint16 LeftX = SDL_GetGamepadAxis(ConnectedDevice.Gamepad, SDL_GAMEPAD_AXIS_LEFTX);
 			const Sint16 LeftY = SDL_GetGamepadAxis(ConnectedDevice.Gamepad, SDL_GAMEPAD_AXIS_LEFTY);
@@ -714,6 +723,9 @@ void FBertaDualSenseModule::StartupModule()
 	EKeys::AddKey(FKeyDetails(FName(TEXT("BertaDualSense_Edge_LeftPaddle")),FText::FromString(TEXT("DualSense Edge Left Paddle")),FKeyDetails::GamepadKey));
 	EKeys::AddKey(FKeyDetails(FName(TEXT("BertaDualSense_Edge_RightFn")),FText::FromString(TEXT("DualSense Edge Right Fn")),FKeyDetails::GamepadKey));
 	EKeys::AddKey(FKeyDetails(FName(TEXT("BertaDualSense_Edge_LeftFn")),FText::FromString(TEXT("DualSense Edge Left Fn")),FKeyDetails::GamepadKey));
+	EKeys::AddKey(FKeyDetails(FName(TEXT("BertaDualSense_TouchpadClick")),FText::FromString(TEXT("DualSense Touchpad Click")),FKeyDetails::GamepadKey));
+	EKeys::AddKey(FKeyDetails(FName(TEXT("BertaDualSense_PSButton")),FText::FromString(TEXT("DualSense PS Button")),FKeyDetails::GamepadKey));
+	EKeys::AddKey(FKeyDetails(FName(TEXT("BertaDualSense_MicrophoneButton")),FText::FromString(TEXT("DualSense Microphone Button")),FKeyDetails::GamepadKey));
 	const TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("BertaDualSense"));
 	if (!Plugin)
 	{
