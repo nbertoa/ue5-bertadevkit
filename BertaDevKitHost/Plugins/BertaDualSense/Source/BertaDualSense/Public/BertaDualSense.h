@@ -13,7 +13,11 @@ public:
 	virtual bool SupportsDynamicReloading() override { return false; }
 
 private:
+	void HandleEnginePreExit();
+	void ShutdownInputDevices();
+
 	TArray<TWeakPtr<FBertaDualSenseInputDevice>> CreatedInputDevices;
+	FDelegateHandle EnginePreExitHandle;
 	void* SDL3DllHandle = nullptr;
 	bool bSDLGamepadSubsystemInitialized = false;
 	bool bInputDeviceModularFeatureRegistered = false;

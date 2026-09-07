@@ -7,6 +7,7 @@
 #include "HAL/PlatformProcess.h"
 #include "HAL/PlatformTime.h"
 #include "Interfaces/IPluginManager.h"
+#include "Misc/CoreDelegates.h"
 #include "Misc/Paths.h"
 #include "SDL3/SDL.h"
 
@@ -199,8 +200,12 @@ class FBertaDualSenseInputDevice final : public IInputDevice
 		void DisconnectDevice(const SDL_JoystickID InstanceId, FConnectedDualSense& ConnectedDevice)
 		{
 			IPlatformInputDeviceMapper& DeviceMapper = IPlatformInputDeviceMapper::Get();
+			UE_LOG(LogBertaDualSense, Log, TEXT("Disconnecting DualSense SDL instance %u from InputDeviceId %d: mapping device as disconnected."), InstanceId, ConnectedDevice.InputDeviceId.GetId());
 			DeviceMapper.Internal_MapInputDeviceToUser(ConnectedDevice.InputDeviceId, DeviceMapper.GetUserForUnpairedInputDevices(), EInputDeviceConnectionState::Disconnected);
+			UE_LOG(LogBertaDualSense, Log, TEXT("Disconnected DualSense SDL instance %u from InputDeviceId %d in the input-device mapper."), InstanceId, ConnectedDevice.InputDeviceId.GetId());
+			UE_LOG(LogBertaDualSense, Log, TEXT("Closing DualSense SDL gamepad for instance %u."), InstanceId);
 			SDL_CloseGamepad(ConnectedDevice.Gamepad);
+			UE_LOG(LogBertaDualSense, Log, TEXT("Closed DualSense SDL gamepad for instance %u."), InstanceId);
 			UE_LOG(LogBertaDualSense, Log, TEXT("Disconnected DualSense SDL instance %u from InputDeviceId %d."), InstanceId, ConnectedDevice.InputDeviceId.GetId());
 		}
 
@@ -264,6 +269,7 @@ void FBertaDualSenseModule::StartupModule()
 
 	IInputDeviceModule::StartupModule();
 	bInputDeviceModularFeatureRegistered = true;
+	EnginePreExitHandle = FCoreDelegates::OnEnginePreExit.AddRaw(this, &FBertaDualSenseModule::HandleEnginePreExit);
 
 	UE_LOG(LogBertaDualSense, Log, TEXT("Initialized SDL gamepad subsystem with gamepad events disabled."));
 }
@@ -276,13 +282,13 @@ void FBertaDualSenseModule::ShutdownModule()
 		bInputDeviceModularFeatureRegistered = false;
 	}
 
-	for (const TWeakPtr<FBertaDualSenseInputDevice>& InputDevice : CreatedInputDevices)
+	if (EnginePreExitHandle.IsValid())
 	{
-		if (const TSharedPtr<FBertaDualSenseInputDevice> PinnedInputDevice = InputDevice.Pin())
-		{
-			PinnedInputDevice->Shutdown();
-		}
+		FCoreDelegates::OnEnginePreExit.Remove(EnginePreExitHandle);
+		EnginePreExitHandle.Reset();
 	}
+
+	ShutdownInputDevices();
 	CreatedInputDevices.Empty();
 
 	if (bSDLGamepadSubsystemInitialized)
@@ -297,6 +303,29 @@ void FBertaDualSenseModule::ShutdownModule()
 		FPlatformProcess::FreeDllHandle(SDL3DllHandle);
 		SDL3DllHandle = nullptr;
 	}
+}
+
+void FBertaDualSenseModule::HandleEnginePreExit()
+{
+	UE_LOG(LogBertaDualSense, Log, TEXT("Beginning BertaDualSense pre-exit input-device shutdown."));
+	ShutdownInputDevices();
+	UE_LOG(LogBertaDualSense, Log, TEXT("Completed BertaDualSense pre-exit input-device shutdown."));
+}
+
+void FBertaDualSenseModule::ShutdownInputDevices()
+{
+	for (const TWeakPtr<FBertaDualSenseInputDevice>& InputDevice : CreatedInputDevices)
+	{
+		if (const TSharedPtr<FBertaDualSenseInputDevice> PinnedInputDevice = InputDevice.Pin())
+		{
+			PinnedInputDevice->Shutdown();
+		}
+	}
+
+	CreatedInputDevices.RemoveAll([](const TWeakPtr<FBertaDualSenseInputDevice>& InputDevice)
+	{
+		return !InputDevice.IsValid();
+	});
 }
 
 TSharedPtr<IInputDevice> FBertaDualSenseModule::CreateInputDevice(const TSharedRef<FGenericApplicationMessageHandler>& InMessageHandler)
