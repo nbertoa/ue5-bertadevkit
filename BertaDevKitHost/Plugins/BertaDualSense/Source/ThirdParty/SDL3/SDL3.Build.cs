@@ -16,7 +16,7 @@ public class SDL3 : ModuleRules
 		PublicAdditionalLibraries.Add(Path.Combine(ModuleDirectory, "lib", "Win64", "SDL3.lib"));
 		PublicDelayLoadDLLs.Add("SDL3.dll");
 		RuntimeDependencies.Add(
-			"$(TargetOutputDir)/SDL3.dll",
+			"$(PluginDir)/Binaries/ThirdParty/SDL3/Win64/SDL3.dll",
 			Path.Combine(ModuleDirectory, "bin", "Win64", "SDL3.dll"),
 			StagedFileType.NonUFS);
 	}

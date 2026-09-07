@@ -6,6 +6,7 @@
 #include "GenericPlatform/InputDeviceRegistry.h"
 #include "HAL/PlatformProcess.h"
 #include "HAL/PlatformTime.h"
+#include "Interfaces/IPluginManager.h"
 #include "Misc/Paths.h"
 #include "SDL3/SDL.h"
 
@@ -214,41 +215,35 @@ namespace
 
 void FBertaDualSenseModule::StartupModule()
 {
-	UE_LOG(LogBertaDualSense, Log, TEXT("BertaDualSense StartupModule begin"));
+	const TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("BertaDualSense"));
+	if (!Plugin)
+	{
+		UE_LOG(LogBertaDualSense, Error, TEXT("Failed to find the BertaDualSense plugin while resolving SDL3.dll."));
+		return;
+	}
 
-	const FString SDL3DllPath = FPaths::ConvertRelativePathToFull(FPlatformProcess::BaseDir(), TEXT("SDL3.dll"));
-	UE_LOG(LogBertaDualSense, Log, TEXT("BertaDualSense SDL3 DLL path: %s"), *SDL3DllPath);
-	UE_LOG(LogBertaDualSense, Log, TEXT("BertaDualSense before GetDllHandle"));
+	const FString SDL3DllPath = FPaths::Combine(Plugin->GetBaseDir(), TEXT("Binaries/ThirdParty/SDL3/Win64/SDL3.dll"));
 	SDL3DllHandle = FPlatformProcess::GetDllHandle(*SDL3DllPath);
 	if (!SDL3DllHandle)
 	{
-		UE_LOG(LogBertaDualSense, Error, TEXT("BertaDualSense failed to load SDL3 DLL from %s"), *SDL3DllPath);
+		UE_LOG(LogBertaDualSense, Error, TEXT("Failed to load BertaDualSense SDL3.dll from %s."), *SDL3DllPath);
 		return;
 	}
-	UE_LOG(LogBertaDualSense, Log, TEXT("BertaDualSense after successful GetDllHandle"));
 
-	UE_LOG(LogBertaDualSense, Log, TEXT("BertaDualSense before SDL_GetVersion"));
 	const int LinkedSDLVersion = SDL_GetVersion();
-	UE_LOG(LogBertaDualSense, Log, TEXT("BertaDualSense linked SDL version: %d.%d.%d"), SDL_VERSIONNUM_MAJOR(LinkedSDLVersion), SDL_VERSIONNUM_MINOR(LinkedSDLVersion), SDL_VERSIONNUM_MICRO(LinkedSDLVersion));
-	UE_LOG(LogBertaDualSense, Log, TEXT("BertaDualSense compile-time SDL version: %d.%d.%d"), SDL_VERSIONNUM_MAJOR(SDL_VERSION), SDL_VERSIONNUM_MINOR(SDL_VERSION), SDL_VERSIONNUM_MICRO(SDL_VERSION));
+	UE_LOG(LogBertaDualSense, Log, TEXT("Loaded SDL3 %d.%d.%d from %s."), SDL_VERSIONNUM_MAJOR(LinkedSDLVersion), SDL_VERSIONNUM_MINOR(LinkedSDLVersion), SDL_VERSIONNUM_MICRO(LinkedSDLVersion), *SDL3DllPath);
 
-	UE_LOG(LogBertaDualSense, Log, TEXT("BertaDualSense before SDL_InitSubSystem(SDL_INIT_GAMEPAD)"));
 	bSDLGamepadSubsystemInitialized = SDL_InitSubSystem(SDL_INIT_GAMEPAD);
 	if (!bSDLGamepadSubsystemInitialized)
 	{
 		UE_LOG(LogBertaDualSense, Error, TEXT("Failed to initialize SDL gamepad subsystem: %s"), UTF8_TO_TCHAR(SDL_GetError()));
 		return;
 	}
-	UE_LOG(LogBertaDualSense, Log, TEXT("BertaDualSense after successful SDL_InitSubSystem"));
 
-	UE_LOG(LogBertaDualSense, Log, TEXT("BertaDualSense before SDL_SetGamepadEventsEnabled(false)"));
 	SDL_SetGamepadEventsEnabled(false);
-	UE_LOG(LogBertaDualSense, Log, TEXT("BertaDualSense after SDL_SetGamepadEventsEnabled(false)"));
 
-	UE_LOG(LogBertaDualSense, Log, TEXT("BertaDualSense before IInputDeviceModule::StartupModule()"));
 	IInputDeviceModule::StartupModule();
 	bInputDeviceModularFeatureRegistered = true;
-	UE_LOG(LogBertaDualSense, Log, TEXT("BertaDualSense after IInputDeviceModule::StartupModule()"));
 
 	UE_LOG(LogBertaDualSense, Log, TEXT("Initialized SDL gamepad subsystem with gamepad events disabled."));
 }

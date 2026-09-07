@@ -13,6 +13,10 @@ public class BertaDualSense : ModuleRules
 			"InputDevice"
 		});
 
-		PrivateDependencyModuleNames.Add("SDL3");
+		PrivateDependencyModuleNames.AddRange(new string[]
+		{
+			"Projects",
+			"SDL3"
+		});
 	}
 }
