@@ -1,0 +1,20 @@
+site_name: BertaDevKit
+site_url: https://nbertoa.github.io/ue5-bertadevkit/
+repo_url: https://github.com/nbertoa/ue5-bertadevkit
+repo_name: nbertoa/ue5-bertadevkit
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.sections
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - BertaDevKit: bertadevkit/index.md
+  - BertaDualSense: bertadualsense/index.md
+  - Development: development/index.md

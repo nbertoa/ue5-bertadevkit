@@ -2,22 +2,13 @@
 
 BertaDualSense is an independent Unreal Engine 5.8 Runtime input-device plugin for native Sony DualSense and DualSense Edge controllers on Win64. It uses SDL3 to deliver normal Unreal input, selected DualSense hardware features, and standard UE output paths without a dependency on BertaDevKit.
 
-Complete technical documentation: <https://nbertoa.github.io/ue5-bertadevkit/bertadualsense/>
-
 ## Requirements and installation
 
 - Unreal Engine 5.8
 - Win64
 - A supported C++ toolchain when building from source
 
-Copy this directory into a UE 5.8 project:
-
-```text
-BertaDevKitHost/Plugins/BertaDualSense/
-→ <YourProject>/Plugins/BertaDualSense/
-```
-
-Build the project and enable **BertaDualSense** in the Plugins window. The plugin is disabled by default. It owns SDL3 3.4.14 and stages/loads its DLL from the plugin deployment, so no system-wide SDL installation is required.
+Copy `BertaDevKitHost/Plugins/BertaDualSense/` to `<YourProject>/Plugins/BertaDualSense/`, build the project, and enable **BertaDualSense** in the Plugins window. The plugin is disabled by default. It owns SDL3 3.4.14 and stages/loads its DLL from the plugin deployment, so no system-wide SDL installation is required.
 
 ## Supported hardware
 
@@ -32,15 +23,13 @@ Other SDL gamepads are ignored. USB and Bluetooth DualSense connections are supp
 
 ## Input
 
-### Standard Unreal gamepad input
+### Standard gamepad input
 
 Face buttons, D-pad, shoulders, thumbstick clicks, sticks, analog triggers, trigger-threshold buttons, and derived stick-direction buttons are delivered through standard Unreal `Gamepad_*` keys. Cross, Circle, Square, and Triangle use positional face-button mappings. Create maps to `Gamepad_Special_Left`; Options maps to `Gamepad_Special_Right`.
 
-Because these are normal Unreal input events, Enhanced Input can bind standard controls without a Berta-specific API.
+Enhanced Input can bind these normal Unreal input events without a Berta-specific API.
 
 ### Touchpad and special buttons
-
-Touch contact and physical controls are separate:
 
 | Physical control | Unreal key | Notes |
 | --- | --- | --- |
@@ -51,7 +40,7 @@ Touch contact and physical controls are separate:
 | Create | `Gamepad_Special_Left` | Standard gamepad key. |
 | Options | `Gamepad_Special_Right` | Standard gamepad key. |
 
-The three `BertaDualSense_*` special keys are registered as gamepad keys and can be bound through Enhanced Input. Touchpad click is intentionally not an alias for touch contact or Create.
+The `BertaDualSense_*` special keys are registered as gamepad keys and can be bound through Enhanced Input. Touchpad click is intentionally not an alias for touch contact or Create.
 
 ### DualSense Edge inputs
 

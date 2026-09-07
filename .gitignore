@@ -75,3 +75,6 @@ ehthumbs.db
 
 # Compiled shader cache (platform-specific, regenerated on load)
 ShaderCache/
+
+# MkDocs generated site
+/site/
