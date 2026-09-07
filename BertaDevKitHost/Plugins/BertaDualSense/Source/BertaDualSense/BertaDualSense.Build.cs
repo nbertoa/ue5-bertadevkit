@@ -10,7 +10,10 @@ public class BertaDualSense : ModuleRules
 		{
 			"Core",
 			"ApplicationCore",
-			"InputDevice"
+			"InputDevice",
+			"InputCore",
+			"Engine",
+			"CoreUObject"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]

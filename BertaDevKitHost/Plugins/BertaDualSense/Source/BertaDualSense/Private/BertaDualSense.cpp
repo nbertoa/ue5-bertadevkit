@@ -8,6 +8,7 @@
 #include "HAL/PlatformProcess.h"
 #include "HAL/PlatformTime.h"
 #include "Interfaces/IPluginManager.h"
+#include "InputCoreTypes.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Misc/CoreDelegates.h"
 #include "Misc/Paths.h"
@@ -25,6 +26,14 @@ namespace
 	constexpr int32 RightStickDeadZone = 8689;
 	constexpr float TriggerThreshold = 30.0f / 255.0f;
 	constexpr Uint32 RumbleDurationMilliseconds = 1000;
+	constexpr int32 NumEdgeButtons = 4;
+	constexpr int32 TriggerEffectSize = 11;
+	constexpr Uint8 EnableRightTrigger = 0x04;
+	constexpr Uint8 EnableLeftTrigger = 0x08;
+	constexpr Uint8 EnableMicLight = 0x01;
+	const FName EdgeButtonKeys[NumEdgeButtons] = { FName(TEXT("BertaDualSense_Edge_RightPaddle")), FName(TEXT("BertaDualSense_Edge_LeftPaddle")), FName(TEXT("BertaDualSense_Edge_RightFn")), FName(TEXT("BertaDualSense_Edge_LeftFn")) };
+	struct FPS5EffectsState { Uint8 EnableBits1=0, EnableBits2=0, RumbleRight=0, RumbleLeft=0, HeadphoneVolume=0, SpeakerVolume=0, MicrophoneVolume=0, AudioEnableBits=0, MicLightMode=0, AudioMuteBits=0; Uint8 RightTrigger[TriggerEffectSize]={}; Uint8 LeftTrigger[TriggerEffectSize]={}; Uint8 Reserved1[6]={}; Uint8 EnableBits3=0; Uint8 Reserved2[2]={}; Uint8 LedAnimation=0, LedBrightness=0, PadLights=0, LedRed=0, LedGreen=0, LedBlue=0; };
+	static_assert(sizeof(FPS5EffectsState) == 47);
 
 	const FGamepadKeyNames::Type GamepadButtonKeys[NumGamepadButtons] =
 	{
@@ -107,6 +116,20 @@ namespace
 		float TouchpadX = 0.0f;
 		float TouchpadY = 0.0f;
 		bool bTouchpadQueryFailureLogged = false;
+		Uint16 ProductId = 0;
+		bool EdgeButtonStates[NumEdgeButtons] = {};
+		double EdgeNextRepeatTime[NumEdgeButtons] = {};
+		bool bSupportsRgbLed = false;
+		bool bSupportsPlayerLed = false;
+		bool bAccelerometerEnabled = false;
+		bool bGyroscopeEnabled = false;
+		bool bSensorFailureLogged = false;
+		bool bAdvancedOutputFailureLogged = false;
+		bool bMicrophoneLedOn = false;
+		Uint8 LeftTriggerEffect[TriggerEffectSize] = {};
+		Uint8 RightTriggerEffect[TriggerEffectSize] = {};
+		bool bLeftTriggerEffectActive = false;
+		bool bRightTriggerEffectActive = false;
 	};
 }
 
@@ -268,6 +291,10 @@ class FBertaDualSenseInputDevice final : public IInputDevice
 			}
 		}
 
+		virtual void SetLightColor(int32 ControllerId, FColor Color) override { ForEachControllerDevice(ControllerId, [&Color](FConnectedDualSense& Device){ SetLight(Device, Color); }); }
+		virtual void ResetLightColor(int32 ControllerId) override { ForEachControllerDevice(ControllerId, [](FConnectedDualSense& Device){ SetLight(Device, FColor::Black); }); }
+		virtual void SetDeviceProperty(int32 ControllerId, const FInputDeviceProperty* Property) override { if (Property) ForEachControllerDevice(ControllerId, [Property](FConnectedDualSense& Device){ SetTriggerProperty(Device, *Property); }); }
+		void SetMicrophoneLed(int32 ControllerId, bool bOn) { ForEachControllerDevice(ControllerId, [bOn](FConnectedDualSense& Device){ Device.bMicrophoneLedOn=bOn; SendPs5Effects(Device,false,false,true); }); }
 		virtual bool SupportsForceFeedback(int32 ControllerId) override
 		{
 			const FPlatformUserId PlatformUserId = GetPlatformUserForControllerId(ControllerId);
@@ -333,6 +360,13 @@ class FBertaDualSenseInputDevice final : public IInputDevice
 				ConnectedDevice.bRumbleFailureLogged = false;
 			}
 		}
+		template<typename TFunction> void ForEachControllerDevice(int32 ControllerId, TFunction&& Function) { const FPlatformUserId User=GetPlatformUserForControllerId(ControllerId); if(!User.IsValid())return; for(TPair<SDL_JoystickID,FConnectedDualSense>& Pair:ConnectedDevices)if(Pair.Value.PlatformUserId==User)Function(Pair.Value); }
+		static void SetLight(FConnectedDualSense& Device,FColor Color) { if(Device.bSupportsRgbLed&&!SDL_SetGamepadLED(Device.Gamepad,Color.R,Color.G,Color.B)) UE_LOG(LogBertaDualSense,Warning,TEXT("SDL_SetGamepadLED failed for InputDeviceId %d: %s"),Device.InputDeviceId.GetId(),UTF8_TO_TCHAR(SDL_GetError())); }
+		static void ClearTrigger(Uint8 (&E)[TriggerEffectSize]) { FMemory::Memzero(E);E[0]=0x05; }
+		static void FeedbackTrigger(Uint8 (&E)[TriggerEffectSize],int32 Position,int32 Strength) { FMemory::Memzero(E);E[0]=0x01;E[1]=static_cast<Uint8>(FMath::Clamp(Position,0,9)*255/9);E[2]=static_cast<Uint8>(FMath::Clamp(Strength,0,8)*255/8); }
+		static void VibrationTrigger(Uint8 (&E)[TriggerEffectSize],int32 Position,int32 Frequency,int32 Strength) { FMemory::Memzero(E);E[0]=0x06;E[1]=static_cast<Uint8>(FMath::Clamp(Position,0,9)*255/9);E[2]=static_cast<Uint8>(FMath::Clamp(Strength,0,8)*255/8);E[3]=static_cast<Uint8>(FMath::Clamp(Frequency,0,255)); }
+		static void SendPs5Effects(FConnectedDualSense& D,bool L,bool R,bool M) { FPS5EffectsState E; if(R){E.EnableBits1|=EnableRightTrigger;FMemory::Memcpy(E.RightTrigger,D.RightTriggerEffect,TriggerEffectSize);}if(L){E.EnableBits1|=EnableLeftTrigger;FMemory::Memcpy(E.LeftTrigger,D.LeftTriggerEffect,TriggerEffectSize);}if(M){E.EnableBits2|=EnableMicLight;E.MicLightMode=D.bMicrophoneLedOn?1:0;}if(!SDL_SendGamepadEffect(D.Gamepad,&E,sizeof(E))&&!D.bAdvancedOutputFailureLogged){D.bAdvancedOutputFailureLogged=true;UE_LOG(LogBertaDualSense,Warning,TEXT("SDL_SendGamepadEffect failed for InputDeviceId %d: %s"),D.InputDeviceId.GetId(),UTF8_TO_TCHAR(SDL_GetError()));}}
+		static void SetTriggerProperty(FConnectedDualSense& D,const FInputDeviceProperty& P) { bool L=false,R=false; if(P.Name==FInputDeviceTriggerResetProperty::PropertyName()){const auto& V=static_cast<const FInputDeviceTriggerResetProperty&>(P);L=EnumHasAnyFlags(V.AffectedTriggers,EInputDeviceTriggerMask::Left);R=EnumHasAnyFlags(V.AffectedTriggers,EInputDeviceTriggerMask::Right);if(L){ClearTrigger(D.LeftTriggerEffect);D.bLeftTriggerEffectActive=false;}if(R){ClearTrigger(D.RightTriggerEffect);D.bRightTriggerEffectActive=false;}}else if(P.Name==FInputDeviceTriggerFeedbackProperty::PropertyName()){const auto& V=static_cast<const FInputDeviceTriggerFeedbackProperty&>(P);L=EnumHasAnyFlags(V.AffectedTriggers,EInputDeviceTriggerMask::Left);R=EnumHasAnyFlags(V.AffectedTriggers,EInputDeviceTriggerMask::Right);if(L){FeedbackTrigger(D.LeftTriggerEffect,V.Position,V.Strengh);D.bLeftTriggerEffectActive=true;}if(R){FeedbackTrigger(D.RightTriggerEffect,V.Position,V.Strengh);D.bRightTriggerEffectActive=true;}}else if(P.Name==FInputDeviceTriggerVibrationProperty::PropertyName()){const auto& V=static_cast<const FInputDeviceTriggerVibrationProperty&>(P);L=EnumHasAnyFlags(V.AffectedTriggers,EInputDeviceTriggerMask::Left);R=EnumHasAnyFlags(V.AffectedTriggers,EInputDeviceTriggerMask::Right);if(L){VibrationTrigger(D.LeftTriggerEffect,V.TriggerPosition,V.VibrationFrequency,V.VibrationAmplitude);D.bLeftTriggerEffectActive=true;}if(R){VibrationTrigger(D.RightTriggerEffect,V.TriggerPosition,V.VibrationFrequency,V.VibrationAmplitude);D.bRightTriggerEffectActive=true;}}if(L||R)SendPs5Effects(D,L,R,false); }
 		void SendControllerEvents(FConnectedDualSense& ConnectedDevice)
 		{
 			bool CurrentButtonStates[NumGamepadButtons] = { false };
@@ -376,6 +410,8 @@ class FBertaDualSenseInputDevice final : public IInputDevice
 			SendAnalog(ConnectedDevice, FGamepadKeyNames::LeftTriggerAnalog, LeftTrigger, NormalizeTriggerAxis(LeftTrigger), ConnectedDevice.LeftTriggerAnalog, TriggerThreshold * 32767.0f);
 			SendAnalog(ConnectedDevice, FGamepadKeyNames::RightTriggerAnalog, RightTrigger, NormalizeTriggerAxis(RightTrigger), ConnectedDevice.RightTriggerAnalog, TriggerThreshold * 32767.0f);
 			SendTouchpadEvents(ConnectedDevice);
+			SendSensors(ConnectedDevice);
+			SendEdgeButtons(ConnectedDevice);
 
 			const double CurrentTime = FPlatformTime::Seconds();
 			for (int32 ButtonIndex = 0; ButtonIndex < NumGamepadButtons; ++ButtonIndex)
@@ -402,6 +438,8 @@ class FBertaDualSenseInputDevice final : public IInputDevice
 			}
 		}
 
+		void SendSensors(FConnectedDualSense& D) { if(!D.bAccelerometerEnabled&&!D.bGyroscopeEnabled)return;float A[3]={},G[3]={};const bool AO=!D.bAccelerometerEnabled||SDL_GetGamepadSensorData(D.Gamepad,SDL_SENSOR_ACCEL,A,3);const bool GO=!D.bGyroscopeEnabled||SDL_GetGamepadSensorData(D.Gamepad,SDL_SENSOR_GYRO,G,3);if(!AO||!GO){if(!D.bSensorFailureLogged){D.bSensorFailureLogged=true;UE_LOG(LogBertaDualSense,Warning,TEXT("SDL sensor poll failed for InputDeviceId %d: %s"),D.InputDeviceId.GetId(),UTF8_TO_TCHAR(SDL_GetError()));}return;}D.bSensorFailureLogged=false;MessageHandler->OnMotionDetected(FVector::ZeroVector,D.bGyroscopeEnabled?FVector(G[0],G[1],G[2]):FVector::ZeroVector,D.bAccelerometerEnabled?FVector(A[0],A[1],A[2])/9.80665f:FVector::ZeroVector,FVector::ZeroVector,D.PlatformUserId,D.InputDeviceId);}
+		void SendEdgeButtons(FConnectedDualSense& D) { if(D.ProductId!=DualSenseEdgeProductId)return;const SDL_GamepadButton B[NumEdgeButtons]={SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1,SDL_GAMEPAD_BUTTON_LEFT_PADDLE1,SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2,SDL_GAMEPAD_BUTTON_LEFT_PADDLE2};const double T=FPlatformTime::Seconds();for(int32 I=0;I<NumEdgeButtons;++I){const bool Down=SDL_GetGamepadButton(D.Gamepad,B[I]);if(Down!=D.EdgeButtonStates[I]){if(Down){MessageHandler->OnControllerButtonPressed(EdgeButtonKeys[I],D.PlatformUserId,D.InputDeviceId,false);D.EdgeNextRepeatTime[I]=T+InitialButtonRepeatDelay;}else MessageHandler->OnControllerButtonReleased(EdgeButtonKeys[I],D.PlatformUserId,D.InputDeviceId,false);}else if(Down&&D.EdgeNextRepeatTime[I]<=T){MessageHandler->OnControllerButtonPressed(EdgeButtonKeys[I],D.PlatformUserId,D.InputDeviceId,true);D.EdgeNextRepeatTime[I]=T+ButtonRepeatDelay;}D.EdgeButtonStates[I]=Down;}}
 		void SendAnalog(const FConnectedDualSense& ConnectedDevice, const FGamepadKeyNames::Type Key, const Sint16 NewRawValue, const float NewNormalizedValue, Sint16& PreviousRawValue, const float HeldThreshold)
 		{
 			if (PreviousRawValue != NewRawValue || FMath::Abs(static_cast<int32>(NewRawValue)) > HeldThreshold)
@@ -521,9 +559,15 @@ class FBertaDualSenseInputDevice final : public IInputDevice
 			FConnectedDualSense& ConnectedDevice = ConnectedDevices.Add(InstanceId);
 			ConnectedDevice.Gamepad = Gamepad;
 			ConnectedDevice.InputDeviceId = InputDeviceId;
+			ConnectedDevice.ProductId = ProductId;
 			ConnectedDevice.PlatformUserId = PlatformUserId;
 			const SDL_PropertiesID GamepadProperties = SDL_GetGamepadProperties(Gamepad);
 			ConnectedDevice.bSupportsRumble = SDL_GetBooleanProperty(GamepadProperties, SDL_PROP_GAMEPAD_CAP_RUMBLE_BOOLEAN, false);
+			ConnectedDevice.bSupportsRgbLed = SDL_GetBooleanProperty(GamepadProperties, SDL_PROP_GAMEPAD_CAP_RGB_LED_BOOLEAN, false);
+			ConnectedDevice.bSupportsPlayerLed = SDL_GetBooleanProperty(GamepadProperties, SDL_PROP_GAMEPAD_CAP_PLAYER_LED_BOOLEAN, false);
+			ConnectedDevice.bAccelerometerEnabled = SDL_GamepadHasSensor(Gamepad, SDL_SENSOR_ACCEL) && SDL_SetGamepadSensorEnabled(Gamepad, SDL_SENSOR_ACCEL, true);
+			ConnectedDevice.bGyroscopeEnabled = SDL_GamepadHasSensor(Gamepad, SDL_SENSOR_GYRO) && SDL_SetGamepadSensorEnabled(Gamepad, SDL_SENSOR_GYRO, true);
+			if (ConnectedDevice.bSupportsPlayerLed) SDL_SetGamepadPlayerIndex(Gamepad, DeviceMapper.GetUserIndexForPlatformUser(PlatformUserId));
 			ConnectedDevice.bHasTouchpad = SDL_GetNumGamepadTouchpads(Gamepad) > 0;
 			if (ConnectedDevice.bHasTouchpad)
 			{
@@ -537,7 +581,12 @@ class FBertaDualSenseInputDevice final : public IInputDevice
 		{
 			FlushInputState(ConnectedDevice);
 			FlushTouchpadState(ConnectedDevice);
+			FlushEdgeButtons(ConnectedDevice);
+			ClearAdvancedEffects(ConnectedDevice);
 			StopRumble(ConnectedDevice);
+			if (ConnectedDevice.bAccelerometerEnabled) SDL_SetGamepadSensorEnabled(ConnectedDevice.Gamepad, SDL_SENSOR_ACCEL, false);
+			if (ConnectedDevice.bGyroscopeEnabled) SDL_SetGamepadSensorEnabled(ConnectedDevice.Gamepad, SDL_SENSOR_GYRO, false);
+			if (ConnectedDevice.bSupportsPlayerLed) SDL_SetGamepadPlayerIndex(ConnectedDevice.Gamepad, -1);
 
 			IPlatformInputDeviceMapper& DeviceMapper = IPlatformInputDeviceMapper::Get();
 			DeviceMapper.Internal_MapInputDeviceToUser(ConnectedDevice.InputDeviceId, DeviceMapper.GetUserForUnpairedInputDevices(), EInputDeviceConnectionState::Disconnected);
@@ -545,6 +594,8 @@ class FBertaDualSenseInputDevice final : public IInputDevice
 			UE_LOG(LogBertaDualSense, Log, TEXT("Disconnected DualSense SDL instance %u from InputDeviceId %d."), InstanceId, ConnectedDevice.InputDeviceId.GetId());
 		}
 
+		void FlushEdgeButtons(FConnectedDualSense& D) { for(int32 I=0;I<NumEdgeButtons;++I){if(D.EdgeButtonStates[I])MessageHandler->OnControllerButtonReleased(EdgeButtonKeys[I],D.PlatformUserId,D.InputDeviceId,false);D.EdgeButtonStates[I]=false;D.EdgeNextRepeatTime[I]=0.0;} }
+		void ClearAdvancedEffects(FConnectedDualSense& D) { const bool L=D.bLeftTriggerEffectActive,R=D.bRightTriggerEffectActive;if(L){ClearTrigger(D.LeftTriggerEffect);D.bLeftTriggerEffectActive=false;}if(R){ClearTrigger(D.RightTriggerEffect);D.bRightTriggerEffectActive=false;}if(L||R||D.bMicrophoneLedOn){D.bMicrophoneLedOn=false;SendPs5Effects(D,L,R,true);} }
 		void FlushTouchpadState(FConnectedDualSense& ConnectedDevice)
 		{
 			if (ConnectedDevice.bTouchpadTouched)
@@ -633,6 +684,10 @@ class FBertaDualSenseInputDevice final : public IInputDevice
 
 void FBertaDualSenseModule::StartupModule()
 {
+	EKeys::AddKey(FKeyDetails(FName(TEXT("BertaDualSense_Edge_RightPaddle")),FText::FromString(TEXT("DualSense Edge Right Paddle")),FKeyDetails::GamepadKey));
+	EKeys::AddKey(FKeyDetails(FName(TEXT("BertaDualSense_Edge_LeftPaddle")),FText::FromString(TEXT("DualSense Edge Left Paddle")),FKeyDetails::GamepadKey));
+	EKeys::AddKey(FKeyDetails(FName(TEXT("BertaDualSense_Edge_RightFn")),FText::FromString(TEXT("DualSense Edge Right Fn")),FKeyDetails::GamepadKey));
+	EKeys::AddKey(FKeyDetails(FName(TEXT("BertaDualSense_Edge_LeftFn")),FText::FromString(TEXT("DualSense Edge Left Fn")),FKeyDetails::GamepadKey));
 	const TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("BertaDualSense"));
 	if (!Plugin)
 	{
@@ -738,4 +793,5 @@ TSharedPtr<IInputDevice> FBertaDualSenseModule::CreateInputDevice(const TSharedR
 	return InputDevice;
 }
 
+void FBertaDualSenseModule::SetMicrophoneLed(int32 ControllerId, bool bEnabled) { for(const TWeakPtr<FBertaDualSenseInputDevice>& Weak:CreatedInputDevices) if(const TSharedPtr<FBertaDualSenseInputDevice> Device=Weak.Pin()) Device->SetMicrophoneLed(ControllerId,bEnabled); }
 IMPLEMENT_MODULE(FBertaDualSenseModule, BertaDualSense)

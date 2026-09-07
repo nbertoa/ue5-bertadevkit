@@ -11,6 +11,7 @@ public:
 	virtual void ShutdownModule() override;
 	virtual TSharedPtr<IInputDevice> CreateInputDevice(const TSharedRef<FGenericApplicationMessageHandler>& InMessageHandler) override;
 	virtual bool SupportsDynamicReloading() override { return false; }
+	void SetMicrophoneLed(int32 ControllerId, bool bEnabled);
 
 private:
 	void HandleEnginePreExit();
