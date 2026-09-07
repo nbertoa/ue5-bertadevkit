@@ -35,8 +35,6 @@ namespace
 
 void FBertaDualSenseModule::StartupModule()
 {
-	IInputDeviceModule::StartupModule();
-
 	bSDLGamepadSubsystemInitialized = SDL_InitSubSystem(SDL_INIT_GAMEPAD);
 	if (!bSDLGamepadSubsystemInitialized)
 	{
@@ -45,19 +43,27 @@ void FBertaDualSenseModule::StartupModule()
 	}
 
 	SDL_SetGamepadEventsEnabled(false);
+
+	IInputDeviceModule::StartupModule();
+	bInputDeviceModularFeatureRegistered = true;
+
 	UE_LOG(LogBertaDualSense, Log, TEXT("Initialized SDL gamepad subsystem with gamepad events disabled."));
 }
 
 void FBertaDualSenseModule::ShutdownModule()
 {
+	if (bInputDeviceModularFeatureRegistered)
+	{
+		IModularFeatures::Get().UnregisterModularFeature(GetModularFeatureName(), this);
+		bInputDeviceModularFeatureRegistered = false;
+	}
+
 	if (bSDLGamepadSubsystemInitialized)
 	{
 		SDL_QuitSubSystem(SDL_INIT_GAMEPAD);
 		bSDLGamepadSubsystemInitialized = false;
 		UE_LOG(LogBertaDualSense, Log, TEXT("Shut down SDL gamepad subsystem."));
 	}
-
-	IModularFeatures::Get().UnregisterModularFeature(GetModularFeatureName(), this);
 }
 
 TSharedPtr<IInputDevice> FBertaDualSenseModule::CreateInputDevice(const TSharedRef<FGenericApplicationMessageHandler>& InMessageHandler)

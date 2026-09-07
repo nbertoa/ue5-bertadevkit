@@ -11,4 +11,5 @@ public:
 
 private:
 	bool bSDLGamepadSubsystemInitialized = false;
+	bool bInputDeviceModularFeatureRegistered = false;
 };
