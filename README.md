@@ -1,10 +1,22 @@
 # BertaDevKit
 
-**Personal Unreal Engine 5.8 toolkit for R&D, prototyping, debugging, editor automation, and everyday development.**
+**Personal Unreal Engine 5.8 development toolbox and native DualSense input plugin.**
 
-BertaDevKit collects small, reusable Unreal Engine utilities for debugging, Blueprint-friendly C++ helpers, world queries, math, asset tooling, validation, and Editor workflows. It is personal, UE 5.8-only tooling—not a gameplay framework or a general-purpose commercial product.
+This repository is a UE 5.8 development host for two independent plugins. It is personal R&D tooling, not a gameplay framework or commercial product.
 
-## Features
+## Plugins
+
+### BertaDevKit
+
+A general-purpose UE 5.8 toolbox with Runtime Blueprint utilities and Editor tools for debugging, drawing, screen stats, math, world queries, asset workflows, validation, and project setup.
+
+### BertaDualSense
+
+A Win64 Runtime input-device plugin for native Sony DualSense and DualSense Edge controllers through SDL3. It delivers standard Unreal gamepad input, touchpad and sensor input, DualSense outputs, and Edge-specific keys. See the [BertaDualSense README](BertaDevKitHost/Plugins/BertaDualSense/README.md) for hardware support, installation, input keys, outputs, and coexistence guidance.
+
+The plugins are siblings: neither is a module of, nor depends on, the other.
+
+## BertaDevKit features
 
 ### Runtime
 
@@ -15,72 +27,70 @@ BertaDevKit collects small, reusable Unreal Engine utilities for debugging, Blue
 | `UBertaScreenStats` | Named development screen stats for common value types; updating a name replaces its displayed value. |
 | `UBertaMathUtils` | Remapping, easing, angular helpers, snapping, distributions, and lightweight prediction helpers. |
 | `UBertaWorldUtils` | Actor queries, traces, player/camera access, and delayed-action timer helpers. |
-| `UBertaUIUtils` | Blueprint conveniences for common UI/player input boilerplate. |
+| `UBertaUIUtils` | Blueprint conveniences for common UI/player-input boilerplate. |
 
 Debug-facing Blueprint nodes use Unreal's `DevelopmentOnly` metadata where appropriate. This signals intended development use; it is not a blanket claim about all Runtime code or runtime cost.
 
 ### Editor
 
-**Asset Naming** audits BertaDevKit naming conventions and can apply a reviewed rename batch. It is available from the Tools menu and Content Browser context menus for selected assets or folders. It also participates in UE Data Validation. After a successful rename, redirectors created by that batch can be offered for cleanup through Unreal's native redirector workflow.
+**Asset Naming** audits BertaDevKit naming conventions and can apply a reviewed rename batch. It is available from the Tools menu and Content Browser context menus for selected assets or folders. It also participates in UE Data Validation.
 
-**Asset Cleaner** identifies conservative unused/orphan asset candidates. Its audit is read-only; cleanup revalidates candidates and opens Unreal's native deletion workflow. From selected folder scopes it can also remove safely revalidated empty project Content folders; it never force-deletes assets.
+**Asset Cleaner** identifies conservative unused/orphan asset candidates. Its audit is read-only; cleanup revalidates candidates and opens Unreal's native deletion workflow. It can remove safely revalidated empty project Content folders, but never force-deletes assets.
 
-**Asset Insights** is a read-only Content Browser analysis for selected assets. It reports Saved Package Size, direct on-disk dependency/referencer counts, Texture2D and StaticMesh metrics, and conservative footprint reviews. It is not cooked-size analysis and complements Unreal's Size Map, Reference Viewer, and Asset Audit rather than replacing them.
+**Asset Insights** is a read-only Content Browser analysis for selected assets. It reports Saved Package Size, direct on-disk dependency/referencer counts, Texture2D and StaticMesh metrics, and conservative footprint reviews. It complements Unreal's Size Map, Reference Viewer, and Asset Audit.
 
-**Project Setup** is an opt-in audit/apply utility for a curated allowlist of preferred project and per-project Editor defaults. It previews changes before applying them, manages Blueprint Assist and Electronic Nodes when installed, and reports missing managed plugins without failing the rest of the operation. Its external plugin toolbox entries are reminder-only: they are never audited, reported missing, or auto-enabled. It does not mutate projects at plugin startup.
+**Project Setup** is an opt-in audit/apply utility for a curated allowlist of preferred project and per-project Editor defaults. It previews changes before applying them, manages Blueprint Assist and Electronic Nodes when installed, and does not mutate projects at plugin startup.
 
-The optional external tools available to Nicolás are documented in [Personal Plugin Toolbox](BertaDevKitHost/Plugins/BertaDevKit/Docs/PLUGIN_TOOLBOX.md). Consult it before recreating an overlapping specialized solution.
-
-**Blueprint Audit** is a read-only, conservative static linter and code-review assistant for selected Blueprint assets or Content Browser folders. It reports static findings such as unused variables/functions, private or protected access reviews, single-function member reviews for possible localization, const and pure recommendations, and unused function inputs. It also reports advisory maintainability metrics and reviews for unusually large event graphs/functions/macros and high conditional-decision counts; these fixed thresholds are review heuristics, not correctness errors. Findings require manual review: static analysis cannot prove runtime/reflection use, a single-function member may intentionally retain state between calls, and making a function Pure can change evaluation timing and count. Blueprint findings appear in Output Log and in the native **BertaDevKit Blueprint Audit** Message Log; Blueprint asset tokens are clickable. Blueprint Audit has no Fix, Fix All, automatic refactoring, or graph-rewriting action.
+**Blueprint Audit** is a read-only, conservative static linter and code-review assistant for selected Blueprint assets or Content Browser folders. Findings require manual review and it has no Fix, Fix All, automatic refactoring, or graph-rewriting action.
 
 **World Validation** checks the open Editor level against enabled project policy checks, including static-mesh assignment, configured world bounds, light mobility, and actor scale. It reports violations without changing actors.
 
-### Editor access
-
-The main Editor actions are under **Tools → BertaDevKit**, including Asset Naming audit/fix, World Validation, and the Project Setup audit/apply submenu. Content Browser right-click menus provide Asset Naming, Asset Cleaner, and Blueprint Audit submenus for project assets and folders, plus **BertaDevKit → Asset Insights → Analyze** for selected project assets.
+The optional external tools available to Nicolás are documented in [Personal Plugin Toolbox](BertaDevKitHost/Plugins/BertaDevKit/Docs/PLUGIN_TOOLBOX.md).
 
 ## Architecture
 
 BertaDevKit has a strict Runtime / Editor separation:
 
-* `BertaDevKit` — Runtime utilities available to game code and Blueprints.
-* `BertaDevKitEditor` — Editor-only menus, audits, automation, asset tooling, and validation.
+- `BertaDevKit` — Runtime utilities available to game code and Blueprints.
+- `BertaDevKitEditor` — Editor-only menus, audits, automation, asset tooling, and validation.
 
-Runtime never depends on the Editor module.
-
-The repository contains a host project for development and verification:
+Runtime never depends on the Editor module. BertaDualSense is a separate Runtime plugin with its own SDL3 dependency and no dependency on BertaDevKit.
 
 ```text
 ue5-bertadevkit/
+├── AGENTS.md
 ├── README.md
 └── BertaDevKitHost/
     ├── BertaDevKitHost.uproject
+    ├── Content/
     └── Plugins/
-        └── BertaDevKit/             # Actual distributable plugin root
-            ├── BertaDevKit.uplugin
-            ├── Config/
-            ├── Content/
-            ├── Resources/
+        ├── BertaDevKit/
+        │   ├── BertaDevKit.uplugin
+        │   └── Source/
+        │       ├── BertaDevKit/
+        │       └── BertaDevKitEditor/
+        └── BertaDualSense/
+            ├── BertaDualSense.uplugin
+            ├── README.md
             └── Source/
-                ├── BertaDevKit/
-                └── BertaDevKitEditor/
 ```
 
-`BertaDevKitHost` is the development/test harness. The distributable plugin starts at `BertaDevKitHost/Plugins/BertaDevKit/`.
+`BertaDevKitHost` is the development and verification harness. Each directory under `Plugins` is independently distributable.
 
 ## Configuration
 
-Runtime plugin settings are under **Project Settings → Plugins → BertaDevKit** and persist in `Config/DefaultBertaDevKit.ini`. They configure debug systems and World Validation, including its individual checks.
+BertaDevKit Runtime settings are under **Project Settings → Plugins → BertaDevKit** and persist in `Config/DefaultBertaDevKit.ini`. Project Setup is a separate explicit Editor tool with its own curated allowlist.
 
-Project Setup is separate: it is an explicit Editor tool that applies its own curated allowlist, rather than a collection of `UBertaDevKitSettings` options.
+BertaDualSense has no settings object. Its installation and Windows input-backend coexistence are documented in its [plugin README](BertaDevKitHost/Plugins/BertaDualSense/README.md).
 
 ## Development
 
 ### Requirements
 
-* Unreal Engine 5.8
-* A C++ toolchain supported by Unreal Engine 5.8
-* Git LFS
+- Unreal Engine 5.8
+- A C++ toolchain supported by Unreal Engine 5.8
+- Git LFS for the repository host
+- Win64 for BertaDualSense
 
 ### Clone and build
 
@@ -88,9 +98,7 @@ Project Setup is separate: it is an explicit Editor tool that applies its own cu
 git clone https://github.com/nbertoa/ue5-bertadevkit.git
 ```
 
-Open `BertaDevKitHost/BertaDevKitHost.uproject` for the development host.
-
-The primary Editor development target is:
+Open `BertaDevKitHost/BertaDevKitHost.uproject` for the development host. The primary Editor development target is:
 
 ```text
 BertaDevKitHostEditor Win64 Development
@@ -102,33 +110,27 @@ For example:
 <UE_5.8>/Engine/Build/BatchFiles/Build.bat BertaDevKitHostEditor Win64 Development -Project="<repo>/BertaDevKitHost/BertaDevKitHost.uproject" -WaitMutex
 ```
 
-Automation coverage includes Runtime math/world helpers and Editor Asset Naming/Asset Cleaner behavior. Run affected Automation Tests when appropriate. Editor, Blueprint, and visual changes also require manual verification in Unreal; a successful C++ build alone does not prove behavior.
+Run affected Automation Tests when appropriate. Editor, Blueprint, and visual changes also require manual Unreal verification; a successful C++ build alone does not prove behavior.
 
-## Using BertaDevKit in another project
+## Installing in another project
 
-Copy:
+Copy either plugin independently into the matching project plugin directory:
 
-```text
-BertaDevKitHost/Plugins/BertaDevKit/
-```
+| Plugin | Copy from | Copy to |
+| --- | --- | --- |
+| BertaDevKit | `BertaDevKitHost/Plugins/BertaDevKit/` | `<YourProject>/Plugins/BertaDevKit/` |
+| BertaDualSense | `BertaDevKitHost/Plugins/BertaDualSense/` | `<YourProject>/Plugins/BertaDualSense/` |
 
-into:
-
-```text
-<YourProject>/Plugins/BertaDevKit/
-```
-
-Then target UE 5.8, regenerate project files if needed, build, enable **BertaDevKit** in the Plugins window, and configure runtime settings under **Project Settings → Plugins → BertaDevKit**.
-
-The repository root is a development host around the plugin; cloning the repository directly as `<YourProject>/Plugins/BertaDevKit` is not the intended installation layout.
+Target UE 5.8, regenerate project files if needed, build, and enable the plugin in Unreal's Plugins window. BertaDualSense is Win64-only and stages its vendored SDL3 dependency from its own plugin directory. The repository root is a development host, so copying the repository itself into a project plugin directory is not the intended layout.
 
 ## Log categories
 
 | Category | Scope |
 | --- | --- |
-| `LogBertaDevKit` | Runtime utilities and systems |
-| `LogBertaDebug` | Debug logging and drawing |
-| `LogBertaDevKitEditor` | Editor tooling and validation |
+| `LogBertaDevKit` | BertaDevKit Runtime utilities and systems |
+| `LogBertaDebug` | BertaDevKit debug logging and drawing |
+| `LogBertaDevKitEditor` | BertaDevKit Editor tooling and validation |
+| `LogBertaDualSense` | BertaDualSense discovery, lifecycle, and SDL output failures |
 
 ## About
 
