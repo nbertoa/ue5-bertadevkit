@@ -293,7 +293,28 @@ class FBertaDualSenseInputDevice final : public IInputDevice
 
 		virtual void SetLightColor(int32 ControllerId, FColor Color) override { ForEachControllerDevice(ControllerId, [&Color](FConnectedDualSense& Device){ SetLight(Device, Color); }); }
 		virtual void ResetLightColor(int32 ControllerId) override { ForEachControllerDevice(ControllerId, [](FConnectedDualSense& Device){ SetLight(Device, FColor::Black); }); }
-		virtual void SetDeviceProperty(int32 ControllerId, const FInputDeviceProperty* Property) override { if (Property) ForEachControllerDevice(ControllerId, [Property](FConnectedDualSense& Device){ SetTriggerProperty(Device, *Property); }); }
+		virtual void SetDeviceProperty(int32 ControllerId, const FInputDeviceProperty* Property) override
+		{
+			if (!Property)
+			{
+				return;
+			}
+
+			if (Property->Name == FInputDeviceLightColorProperty::PropertyName())
+			{
+				const FInputDeviceLightColorProperty& LightProperty = static_cast<const FInputDeviceLightColorProperty&>(*Property);
+				ForEachControllerDevice(ControllerId, [&LightProperty](FConnectedDualSense& Device)
+				{
+					SetLight(Device, LightProperty.bEnable ? LightProperty.Color : FColor::Black);
+				});
+				return;
+			}
+
+			ForEachControllerDevice(ControllerId, [Property](FConnectedDualSense& Device)
+			{
+				SetTriggerProperty(Device, *Property);
+			});
+		}
 		void SetMicrophoneLed(int32 ControllerId, bool bOn) { ForEachControllerDevice(ControllerId, [bOn](FConnectedDualSense& Device){ Device.bMicrophoneLedOn=bOn; SendPs5Effects(Device,false,false,true); }); }
 		virtual bool SupportsForceFeedback(int32 ControllerId) override
 		{
