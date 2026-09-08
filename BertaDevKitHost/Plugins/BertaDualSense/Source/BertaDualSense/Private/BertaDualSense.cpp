@@ -129,6 +129,8 @@ namespace
 		bool bSupportsPlayerLed = false;
 		bool bAccelerometerEnabled = false;
 		bool bGyroscopeEnabled = false;
+		bool bSupportsAccelerometer = false;
+		bool bSupportsGyroscope = false;
 		bool bSensorFailureLogged = false;
 		bool bAdvancedOutputFailureLogged = false;
 		bool bMicrophoneLedOn = false;
@@ -322,6 +324,12 @@ class FBertaDualSenseInputDevice final : public IInputDevice
 			});
 		}
 		void SetMicrophoneLed(int32 ControllerId, bool bOn) { ForEachControllerDevice(ControllerId, [bOn](FConnectedDualSense& Device){ Device.bMicrophoneLedOn=bOn; SendPs5Effects(Device,false,false,true); }); }
+		void GetConnectedDevices(TArray<FBertaDualSenseDeviceInfo>& Out) const { Out.Reset(); for(const TPair<SDL_JoystickID,FConnectedDualSense>& Pair:ConnectedDevices){ FBertaDualSenseDeviceInfo Info; BuildDeviceInfo(Pair.Value,Info); Out.Add(MoveTemp(Info)); } Out.Sort([](const FBertaDualSenseDeviceInfo& A,const FBertaDualSenseDeviceInfo& B){return A.Device.DeviceId<B.Device.DeviceId;}); }
+		bool GetDeviceInfo(const FBertaDualSenseDeviceHandle& Handle, FBertaDualSenseDeviceInfo& Out) const { if(const FConnectedDualSense* D=FindDevice(Handle)){BuildDeviceInfo(*D,Out);return true;} Out={};return false; }
+		bool IsDeviceConnected(const FBertaDualSenseDeviceHandle& Handle) const { return FindDevice(Handle)!=nullptr; }
+		bool SetLightColorForDevice(const FBertaDualSenseDeviceHandle& Handle,FColor Color) { if(FConnectedDualSense* D=FindDevice(Handle))return SetLight(*D,Color);return false; }
+		bool ResetLightColorForDevice(const FBertaDualSenseDeviceHandle& Handle) { return SetLightColorForDevice(Handle,FColor::Black); }
+		bool SetMicrophoneLedForDevice(const FBertaDualSenseDeviceHandle& Handle,bool bOn) { if(FConnectedDualSense* D=FindDevice(Handle)){D->bMicrophoneLedOn=bOn;return SendPs5Effects(*D,false,false,true);}return false; }
 		virtual bool SupportsForceFeedback(int32 ControllerId) override
 		{
 			const FPlatformUserId PlatformUserId = GetPlatformUserForControllerId(ControllerId);
@@ -388,12 +396,17 @@ class FBertaDualSenseInputDevice final : public IInputDevice
 			}
 		}
 		template<typename TFunction> void ForEachControllerDevice(int32 ControllerId, TFunction&& Function) { const FPlatformUserId User=GetPlatformUserForControllerId(ControllerId); if(!User.IsValid())return; for(TPair<SDL_JoystickID,FConnectedDualSense>& Pair:ConnectedDevices)if(Pair.Value.PlatformUserId==User)Function(Pair.Value); }
-		static void SetLight(FConnectedDualSense& Device,FColor Color) { if(Device.bSupportsRgbLed&&!SDL_SetGamepadLED(Device.Gamepad,Color.R,Color.G,Color.B)) UE_LOG(LogBertaDualSense,Warning,TEXT("SDL_SetGamepadLED failed for InputDeviceId %d: %s"),Device.InputDeviceId.GetId(),UTF8_TO_TCHAR(SDL_GetError())); }
+		FConnectedDualSense* FindDevice(const FBertaDualSenseDeviceHandle& Handle) { for(TPair<SDL_JoystickID,FConnectedDualSense>& Pair:ConnectedDevices)if(Pair.Value.InputDeviceId.GetId()==Handle.DeviceId)return &Pair.Value;return nullptr; }
+		const FConnectedDualSense* FindDevice(const FBertaDualSenseDeviceHandle& Handle) const { for(const TPair<SDL_JoystickID,FConnectedDualSense>& Pair:ConnectedDevices)if(Pair.Value.InputDeviceId.GetId()==Handle.DeviceId)return &Pair.Value;return nullptr; }
+		static EBertaDualSenseConnectionType ToConnection(const SDL_JoystickConnectionState S){return S==SDL_JOYSTICK_CONNECTION_WIRED?EBertaDualSenseConnectionType::Wired:S==SDL_JOYSTICK_CONNECTION_WIRELESS?EBertaDualSenseConnectionType::Wireless:EBertaDualSenseConnectionType::Unknown;}
+		static EBertaDualSensePowerState ToPower(const SDL_PowerState S){switch(S){case SDL_POWERSTATE_ON_BATTERY:return EBertaDualSensePowerState::OnBattery;case SDL_POWERSTATE_NO_BATTERY:return EBertaDualSensePowerState::NoBattery;case SDL_POWERSTATE_CHARGING:return EBertaDualSensePowerState::Charging;case SDL_POWERSTATE_CHARGED:return EBertaDualSensePowerState::Charged;default:return EBertaDualSensePowerState::Unknown;}}
+		static void BuildDeviceInfo(const FConnectedDualSense& D,FBertaDualSenseDeviceInfo& O){O={};O.Device.DeviceId=D.InputDeviceId.GetId();O.Model=D.ProductId==DualSenseEdgeProductId?EBertaDualSenseModel::DualSenseEdge:EBertaDualSenseModel::DualSense;O.ConnectionType=ToConnection(SDL_GetGamepadConnectionState(D.Gamepad));int Percent=-1;O.PowerState=ToPower(SDL_GetGamepadPowerInfo(D.Gamepad,&Percent));O.BatteryPercent=Percent>=0&&Percent<=100?Percent:-1;O.FirmwareVersion=SDL_GetGamepadFirmwareVersion(D.Gamepad);O.SerialNumber=ToUnrealString(SDL_GetGamepadSerial(D.Gamepad));O.Name=ToUnrealString(SDL_GetGamepadName(D.Gamepad));O.ProductId=D.ProductId;O.bSupportsRumble=D.bSupportsRumble;O.bSupportsRgbLed=D.bSupportsRgbLed;O.bSupportsPlayerLed=D.bSupportsPlayerLed;O.bHasTouchpad=D.bHasTouchpad;O.bSupportsAccelerometer=D.bSupportsAccelerometer;O.bSupportsGyroscope=D.bSupportsGyroscope;}
+		static bool SetLight(FConnectedDualSense& Device,FColor Color) { if(!Device.bSupportsRgbLed)return false; if(SDL_SetGamepadLED(Device.Gamepad,Color.R,Color.G,Color.B))return true; UE_LOG(LogBertaDualSense,Warning,TEXT("SDL_SetGamepadLED failed for InputDeviceId %d: %s"),Device.InputDeviceId.GetId(),UTF8_TO_TCHAR(SDL_GetError()));return false; }
 		static void ClearTrigger(Uint8 (&E)[TriggerEffectSize]) { FMemory::Memzero(E);E[0]=0x05; }
 		static void FeedbackTrigger(Uint8 (&E)[TriggerEffectSize],int32 Position,int32 Strength) { FMemory::Memzero(E);E[0]=0x01;E[1]=static_cast<Uint8>(FMath::Clamp(Position,0,255));E[2]=static_cast<Uint8>(FMath::Clamp(Strength,0,255)); }
 		static void VibrationTrigger(Uint8 (&E)[TriggerEffectSize],int32 Position,int32 Frequency,int32 Strength) { FMemory::Memzero(E);E[0]=0x06;E[1]=static_cast<Uint8>(FMath::Clamp(Position,0,255));E[2]=static_cast<Uint8>(FMath::Clamp(Strength,0,255));E[3]=static_cast<Uint8>(FMath::Clamp(Frequency,0,255)); }
 		static void ResistanceTrigger(Uint8 (&E)[TriggerEffectSize],int32 StartPosition,int32 StartStrength,int32 EndStrength) { FeedbackTrigger(E, StartPosition, (FMath::Clamp(StartStrength,0,255) + FMath::Clamp(EndStrength,0,255)) / 2); }
-		static void SendPs5Effects(FConnectedDualSense& D,bool L,bool R,bool M) { FPS5EffectsState E; if(R){E.EnableBits1|=EnableRightTrigger;FMemory::Memcpy(E.RightTrigger,D.RightTriggerEffect,TriggerEffectSize);}if(L){E.EnableBits1|=EnableLeftTrigger;FMemory::Memcpy(E.LeftTrigger,D.LeftTriggerEffect,TriggerEffectSize);}if(M){E.EnableBits2|=EnableMicLight;E.MicLightMode=D.bMicrophoneLedOn?1:0;}if(!SDL_SendGamepadEffect(D.Gamepad,&E,sizeof(E))&&!D.bAdvancedOutputFailureLogged){D.bAdvancedOutputFailureLogged=true;UE_LOG(LogBertaDualSense,Warning,TEXT("SDL_SendGamepadEffect failed for InputDeviceId %d: %s"),D.InputDeviceId.GetId(),UTF8_TO_TCHAR(SDL_GetError()));}}
+		static bool SendPs5Effects(FConnectedDualSense& D,bool L,bool R,bool M) { FPS5EffectsState E; if(R){E.EnableBits1|=EnableRightTrigger;FMemory::Memcpy(E.RightTrigger,D.RightTriggerEffect,TriggerEffectSize);}if(L){E.EnableBits1|=EnableLeftTrigger;FMemory::Memcpy(E.LeftTrigger,D.LeftTriggerEffect,TriggerEffectSize);}if(M){E.EnableBits2|=EnableMicLight;E.MicLightMode=D.bMicrophoneLedOn?1:0;}if(SDL_SendGamepadEffect(D.Gamepad,&E,sizeof(E))){D.bAdvancedOutputFailureLogged=false;return true;}if(!D.bAdvancedOutputFailureLogged){D.bAdvancedOutputFailureLogged=true;UE_LOG(LogBertaDualSense,Warning,TEXT("SDL_SendGamepadEffect failed for InputDeviceId %d: %s"),D.InputDeviceId.GetId(),UTF8_TO_TCHAR(SDL_GetError()));}return false;}
 		static void SetTriggerProperty(FConnectedDualSense& D,const FInputDeviceProperty& P) { bool L=false,R=false; if(P.Name==FInputDeviceTriggerResetProperty::PropertyName()){const auto& V=static_cast<const FInputDeviceTriggerResetProperty&>(P);L=EnumHasAnyFlags(V.AffectedTriggers,EInputDeviceTriggerMask::Left);R=EnumHasAnyFlags(V.AffectedTriggers,EInputDeviceTriggerMask::Right);if(L){ClearTrigger(D.LeftTriggerEffect);D.bLeftTriggerEffectActive=false;}if(R){ClearTrigger(D.RightTriggerEffect);D.bRightTriggerEffectActive=false;}}else if(P.Name==FInputDeviceTriggerFeedbackProperty::PropertyName()){const auto& V=static_cast<const FInputDeviceTriggerFeedbackProperty&>(P);L=EnumHasAnyFlags(V.AffectedTriggers,EInputDeviceTriggerMask::Left);R=EnumHasAnyFlags(V.AffectedTriggers,EInputDeviceTriggerMask::Right);if(L){FeedbackTrigger(D.LeftTriggerEffect,V.Position,V.Strengh);D.bLeftTriggerEffectActive=true;}if(R){FeedbackTrigger(D.RightTriggerEffect,V.Position,V.Strengh);D.bRightTriggerEffectActive=true;}}else if(P.Name==FInputDeviceTriggerResistanceProperty::PropertyName()){const auto& V=static_cast<const FInputDeviceTriggerResistanceProperty&>(P);L=EnumHasAnyFlags(V.AffectedTriggers,EInputDeviceTriggerMask::Left);R=EnumHasAnyFlags(V.AffectedTriggers,EInputDeviceTriggerMask::Right);if(L){ResistanceTrigger(D.LeftTriggerEffect,V.StartPosition,V.StartStrengh,V.EndStrengh);D.bLeftTriggerEffectActive=true;}if(R){ResistanceTrigger(D.RightTriggerEffect,V.StartPosition,V.StartStrengh,V.EndStrengh);D.bRightTriggerEffectActive=true;}}else if(P.Name==FInputDeviceTriggerVibrationProperty::PropertyName()){const auto& V=static_cast<const FInputDeviceTriggerVibrationProperty&>(P);L=EnumHasAnyFlags(V.AffectedTriggers,EInputDeviceTriggerMask::Left);R=EnumHasAnyFlags(V.AffectedTriggers,EInputDeviceTriggerMask::Right);if(L){VibrationTrigger(D.LeftTriggerEffect,V.TriggerPosition,V.VibrationFrequency,V.VibrationAmplitude);D.bLeftTriggerEffectActive=true;}if(R){VibrationTrigger(D.RightTriggerEffect,V.TriggerPosition,V.VibrationFrequency,V.VibrationAmplitude);D.bRightTriggerEffectActive=true;}}if(L||R)SendPs5Effects(D,L,R,false); }
 		void SendControllerEvents(FConnectedDualSense& ConnectedDevice)
 		{
@@ -592,8 +605,10 @@ class FBertaDualSenseInputDevice final : public IInputDevice
 			ConnectedDevice.InputDeviceId = InputDeviceId;
 			ConnectedDevice.ProductId = ProductId;
 			ConnectedDevice.PlatformUserId = PlatformUserId;
-			ConnectedDevice.bAccelerometerEnabled = SDL_GamepadHasSensor(Gamepad, SDL_SENSOR_ACCEL) && SDL_SetGamepadSensorEnabled(Gamepad, SDL_SENSOR_ACCEL, true);
-			ConnectedDevice.bGyroscopeEnabled = SDL_GamepadHasSensor(Gamepad, SDL_SENSOR_GYRO) && SDL_SetGamepadSensorEnabled(Gamepad, SDL_SENSOR_GYRO, true);
+			ConnectedDevice.bSupportsAccelerometer = SDL_GamepadHasSensor(Gamepad, SDL_SENSOR_ACCEL);
+			ConnectedDevice.bSupportsGyroscope = SDL_GamepadHasSensor(Gamepad, SDL_SENSOR_GYRO);
+			ConnectedDevice.bAccelerometerEnabled = ConnectedDevice.bSupportsAccelerometer && SDL_SetGamepadSensorEnabled(Gamepad, SDL_SENSOR_ACCEL, true);
+			ConnectedDevice.bGyroscopeEnabled = ConnectedDevice.bSupportsGyroscope && SDL_SetGamepadSensorEnabled(Gamepad, SDL_SENSOR_GYRO, true);
 
 			const SDL_PropertiesID GamepadProperties = SDL_GetGamepadProperties(Gamepad);
 			ConnectedDevice.bSupportsRumble = SDL_GetBooleanProperty(GamepadProperties, SDL_PROP_GAMEPAD_CAP_RUMBLE_BOOLEAN, false);
@@ -832,4 +847,10 @@ TSharedPtr<IInputDevice> FBertaDualSenseModule::CreateInputDevice(const TSharedR
 }
 
 void FBertaDualSenseModule::SetMicrophoneLed(int32 ControllerId, bool bEnabled) { for(const TWeakPtr<FBertaDualSenseInputDevice>& Weak:CreatedInputDevices) if(const TSharedPtr<FBertaDualSenseInputDevice> Device=Weak.Pin()) Device->SetMicrophoneLed(ControllerId,bEnabled); }
+void FBertaDualSenseModule::GetConnectedDevices(TArray<FBertaDualSenseDeviceInfo>& OutDevices) const { OutDevices.Reset(); for(const TWeakPtr<FBertaDualSenseInputDevice>& Weak:CreatedInputDevices)if(const TSharedPtr<FBertaDualSenseInputDevice> Device=Weak.Pin()){Device->GetConnectedDevices(OutDevices);break;} }
+bool FBertaDualSenseModule::GetDeviceInfo(const FBertaDualSenseDeviceHandle& Device,FBertaDualSenseDeviceInfo& OutInfo) const { for(const TWeakPtr<FBertaDualSenseInputDevice>& Weak:CreatedInputDevices)if(const TSharedPtr<FBertaDualSenseInputDevice> Input=Weak.Pin())return Input->GetDeviceInfo(Device,OutInfo);OutInfo={};return false; }
+bool FBertaDualSenseModule::IsDeviceConnected(const FBertaDualSenseDeviceHandle& Device) const { FBertaDualSenseDeviceInfo Info;return GetDeviceInfo(Device,Info); }
+bool FBertaDualSenseModule::SetLightColorForDevice(const FBertaDualSenseDeviceHandle& Device,FColor Color) { for(const TWeakPtr<FBertaDualSenseInputDevice>& Weak:CreatedInputDevices)if(const TSharedPtr<FBertaDualSenseInputDevice> Input=Weak.Pin())return Input->SetLightColorForDevice(Device,Color);return false; }
+bool FBertaDualSenseModule::ResetLightColorForDevice(const FBertaDualSenseDeviceHandle& Device) { return SetLightColorForDevice(Device,FColor::Black); }
+bool FBertaDualSenseModule::SetMicrophoneLedForDevice(const FBertaDualSenseDeviceHandle& Device,bool bEnabled) { for(const TWeakPtr<FBertaDualSenseInputDevice>& Weak:CreatedInputDevices)if(const TSharedPtr<FBertaDualSenseInputDevice> Input=Weak.Pin())return Input->SetMicrophoneLedForDevice(Device,bEnabled);return false; }
 IMPLEMENT_MODULE(FBertaDualSenseModule, BertaDualSense)
