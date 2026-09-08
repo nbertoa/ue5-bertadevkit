@@ -35,6 +35,9 @@ namespace
 	constexpr Uint8 EnableLeftTrigger = 0x08;
 	constexpr Uint8 EnableMicLight = 0x01;
 	const FName EdgeButtonKeys[NumEdgeButtons] = { FName(TEXT("BertaDualSense_Edge_RightPaddle")), FName(TEXT("BertaDualSense_Edge_LeftPaddle")), FName(TEXT("BertaDualSense_Edge_RightFn")), FName(TEXT("BertaDualSense_Edge_LeftFn")) };
+	const FName Touchpad2XKey(TEXT("BertaDualSense_Touchpad2_X"));
+	const FName Touchpad2YKey(TEXT("BertaDualSense_Touchpad2_Y"));
+	const FName Touchpad2TouchedKey(TEXT("BertaDualSense_Touchpad2_Touched"));
 	struct FPS5EffectsState { Uint8 EnableBits1=0, EnableBits2=0, RumbleRight=0, RumbleLeft=0, HeadphoneVolume=0, SpeakerVolume=0, MicrophoneVolume=0, AudioEnableBits=0, MicLightMode=0, AudioMuteBits=0; Uint8 RightTrigger[TriggerEffectSize]={}; Uint8 LeftTrigger[TriggerEffectSize]={}; Uint8 Reserved1[6]={}; Uint8 EnableBits3=0; Uint8 Reserved2[2]={}; Uint8 LedAnimation=0, LedBrightness=0, PadLights=0, LedRed=0, LedGreen=0, LedBlue=0; };
 	static_assert(sizeof(FPS5EffectsState) == 47);
 
@@ -121,6 +124,10 @@ namespace
 		bool bTouchpadTouched = false;
 		float TouchpadX = 0.0f;
 		float TouchpadY = 0.0f;
+		int32 SecondaryTouchpadFinger = INDEX_NONE;
+		bool bTouchpad2Touched = false;
+		float Touchpad2X = 0.0f;
+		float Touchpad2Y = 0.0f;
 		bool bTouchpadQueryFailureLogged = false;
 		Uint16 ProductId = 0;
 		bool EdgeButtonStates[NumEdgeButtons] = {};
@@ -530,6 +537,14 @@ class FBertaDualSenseInputDevice final : public IInputDevice
 					}
 				}
 			}
+			if (ConnectedDevice.SecondaryTouchpadFinger == ConnectedDevice.PrimaryTouchpadFinger || ConnectedDevice.SecondaryTouchpadFinger == INDEX_NONE || !Fingers[ConnectedDevice.SecondaryTouchpadFinger].bDown)
+			{
+				ConnectedDevice.SecondaryTouchpadFinger = INDEX_NONE;
+				for (int32 FingerIndex = 0; FingerIndex < Fingers.Num(); ++FingerIndex)
+				{
+					if (FingerIndex != ConnectedDevice.PrimaryTouchpadFinger && Fingers[FingerIndex].bDown) { ConnectedDevice.SecondaryTouchpadFinger = FingerIndex; break; }
+				}
+			}
 
 			const bool bTouched = ConnectedDevice.PrimaryTouchpadFinger != INDEX_NONE;
 			if (bTouched)
@@ -559,6 +574,24 @@ class FBertaDualSenseInputDevice final : public IInputDevice
 				ConnectedDevice.TouchpadY = 0.0f;
 			}
 			ConnectedDevice.bTouchpadTouched = bTouched;
+
+			const bool bTouchpad2Touched = ConnectedDevice.SecondaryTouchpadFinger != INDEX_NONE;
+			if (bTouchpad2Touched)
+			{
+				const FTouchpadFingerState& SecondaryFinger = Fingers[ConnectedDevice.SecondaryTouchpadFinger];
+				if (!ConnectedDevice.bTouchpad2Touched) MessageHandler->OnControllerButtonPressed(Touchpad2TouchedKey, ConnectedDevice.PlatformUserId, ConnectedDevice.InputDeviceId, false);
+				if (!ConnectedDevice.bTouchpad2Touched || SecondaryFinger.X != ConnectedDevice.Touchpad2X) MessageHandler->OnControllerAnalog(Touchpad2XKey, ConnectedDevice.PlatformUserId, ConnectedDevice.InputDeviceId, SecondaryFinger.X);
+				if (!ConnectedDevice.bTouchpad2Touched || SecondaryFinger.Y != ConnectedDevice.Touchpad2Y) MessageHandler->OnControllerAnalog(Touchpad2YKey, ConnectedDevice.PlatformUserId, ConnectedDevice.InputDeviceId, SecondaryFinger.Y);
+				ConnectedDevice.Touchpad2X = SecondaryFinger.X; ConnectedDevice.Touchpad2Y = SecondaryFinger.Y;
+			}
+			else if (ConnectedDevice.bTouchpad2Touched)
+			{
+				MessageHandler->OnControllerButtonReleased(Touchpad2TouchedKey, ConnectedDevice.PlatformUserId, ConnectedDevice.InputDeviceId, false);
+				MessageHandler->OnControllerAnalog(Touchpad2XKey, ConnectedDevice.PlatformUserId, ConnectedDevice.InputDeviceId, 0.0f);
+				MessageHandler->OnControllerAnalog(Touchpad2YKey, ConnectedDevice.PlatformUserId, ConnectedDevice.InputDeviceId, 0.0f);
+				ConnectedDevice.Touchpad2X = 0.0f; ConnectedDevice.Touchpad2Y = 0.0f;
+			}
+			ConnectedDevice.bTouchpad2Touched = bTouchpad2Touched;
 		}
 		void ConnectDevice(const SDL_JoystickID InstanceId, const Uint16 VendorId, const Uint16 ProductId)
 		{
@@ -654,10 +687,20 @@ class FBertaDualSenseInputDevice final : public IInputDevice
 				MessageHandler->OnControllerAnalog(FGamepadKeyNames::SpecialLeft_X, ConnectedDevice.PlatformUserId, ConnectedDevice.InputDeviceId, 0.0f);
 				MessageHandler->OnControllerAnalog(FGamepadKeyNames::SpecialLeft_Y, ConnectedDevice.PlatformUserId, ConnectedDevice.InputDeviceId, 0.0f);
 			}
+			if (ConnectedDevice.bTouchpad2Touched)
+			{
+				MessageHandler->OnControllerButtonReleased(Touchpad2TouchedKey, ConnectedDevice.PlatformUserId, ConnectedDevice.InputDeviceId, false);
+				MessageHandler->OnControllerAnalog(Touchpad2XKey, ConnectedDevice.PlatformUserId, ConnectedDevice.InputDeviceId, 0.0f);
+				MessageHandler->OnControllerAnalog(Touchpad2YKey, ConnectedDevice.PlatformUserId, ConnectedDevice.InputDeviceId, 0.0f);
+			}
 			ConnectedDevice.PrimaryTouchpadFinger = INDEX_NONE;
+			ConnectedDevice.SecondaryTouchpadFinger = INDEX_NONE;
 			ConnectedDevice.bTouchpadTouched = false;
+			ConnectedDevice.bTouchpad2Touched = false;
 			ConnectedDevice.TouchpadX = 0.0f;
 			ConnectedDevice.TouchpadY = 0.0f;
+			ConnectedDevice.Touchpad2X = 0.0f;
+			ConnectedDevice.Touchpad2Y = 0.0f;
 			ConnectedDevice.bTouchpadQueryFailureLogged = false;
 		}
 
@@ -741,6 +784,9 @@ void FBertaDualSenseModule::StartupModule()
 	EKeys::AddKey(FKeyDetails(FName(TEXT("BertaDualSense_TouchpadClick")),FText::FromString(TEXT("DualSense Touchpad Click")),FKeyDetails::GamepadKey));
 	EKeys::AddKey(FKeyDetails(FName(TEXT("BertaDualSense_PSButton")),FText::FromString(TEXT("DualSense PS Button")),FKeyDetails::GamepadKey));
 	EKeys::AddKey(FKeyDetails(FName(TEXT("BertaDualSense_MicrophoneButton")),FText::FromString(TEXT("DualSense Microphone Button")),FKeyDetails::GamepadKey));
+	EKeys::AddKey(FKeyDetails(Touchpad2XKey,FText::FromString(TEXT("DualSense Touchpad 2 X")),FKeyDetails::GamepadKey|FKeyDetails::Axis1D));
+	EKeys::AddKey(FKeyDetails(Touchpad2YKey,FText::FromString(TEXT("DualSense Touchpad 2 Y")),FKeyDetails::GamepadKey|FKeyDetails::Axis1D));
+	EKeys::AddKey(FKeyDetails(Touchpad2TouchedKey,FText::FromString(TEXT("DualSense Touchpad 2 Touched")),FKeyDetails::GamepadKey));
 	const TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("BertaDualSense"));
 	if (!Plugin)
 	{

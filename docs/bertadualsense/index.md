@@ -73,6 +73,10 @@ The plugin deliberately sends zero Tilt and Acceleration. SDL accelerometer data
 
 Legacy `ControllerId` output callbacks are routed to every connected BertaDualSense assigned to that resolved UE platform user. They cannot select one exact `FInputDeviceId` when several controllers share the same platform user.
 
+`Get Connected DualSense Devices` exposes model, connection, SDL power state, battery percentage (`-1` when unavailable), firmware integer, serial availability, and capabilities. Its opaque exact-device handle can set/reset one lightbar and set one microphone LED. Serial-backed reconnects reuse the handle during the plugin lifetime; reconnects without a serial receive a new handle.
+
+The existing primary touch remains `Gamepad_Special_Left_X`, `Gamepad_Special_Left_Y`, and `Gamepad_Special_Left_Touched`. The second physical contact uses `BertaDualSense_Touchpad2_X`, `BertaDualSense_Touchpad2_Y`, and `BertaDualSense_Touchpad2_Touched`. The plugin provides neither touch pressure nor gesture recognition.
+
 ### Adaptive-trigger note
 
 BertaDualSense uses SDL3's PS5 effect path for trigger output, not trigger rumble. Reset, Feedback, and Vibration map to their supported SDL PS5 effect modes. UE's generic Resistance property includes start/end positions and strengths; SDL's available feedback mode cannot faithfully encode the complete interval. The current Resistance mapping starts at `StartPosition` and uses the mean of `StartStrengh` and `EndStrengh`; `EndPosition` is not represented. Treat it as an approximation rather than a linear resistance curve.
@@ -93,7 +97,7 @@ XInput can continue to handle Xbox/XInput controllers. Steam Input, DS4Windows, 
 
 - Win64 and UE 5.8 only.
 - Only the listed Sony VID/PID pairs are accepted.
-- No custom touch gestures, multitouch API, touchpad pressure, battery, speaker/audio, or custom HID transport API.
+- No custom touch gestures, touchpad pressure, speaker/audio, or custom HID transport API.
 - The PS and microphone buttons are custom keys, not standard Unreal gamepad aliases.
 - Packaged-project behavior and DualSense Edge hardware behavior still require project-specific manual verification.
 
