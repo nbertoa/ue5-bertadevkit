@@ -4,6 +4,7 @@
 #include "AssetActions/BertaAssetAuditor.h"
 #include "AssetInsights/BertaAssetInsights.h"
 #include "BlueprintAudit/BertaBlueprintAuditor.h"
+#include "BlueprintUsages/BertaBlueprintUsageFinder.h"
 #include "Log/BertaDevKitEditorLog.h"
 
 #include "AssetRegistry/AssetRegistryModule.h"
@@ -121,6 +122,11 @@ void FBertaContentBrowserMenu::Register()
 			FilterProjectAssets(Context->SelectedAssets, Assets);
 			if (!Assets.IsEmpty())
 			{
+				if (Assets.Num() == 1)
+				{
+					FToolMenuEntry UsageEntry = FToolMenuEntry::InitMenuEntry(TEXT("BertaFindBlueprintUsages"), LOCTEXT("FindBlueprintUsages", "Find Blueprint Usages"), LOCTEXT("FindBlueprintUsagesTooltip", "Find exact graph nodes in project Blueprints that reference this asset. Read-only."), FSlateIcon(), FUIAction(FExecuteAction::CreateLambda([Asset = Assets[0]](){ FBertaBlueprintUsageFinder::FindUsages(Asset); })));
+					UsageEntry.Owner = FToolMenuOwner(BertaContentBrowserOwnerName); Section.AddEntry(UsageEntry);
+				}
 				AddAssetNamingSubMenu(Section, Assets, LOCTEXT("SelectedAssets", "the selected project asset(s)"));
 				AddAssetCleanerSubMenu(Section, Assets, LOCTEXT("SelectedAssetsForCleaner", "the selected project asset(s)"));
 				AddBlueprintAuditSubMenu(Section, Assets, LOCTEXT("SelectedAssetsForBlueprintAudit", "the selected project asset(s)"));

@@ -74,6 +74,7 @@ void FBertaDevKitEditorModule::RegisterBlueprintAuditMessageLog()
 	Options.bShowPages = true;
 	Options.MaxPageCount = 10;
 	FModuleManager::LoadModuleChecked<FMessageLogModule>(TEXT("MessageLog")).RegisterLogListing(TEXT("BertaDevKitBlueprintAudit"), NSLOCTEXT("BertaDevKit", "BlueprintAuditMessageLog", "BertaDevKit Blueprint Audit"), Options);
+	FModuleManager::LoadModuleChecked<FMessageLogModule>(TEXT("MessageLog")).RegisterLogListing(TEXT("BertaDevKitBlueprintUsages"), NSLOCTEXT("BertaDevKit", "BlueprintUsageMessageLog", "BertaDevKit Blueprint Usages"), Options);
 }
 
 void FBertaDevKitEditorModule::UnregisterBlueprintAuditMessageLog()
