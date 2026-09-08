@@ -53,6 +53,7 @@ public:
 	virtual bool SupportsDynamicReloading() override { return false; }
 	void SetMicrophoneLed(int32 ControllerId, bool bEnabled);
 	void GetConnectedDevices(TArray<FBertaDualSenseDeviceInfo>& OutDevices) const;
+	void GetDevicesForControllerId(int32 ControllerId, TArray<FBertaDualSenseDeviceInfo>& OutDevices) const;
 	bool GetDeviceInfo(const FBertaDualSenseDeviceHandle& Device, FBertaDualSenseDeviceInfo& OutInfo) const;
 	bool IsDeviceConnected(const FBertaDualSenseDeviceHandle& Device) const;
 	bool SetLightColorForDevice(const FBertaDualSenseDeviceHandle& Device, FColor Color);

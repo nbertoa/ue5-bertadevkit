@@ -85,7 +85,7 @@ The plugin deliberately sends zero Tilt and Acceleration. SDL accelerometer data
 
 Legacy `ControllerId` output callbacks are routed to every connected BertaDualSense assigned to that resolved UE platform user. They cannot select one exact `FInputDeviceId` when several controllers share the same platform user.
 
-`GetConnectedDualSenseDevices` reports model, wired/wireless state, SDL power state, battery percentage (`-1` when unavailable), firmware integer, serial when SDL provides it, and output/sensor capabilities. Its opaque device handle targets one currently connected device for lightbar and microphone LED output. A reconnect reuses the handle during the plugin lifetime when SDL provides the same serial; without a serial it receives a new handle.
+`GetConnectedDualSenseDevices` and `GetDualSenseDeviceInfo` are explicit callable telemetry operations. `GetDualSenseDevicesForControllerId` maps a legacy UE ControllerId to every BertaDualSense assigned to its PlatformUser; multiple devices may be returned. Their opaque handles target one currently connected device for lightbar and microphone LED output, while existing ControllerId output remains PlatformUser-scoped. A reconnect reuses the handle during the plugin lifetime when SDL provides the same serial; without a serial it receives a new handle.
 
 ### Adaptive-trigger note
 
