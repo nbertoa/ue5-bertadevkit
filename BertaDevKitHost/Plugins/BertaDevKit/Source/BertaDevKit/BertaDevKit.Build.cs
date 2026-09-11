@@ -12,10 +12,12 @@ public class BertaDevKit : ModuleRules
 		// a transitive dependency for all consumers.
 		PublicDependencyModuleNames.AddRange(new string[]
 		{
+			"AIModule", // UBTDecorator is part of the public API.
 			"Core",
 			"CoreUObject",
 			"Engine",
 			"DeveloperSettings", // UDeveloperSettings
+			"GameplayTags", // FGameplayTag is part of the public API.
 			"UMG" // UUserWidget is part of the public Blueprint API.
 		});
 
@@ -24,9 +26,8 @@ public class BertaDevKit : ModuleRules
 		// implementation details that shouldn't leak into the public API.
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
-			// Empty for now. Add here as the plugin grows.
+			"GameplayAbilities" // UAbilitySystemComponent is an implementation detail.
 			// Examples:
-			// "GameplayAbilities" — when GAS helpers are added
 			// "EnhancedInput"    — when input helpers are added
 		});
 	}
