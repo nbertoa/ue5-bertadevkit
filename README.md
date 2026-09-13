@@ -1,8 +1,8 @@
 # BertaDevKit
 
-**Personal Unreal Engine 5.8 development toolbox with native DualSense input, system information, external-process integration, runtime game-window control, and Win64 desktop capture.**
+**Personal Unreal Engine 5.8 development toolbox with native DualSense input, system information, external-process integration, runtime game-window control, desktop capture, and serial communication.**
 
-This repository is a UE 5.8 development host for six independent sibling plugins. It is personal R&D tooling, not a gameplay framework or commercial product.
+This repository is a UE 5.8 development host for seven independent sibling plugins. It is personal R&D tooling, not a gameplay framework or commercial product.
 
 > **Documentation:** <https://nbertoa.github.io/ue5-bertadevkit/>
 
@@ -32,6 +32,10 @@ A stateless Runtime C++ and Blueprint API for inspecting and controlling the cur
 
 A Win64 Runtime C++ and Blueprint API for enumerating displays and visible top-level windows and capturing a selected source into a live transient `UTexture2D`. Each capture belongs to one `GameInstance`; the CPU-backed BGRA8 path is independent of Unreal's active RHI.
 
+### BertaSerial
+
+A Win64 Runtime C++ and Blueprint API for current COM-port enumeration, asynchronous raw-byte reception, ordered queued transmission, UTF-8 write helpers, explicit disconnect errors, and deterministic `GameInstance` cleanup.
+
 The plugins are independent siblings: none is a module of or dependency of another.
 
 ## Requirements
@@ -40,6 +44,7 @@ The plugins are independent siblings: none is a module of or dependency of anoth
 - A C++ toolchain supported by Unreal Engine 5.8
 - Win64 for BertaDualSense
 - Windows 10 version 1903 or later and Win64 for BertaDesktopCapture
+- Win64 and a Windows COM-port device/driver for BertaSerial
 - Git LFS for the repository host
 
 ## Install in another project
@@ -54,10 +59,11 @@ Copy any plugin independently into the matching project plugin directory:
 | BertaProcessBridge | `BertaDevKitHost/Plugins/BertaProcessBridge/` | `<YourProject>/Plugins/BertaProcessBridge/` |
 | BertaWindowTools | `BertaDevKitHost/Plugins/BertaWindowTools/` | `<YourProject>/Plugins/BertaWindowTools/` |
 | BertaDesktopCapture | `BertaDevKitHost/Plugins/BertaDesktopCapture/` | `<YourProject>/Plugins/BertaDesktopCapture/` |
+| BertaSerial | `BertaDevKitHost/Plugins/BertaSerial/` | `<YourProject>/Plugins/BertaSerial/` |
 
-Target UE 5.8, regenerate project files if needed, build, and enable the copied plugin in Unreal's Plugins window. BertaDualSense, BertaSystemInfo, BertaProcessBridge, BertaWindowTools, and BertaDesktopCapture are disabled by default. BertaDualSense stages SDL3 from its own directory; BertaSystemInfo enables UE's built-in Audio Capture plugin for microphone-device enumeration. BertaDesktopCapture is Win64-only.
+Target UE 5.8, regenerate project files if needed, build, and enable the copied plugin in Unreal's Plugins window. BertaDualSense, BertaSystemInfo, BertaProcessBridge, BertaWindowTools, BertaDesktopCapture, and BertaSerial are disabled by default. BertaDualSense stages SDL3 from its own directory; BertaSystemInfo enables UE's built-in Audio Capture plugin for microphone-device enumeration. BertaDesktopCapture and BertaSerial are Win64-only.
 
-Copied-plugin guidance remains available in the [BertaDualSense README](BertaDevKitHost/Plugins/BertaDualSense/README.md), [BertaSystemInfo README](BertaDevKitHost/Plugins/BertaSystemInfo/README.md), [BertaProcessBridge README](BertaDevKitHost/Plugins/BertaProcessBridge/README.md), [BertaWindowTools README](BertaDevKitHost/Plugins/BertaWindowTools/README.md), and [BertaDesktopCapture README](BertaDevKitHost/Plugins/BertaDesktopCapture/README.md).
+Copied-plugin guidance remains available in the [BertaDualSense README](BertaDevKitHost/Plugins/BertaDualSense/README.md), [BertaSystemInfo README](BertaDevKitHost/Plugins/BertaSystemInfo/README.md), [BertaProcessBridge README](BertaDevKitHost/Plugins/BertaProcessBridge/README.md), [BertaWindowTools README](BertaDevKitHost/Plugins/BertaWindowTools/README.md), [BertaDesktopCapture README](BertaDevKitHost/Plugins/BertaDesktopCapture/README.md), and [BertaSerial README](BertaDevKitHost/Plugins/BertaSerial/README.md).
 
 ## Development host
 
@@ -74,7 +80,8 @@ ue5-bertadevkit/
         ├── BertaSystemInfo/
         ├── BertaProcessBridge/
         ├── BertaWindowTools/
-        └── BertaDesktopCapture/
+        ├── BertaDesktopCapture/
+        └── BertaSerial/
 ```
 
 `BertaDevKitHost` is the development and verification harness. The primary Editor target is:
@@ -103,6 +110,7 @@ See the [documentation site](https://nbertoa.github.io/ue5-bertadevkit/) for fea
 | `LogBertaProcessBridge` | BertaProcessBridge launch and lifecycle diagnostics |
 | `LogBertaWindowTools` | BertaWindowTools native window-operation diagnostics |
 | `LogBertaDesktopCapture` | BertaDesktopCapture initialization and lifecycle failures |
+| `LogBertaSerial` | BertaSerial open, configuration, worker, and cleanup failures |
 
 ## About
 
