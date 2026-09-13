@@ -1,7 +1,10 @@
 // BertaComponentUtils.cpp
 #include "Component/BertaComponentUtils.h"
 
+#include "ComponentInstanceDataCache.h"
+#include "Components/ActorComponent.h"
 #include "Components/SceneComponent.h"
+#include "Engine/EngineBaseTypes.h"
 #include "Engine/EngineTypes.h"
 #include "GameFramework/Actor.h"
 
@@ -19,6 +22,34 @@ namespace BertaComponentUtilsPrivate
 		case EComponentMobility::Static: return TEXT("Static");
 		case EComponentMobility::Stationary: return TEXT("Stationary");
 		case EComponentMobility::Movable: return TEXT("Movable");
+		default: return TEXT("Unknown");
+		}
+	}
+
+	const TCHAR* FormatTickGroup(const ETickingGroup TickGroup)
+	{
+		switch (TickGroup)
+		{
+		case TG_PrePhysics: return TEXT("PrePhysics");
+		case TG_StartPhysics: return TEXT("StartPhysics");
+		case TG_DuringPhysics: return TEXT("DuringPhysics");
+		case TG_EndPhysics: return TEXT("EndPhysics");
+		case TG_PostPhysics: return TEXT("PostPhysics");
+		case TG_PostUpdateWork: return TEXT("PostUpdateWork");
+		case TG_LastDemotable: return TEXT("LastDemotable");
+		case TG_NewlySpawned: return TEXT("NewlySpawned");
+		default: return TEXT("Unknown");
+		}
+	}
+
+	const TCHAR* FormatCreationMethod(const EComponentCreationMethod CreationMethod)
+	{
+		switch (CreationMethod)
+		{
+		case EComponentCreationMethod::Native: return TEXT("Native");
+		case EComponentCreationMethod::SimpleConstructionScript: return TEXT("SimpleConstructionScript");
+		case EComponentCreationMethod::UserConstructionScript: return TEXT("UserConstructionScript");
+		case EComponentCreationMethod::Instance: return TEXT("Instance");
 		default: return TEXT("Unknown");
 		}
 	}
@@ -101,4 +132,60 @@ FString UBertaComponentUtils::GetAttachmentDebugSummary(const USceneComponent* C
 		BertaComponentUtilsPrivate::FormatBool(Component->IsUsingAbsoluteRotation()),
 		BertaComponentUtilsPrivate::FormatBool(Component->IsUsingAbsoluteScale()),
 		BertaComponentUtilsPrivate::FormatMobility(Component->GetMobility()));
+}
+
+FString UBertaComponentUtils::GetLifecycleDebugSummary(const UActorComponent* Component)
+{
+	if (Component == nullptr)
+	{
+		return TEXT("Component: None");
+	}
+
+	const FActorComponentTickFunction& TickFunction = Component->PrimaryComponentTick;
+	return FString::Printf(
+		TEXT("Component: %s\n")
+		TEXT("Class: %s\n")
+		TEXT("Owner: %s\n\n")
+		TEXT("Lifecycle:\n")
+		TEXT("Registered: %s\n")
+		TEXT("Initialized: %s\n")
+		TEXT("BegunPlay: %s\n")
+		TEXT("Active: %s\n")
+		TEXT("BeingDestroyed: %s\n\n")
+		TEXT("Tick:\n")
+		TEXT("CanEverTick: %s\n")
+		TEXT("TickFunctionRegistered: %s\n")
+		TEXT("TickEnabled: %s\n")
+		TEXT("StartWithTickEnabled: %s\n")
+		TEXT("TickGroup: %s\n")
+		TEXT("TickInterval: %.3f\n")
+		TEXT("TickEvenWhenPaused: %s\n")
+		TEXT("AllowTickOnDedicatedServer: %s\n\n")
+		TEXT("Configuration:\n")
+		TEXT("AutoRegister: %s\n")
+		TEXT("WantsInitializeComponent: %s\n")
+		TEXT("AutoActivate: %s\n")
+		TEXT("Replicated: %s\n")
+		TEXT("CreationMethod: %s"),
+		*Component->GetName(),
+		*Component->GetClass()->GetName(),
+		*BertaComponentUtilsPrivate::FormatObjectName(Component->GetOwner()),
+		BertaComponentUtilsPrivate::FormatBool(Component->IsRegistered()),
+		BertaComponentUtilsPrivate::FormatBool(Component->HasBeenInitialized()),
+		BertaComponentUtilsPrivate::FormatBool(Component->HasBegunPlay()),
+		BertaComponentUtilsPrivate::FormatBool(Component->IsActive()),
+		BertaComponentUtilsPrivate::FormatBool(Component->IsBeingDestroyed()),
+		BertaComponentUtilsPrivate::FormatBool(TickFunction.bCanEverTick),
+		BertaComponentUtilsPrivate::FormatBool(TickFunction.IsTickFunctionRegistered()),
+		BertaComponentUtilsPrivate::FormatBool(Component->IsComponentTickEnabled()),
+		BertaComponentUtilsPrivate::FormatBool(TickFunction.bStartWithTickEnabled),
+		BertaComponentUtilsPrivate::FormatTickGroup(TickFunction.TickGroup),
+		Component->GetComponentTickInterval(),
+		BertaComponentUtilsPrivate::FormatBool(TickFunction.bTickEvenWhenPaused),
+		BertaComponentUtilsPrivate::FormatBool(TickFunction.bAllowTickOnDedicatedServer),
+		BertaComponentUtilsPrivate::FormatBool(Component->bAutoRegister),
+		BertaComponentUtilsPrivate::FormatBool(Component->bWantsInitializeComponent),
+		BertaComponentUtilsPrivate::FormatBool(Component->bAutoActivate),
+		BertaComponentUtilsPrivate::FormatBool(Component->GetIsReplicated()),
+		BertaComponentUtilsPrivate::FormatCreationMethod(Component->CreationMethod));
 }

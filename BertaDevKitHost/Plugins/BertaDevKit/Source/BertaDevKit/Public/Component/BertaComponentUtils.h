@@ -5,6 +5,7 @@
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "BertaComponentUtils.generated.h"
 
+class UActorComponent;
 class USceneComponent;
 
 /** Blueprint conveniences for inspecting component state. */
@@ -19,4 +20,10 @@ public:
 		Category = "BertaDevKit|Component|Debug",
 		meta = (DevelopmentOnly, DisplayName = "Get Attachment Debug Summary"))
 	static FString GetAttachmentDebugSummary(const USceneComponent* Component);
+
+	/** Returns a human-readable snapshot of an actor component's lifecycle and tick state. */
+	UFUNCTION(BlueprintPure,
+		Category = "BertaDevKit|Component|Debug",
+		meta = (DevelopmentOnly, DisplayName = "Get Component Lifecycle Debug Summary"))
+	static FString GetLifecycleDebugSummary(const UActorComponent* Component);
 };
