@@ -15,6 +15,7 @@ BertaDevKit is a general-purpose Unreal Engine 5.8 toolbox. Its Runtime module p
 | `UBertaControllerUtils` | Controller feedback, light output, and Input Device Property conveniences without PlayerController casts. |
 | `UBertaBTDecorator_GameplayTag` / `UBertaBTDecorator_GameplayTagQuery` | Reactive GAS conditions controlling whether Behavior Tree branches may execute. |
 | `UBertaBTTask_WaitGameplayTagQuery` | Event-driven Behavior Tree wait for a Gameplay Tag Query state without Blackboard mirroring. |
+| `UBertaBTTask_ActivateGameplayAbilityAndWait` | Activates one granted Gameplay Ability and waits for that exact execution to end. |
 
 Debug-facing Blueprint nodes use Unreal's `DevelopmentOnly` metadata where appropriate. This signals intended development use; it is not a blanket claim about all Runtime code or runtime cost.
 
@@ -48,6 +49,12 @@ Activate or start attack
 ```
 
 An empty query or a controlled Pawn without an Ability System Component fails immediately.
+
+### Activate Gameplay Ability And Wait
+
+**Activate Gameplay Ability And Wait** resolves the configured exact granted ability class on the controlled Pawn's Ability System Component, requests activation, and remains latent until that execution ends. A normal end succeeds; activation rejection and cancellation fail. GAS activation, failure, and per-activation end delegates drive the task, so it does not tick.
+
+The task listens before requesting activation, including abilities that end synchronously from `ActivateAbility`. `Cancel Ability On Abort` cancels the task-owned execution when GAS exposes an instantiated ability identity; it intentionally avoids broad spec cancellation for non-instanced abilities because that could terminate unrelated executions. `Allow Remote Activation` is passed to GAS unchanged, so authority, prediction, and remote execution remain governed by the ability's normal network policy. If GAS only sends a remote request and does not establish an observable local execution, the task fails instead of entering an unfinishable latent state; AI Behavior Trees normally run on authority, where server-executed abilities provide that identity.
 
 ## Editor tools
 
