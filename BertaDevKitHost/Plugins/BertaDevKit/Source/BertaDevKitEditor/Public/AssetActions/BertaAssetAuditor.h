@@ -23,8 +23,8 @@ class BERTADEVKITEDITOR_API UBertaAssetAuditor : public UObject
 
 public:
 	/**
-	 * Scans assets and reports naming violations to LogBertaDevKitEditor.
-	 * Displays an FNotificationInfo with the total violation count on completion.
+	 * Scans assets and reports naming violations to the Asset Naming Message Log and LogBertaDevKitEditor.
+	 * Uses the Message Log notification workflow to report the summary on completion.
 	 * Does not modify any assets.
 	 */
 	static void AuditAssetNaming();

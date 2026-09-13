@@ -4,11 +4,15 @@
 #include "AssetActions/BertaAssetNamingUtils.h"
 #include "Log/BertaDevKitEditorLog.h"
 
+#include "AssetRegistry/AssetDataToken.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetToolsModule.h"
 #include "EditorUtilityLibrary.h"
 #include "Framework/Notifications/NotificationManager.h"
 #include "IAssetTools.h"
+#include "Logging/MessageLog.h"
+#include "Logging/TokenizedMessage.h"
+#include "Misc/DateTime.h"
 #include "Misc/MessageDialog.h"
 #include "Misc/PackageName.h"
 #include "UObject/Package.h"
@@ -17,6 +21,8 @@
 
 namespace
 {
+	const FName AssetNamingLogName(TEXT("BertaDevKitAssetNaming"));
+
 	bool IsProjectAsset(const FAssetData& AssetData)
 	{
 		const FString Path = AssetData.PackagePath.ToString();
@@ -134,6 +140,11 @@ void UBertaAssetAuditor::AuditAssetNaming()
 
 void UBertaAssetAuditor::AuditAssetNaming(const TArray<FAssetData>& Assets)
 {
+	FMessageLog MessageLog(AssetNamingLogName);
+	MessageLog.NewPage(FText::Format(
+		NSLOCTEXT("BertaDevKit", "AssetNamingAuditPage", "Asset Naming Audit {0}"),
+		FText::AsDateTime(FDateTime::Now())));
+
 	int32 NeedsRename = 0;
 	int32 Unsupported = 0;
 	for (const FAssetData& Asset : Assets)
@@ -146,11 +157,25 @@ void UBertaAssetAuditor::AuditAssetNaming(const TArray<FAssetData>& Assets)
 		else if (Plan.Status == EBertaAssetNamingStatus::NeedsRename)
 		{
 			++NeedsRename;
+			TSharedRef<FTokenizedMessage> Finding = FTokenizedMessage::Create(EMessageSeverity::Warning);
+			Finding->AddToken(FAssetDataToken::Create(Asset));
+			Finding->AddToken(FTextToken::Create(FText::Format(
+				NSLOCTEXT("BertaDevKit", "AssetNamingAuditFinding", "  Expected name: \"{0}\". Expected prefix: \"{1}\"."),
+				FText::FromString(Plan.TargetName),
+				FText::FromString(Plan.ExpectedPrefix))));
+			MessageLog.AddMessage(Finding);
 			UE_LOG(LogBertaDevKitEditor, Warning, TEXT("[AssetNaming] VIOLATION: %s -> %s"), *Asset.AssetName.ToString(), *Plan.TargetName);
 		}
 	}
+
+	const FText Summary = FText::Format(
+		NSLOCTEXT("BertaDevKit", "AssetNamingAuditSummary", "Audit complete: {0} assets checked, {1} violations, {2} unsupported/skipped."),
+		FText::AsNumber(Assets.Num()),
+		FText::AsNumber(NeedsRename),
+		FText::AsNumber(Unsupported));
+	MessageLog.Info(Summary);
 	UE_LOG(LogBertaDevKitEditor, Log, TEXT("[AssetNaming] Audit complete: %d violation(s), %d unsupported/skipped."), NeedsRename, Unsupported);
-	ShowNotification(FText::Format(NSLOCTEXT("BertaDevKit", "AssetAudit", "Asset Audit: {0} violation(s), {1} unsupported/skipped. See Output Log."), FText::AsNumber(NeedsRename), FText::AsNumber(Unsupported)), NeedsRename > 0 ? SNotificationItem::CS_Fail : SNotificationItem::CS_Success);
+	MessageLog.Notify(Summary, EMessageSeverity::Info, true);
 }
 
 void UBertaAssetAuditor::FixAssetNaming()

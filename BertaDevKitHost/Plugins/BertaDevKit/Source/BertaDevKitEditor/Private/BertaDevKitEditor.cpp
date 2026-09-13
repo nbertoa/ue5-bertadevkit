@@ -45,6 +45,7 @@ void FBertaDevKitEditorModule::ShutdownModule()
 	}
 	UnregisterBlueprintAuditMessageLog();
 	UnregisterAssetInsightsMessageLog();
+	UnregisterAssetNamingMessageLog();
 
 	UE_LOG(LogBertaDevKitEditor,
 	       Log,
@@ -55,6 +56,7 @@ void FBertaDevKitEditorModule::OnPostEngineInit()
 {
 	RegisterBlueprintAuditMessageLog();
 	RegisterAssetInsightsMessageLog();
+	RegisterAssetNamingMessageLog();
 	// This delegate fires once — no need to unbind after registration.
 	// The engine guarantees it is not called again after this point.
 	if (EditorToolbar)
@@ -82,6 +84,7 @@ void FBertaDevKitEditorModule::UnregisterBlueprintAuditMessageLog()
 	if (FModuleManager::Get().IsModuleLoaded(TEXT("MessageLog")))
 	{
 		FModuleManager::GetModuleChecked<FMessageLogModule>(TEXT("MessageLog")).UnregisterLogListing(TEXT("BertaDevKitBlueprintAudit"));
+		FModuleManager::GetModuleChecked<FMessageLogModule>(TEXT("MessageLog")).UnregisterLogListing(TEXT("BertaDevKitBlueprintUsages"));
 	}
 }
 
@@ -98,6 +101,22 @@ void FBertaDevKitEditorModule::UnregisterAssetInsightsMessageLog()
 	if (FModuleManager::Get().IsModuleLoaded(TEXT("MessageLog")))
 	{
 		FModuleManager::GetModuleChecked<FMessageLogModule>(TEXT("MessageLog")).UnregisterLogListing(TEXT("BertaDevKitAssetInsights"));
+	}
+}
+
+void FBertaDevKitEditorModule::RegisterAssetNamingMessageLog()
+{
+	FMessageLogInitializationOptions Options;
+	Options.bShowPages = true;
+	Options.MaxPageCount = 10;
+	FModuleManager::LoadModuleChecked<FMessageLogModule>(TEXT("MessageLog")).RegisterLogListing(TEXT("BertaDevKitAssetNaming"), NSLOCTEXT("BertaDevKit", "AssetNamingMessageLog", "BertaDevKit Asset Naming"), Options);
+}
+
+void FBertaDevKitEditorModule::UnregisterAssetNamingMessageLog()
+{
+	if (FModuleManager::Get().IsModuleLoaded(TEXT("MessageLog")))
+	{
+		FModuleManager::GetModuleChecked<FMessageLogModule>(TEXT("MessageLog")).UnregisterLogListing(TEXT("BertaDevKitAssetNaming"));
 	}
 }
 
