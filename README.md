@@ -1,8 +1,8 @@
 # BertaDevKit
 
-**Personal Unreal Engine 5.8 development toolbox, native DualSense input, and runtime system-information plugins.**
+**Personal Unreal Engine 5.8 development toolbox with native DualSense input, system information, and external-process integration.**
 
-This repository is a UE 5.8 development host for three independent sibling plugins. It is personal R&D tooling, not a gameplay framework or commercial product.
+This repository is a UE 5.8 development host for four independent sibling plugins. It is personal R&D tooling, not a gameplay framework or commercial product.
 
 > **Documentation:** <https://nbertoa.github.io/ue5-bertadevkit/>
 
@@ -19,6 +19,10 @@ A Win64 Runtime input-device plugin for native Sony DualSense and DualSense Edge
 ### BertaSystemInfo
 
 A read-only Runtime query plugin for operating system, CPU, GPU, memory, displays, display modes, and audio input/output device information. It uses UE 5.8 platform abstractions and exposes its own C++ and Blueprint types.
+
+### BertaProcessBridge
+
+A Runtime C++ and Blueprint bridge for launching an executable directly, receiving asynchronous text output, sending stdin, observing completion, and canceling it. Processes are owned by a `GameInstance` and cleaned up during teardown; the plugin does not implicitly invoke a shell.
 
 The plugins are independent siblings: none is a module of or dependency of another.
 
@@ -38,10 +42,11 @@ Copy any plugin independently into the matching project plugin directory:
 | BertaDevKit | `BertaDevKitHost/Plugins/BertaDevKit/` | `<YourProject>/Plugins/BertaDevKit/` |
 | BertaDualSense | `BertaDevKitHost/Plugins/BertaDualSense/` | `<YourProject>/Plugins/BertaDualSense/` |
 | BertaSystemInfo | `BertaDevKitHost/Plugins/BertaSystemInfo/` | `<YourProject>/Plugins/BertaSystemInfo/` |
+| BertaProcessBridge | `BertaDevKitHost/Plugins/BertaProcessBridge/` | `<YourProject>/Plugins/BertaProcessBridge/` |
 
-Target UE 5.8, regenerate project files if needed, build, and enable the copied plugin in Unreal's Plugins window. BertaDualSense and BertaSystemInfo are disabled by default. BertaDualSense stages SDL3 from its own directory; BertaSystemInfo enables UE's built-in Audio Capture plugin for microphone-device enumeration.
+Target UE 5.8, regenerate project files if needed, build, and enable the copied plugin in Unreal's Plugins window. BertaDualSense, BertaSystemInfo, and BertaProcessBridge are disabled by default. BertaDualSense stages SDL3 from its own directory; BertaSystemInfo enables UE's built-in Audio Capture plugin for microphone-device enumeration.
 
-Copied-plugin guidance remains available in the [BertaDualSense README](BertaDevKitHost/Plugins/BertaDualSense/README.md) and [BertaSystemInfo README](BertaDevKitHost/Plugins/BertaSystemInfo/README.md).
+Copied-plugin guidance remains available in the [BertaDualSense README](BertaDevKitHost/Plugins/BertaDualSense/README.md), [BertaSystemInfo README](BertaDevKitHost/Plugins/BertaSystemInfo/README.md), and [BertaProcessBridge README](BertaDevKitHost/Plugins/BertaProcessBridge/README.md).
 
 ## Development host
 
@@ -55,7 +60,8 @@ ue5-bertadevkit/
     └── Plugins/
         ├── BertaDevKit/
         ├── BertaDualSense/
-        └── BertaSystemInfo/
+        ├── BertaSystemInfo/
+        └── BertaProcessBridge/
 ```
 
 `BertaDevKitHost` is the development and verification harness. The primary Editor target is:
@@ -81,6 +87,7 @@ See the [documentation site](https://nbertoa.github.io/ue5-bertadevkit/) for fea
 | `LogBertaDevKitEditor` | BertaDevKit Editor tooling and validation |
 | `LogBertaDualSense` | BertaDualSense discovery, lifecycle, and SDL output failures |
 | `LogBertaSystemInfo` | BertaSystemInfo Runtime query diagnostics |
+| `LogBertaProcessBridge` | BertaProcessBridge launch and lifecycle diagnostics |
 
 ## About
 

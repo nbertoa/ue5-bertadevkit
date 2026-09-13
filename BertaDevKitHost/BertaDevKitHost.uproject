@@ -42,6 +42,10 @@
 		{
 			"Name": "BertaSystemInfo",
 			"Enabled": true
+		},
+		{
+			"Name": "BertaProcessBridge",
+			"Enabled": true
 		}
 	]
 }

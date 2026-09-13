@@ -2,7 +2,7 @@
 
 ## Repository architecture
 
-`BertaDevKitHost` is the development and verification harness. It contains three independent plugin roots:
+`BertaDevKitHost` is the development and verification harness. It contains four independent plugin roots:
 
 ```text
 BertaDevKitHost/
@@ -10,10 +10,11 @@ BertaDevKitHost/
 └── Plugins/
     ├── BertaDevKit/
     ├── BertaDualSense/
-    └── BertaSystemInfo/
+    ├── BertaSystemInfo/
+    └── BertaProcessBridge/
 ```
 
-All three plugins target Unreal Engine 5.8. BertaDualSense is Win64-only. BertaSystemInfo compiles through UE Runtime abstractions without a platform allowlist; runtime behavior outside Win64 has not been verified.
+All four plugins target Unreal Engine 5.8. BertaDualSense is Win64-only. BertaSystemInfo and BertaProcessBridge compile through UE Runtime abstractions without a platform allowlist; their runtime behavior outside Win64 has not been verified.
 
 ## Build the host
 
