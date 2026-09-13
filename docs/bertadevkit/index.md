@@ -13,7 +13,8 @@ BertaDevKit is a general-purpose Unreal Engine 5.8 toolbox. Its Runtime module p
 | `UBertaWorldUtils` | Actor queries, traces, player/camera access, and delayed-action timer helpers. |
 | `UBertaUIUtils` | Blueprint conveniences for common UI/player-input boilerplate. |
 | `UBertaControllerUtils` | Controller feedback, light output, and Input Device Property conveniences without PlayerController casts. |
-| `UBertaBTDecorator_GameplayTag` / `UBertaBTDecorator_GameplayTagQuery` | Reactive GAS conditions for Behavior Trees without mirroring tag state into a Blackboard. |
+| `UBertaBTDecorator_GameplayTag` / `UBertaBTDecorator_GameplayTagQuery` | Reactive GAS conditions controlling whether Behavior Tree branches may execute. |
+| `UBertaBTTask_WaitGameplayTagQuery` | Event-driven Behavior Tree wait for a Gameplay Tag Query state without Blackboard mirroring. |
 
 Debug-facing Blueprint nodes use Unreal's `DevelopmentOnly` metadata where appropriate. This signals intended development use; it is not a blanket claim about all Runtime code or runtime cost.
 
@@ -29,6 +30,24 @@ Both decorators read the controlled Pawn's `UAbilitySystemComponent` directly an
 For example, a query combining `ALL(State.Combat, Weapon.Ranged)` with `NONE(Status.Stunned)` expresses `(State.Combat && Weapon.Ranged) && !Status.Stunned`. Adding or removing any referenced tag requests immediate Behavior Tree condition re-evaluation according to the configured Observer Aborts policy. Gameplay Tag hierarchy is preserved by GAS, so a query for `State.Combat` also reacts when a child such as `State.Combat.Melee` changes the parent's effective count.
 
 The source is specifically the controlled Pawn's Ability System Component; these decorators do not read arbitrary `IGameplayTagAssetInterface` actors.
+
+### Gameplay Tag Query Wait Task
+
+**Wait Gameplay Tag Query** pauses a Behavior Tree Sequence until its query either **Matches** or **Does Not Match** the controlled Pawn's Ability System Component. Unlike a decorator, which controls whether a branch may execute and can drive Observer Aborts, this latent task represents an explicit sequencing step.
+
+The task evaluates immediately when execution begins. It succeeds without waiting when the requested state already holds; otherwise it observes every tag referenced by the query and completes when a relevant change satisfies the condition. It has no Tick, polling timer, or Blackboard boolean, and a normal Behavior Tree abort unregisters its observers.
+
+For example:
+
+```text
+Activate or start attack
+→ Wait Gameplay Tag Query
+    Query: State.Attacking
+    Wait Until: Does Not Match
+→ Choose next action
+```
+
+An empty query or a controlled Pawn without an Ability System Component fails immediately.
 
 ## Editor tools
 
