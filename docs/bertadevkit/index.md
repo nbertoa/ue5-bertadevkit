@@ -30,6 +30,7 @@ BertaDevKit is a general-purpose Unreal Engine 5.8 toolbox. Its Runtime module p
 | `UBertaBTTask_ActivateGameplayAbilityWithTarget` | Triggers one granted ability with a Blackboard Actor in its Gameplay Event context. |
 | `UBertaBTTask_WaitGameplayEffectApplied` | Waits for the next matching Gameplay Effect application, including instant effects. |
 | `UBertaBTTask_WaitGameplayEffectRemoved` | Waits until no active Gameplay Effect matching a query remains. |
+| `UBertaBTDecorator_GameplayEffectQuery` | Reactive condition for active Gameplay Effects matching a query. |
 
 Debug-facing Blueprint nodes use Unreal's `DevelopmentOnly` metadata where appropriate. This signals intended development use; it is not a blanket claim about all Runtime code or runtime cost.
 
@@ -125,6 +126,10 @@ The task listens before requesting activation, including abilities that end sync
 ### Wait Gameplay Effect Removed
 
 **Wait Gameplay Effect Removed** succeeds immediately when no active duration/infinite effect matches its non-empty query. Otherwise it observes all effect removals and re-runs the native query after each one, completing only when zero matches remain. This correctly handles multiple matching effects; instant effects are never active and do not participate. Abort removes the delegate and the task never ticks.
+
+### Gameplay Effect Query
+
+**Gameplay Effect Query** is true when at least one active duration/infinite effect on the controlled Pawn's ASC matches the configured query. Native active-effect addition and removal delegates request standard Observer Abort re-evaluation; each evaluation runs UE's query instead of maintaining a parallel count. Instant effects never become active and therefore do not make this decorator true. Empty queries evaluate false and no Tick is used.
 
 ## Editor tools
 
