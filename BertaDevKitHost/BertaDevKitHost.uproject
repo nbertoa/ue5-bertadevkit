@@ -46,6 +46,10 @@
 		{
 			"Name": "BertaProcessBridge",
 			"Enabled": true
+		},
+		{
+			"Name": "BertaWindowTools",
+			"Enabled": true
 		}
 	]
 }

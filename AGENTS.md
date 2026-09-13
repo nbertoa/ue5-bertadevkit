@@ -19,7 +19,7 @@ Never invent Unreal APIs or behavior.
 
 ### Repository Structure
 
-The repository contains a host project around four independent sibling plugins:
+The repository contains a host project around five independent sibling plugins:
 
 ```text
 ue5-bertadevkit/
@@ -40,8 +40,11 @@ ue5-bertadevkit/
         ├── BertaSystemInfo/
         │   ├── BertaSystemInfo.uplugin
         │   └── Source/
-        └── BertaProcessBridge/
-            ├── BertaProcessBridge.uplugin
+        ├── BertaProcessBridge/
+        │   ├── BertaProcessBridge.uplugin
+        │   └── Source/
+        └── BertaWindowTools/
+            ├── BertaWindowTools.uplugin
             └── Source/
 ```
 
@@ -52,6 +55,7 @@ BertaDevKitHost/Plugins/BertaDevKit/
 BertaDevKitHost/Plugins/BertaDualSense/
 BertaDevKitHost/Plugins/BertaSystemInfo/
 BertaDevKitHost/Plugins/BertaProcessBridge/
+BertaDevKitHost/Plugins/BertaWindowTools/
 ```
 
 The host project exists for development and verification.

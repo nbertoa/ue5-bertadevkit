@@ -1,8 +1,8 @@
 # BertaDevKit
 
-**Personal Unreal Engine 5.8 development toolbox with native DualSense input, system information, and external-process integration.**
+**Personal Unreal Engine 5.8 development toolbox with native DualSense input, system information, external-process integration, and runtime game-window control.**
 
-This repository is a UE 5.8 development host for four independent sibling plugins. It is personal R&D tooling, not a gameplay framework or commercial product.
+This repository is a UE 5.8 development host for five independent sibling plugins. It is personal R&D tooling, not a gameplay framework or commercial product.
 
 > **Documentation:** <https://nbertoa.github.io/ue5-bertadevkit/>
 
@@ -24,6 +24,10 @@ A read-only Runtime query plugin for operating system, CPU, GPU, memory, display
 
 A Runtime C++ and Blueprint bridge for launching an executable directly, receiving asynchronous text output, sending stdin, observing completion, and canceling it. Processes are owned by a `GameInstance` and cleaned up during teardown; the plugin does not implicitly invoke a shell.
 
+### BertaWindowTools
+
+A stateless Runtime C++ and Blueprint API for inspecting and controlling the current `GameInstance` game window: move, client resize, display centering, maximize/minimize/restore, focus/front requests, and title changes. It never enumerates or controls unrelated operating-system windows.
+
 The plugins are independent siblings: none is a module of or dependency of another.
 
 ## Requirements
@@ -43,10 +47,11 @@ Copy any plugin independently into the matching project plugin directory:
 | BertaDualSense | `BertaDevKitHost/Plugins/BertaDualSense/` | `<YourProject>/Plugins/BertaDualSense/` |
 | BertaSystemInfo | `BertaDevKitHost/Plugins/BertaSystemInfo/` | `<YourProject>/Plugins/BertaSystemInfo/` |
 | BertaProcessBridge | `BertaDevKitHost/Plugins/BertaProcessBridge/` | `<YourProject>/Plugins/BertaProcessBridge/` |
+| BertaWindowTools | `BertaDevKitHost/Plugins/BertaWindowTools/` | `<YourProject>/Plugins/BertaWindowTools/` |
 
-Target UE 5.8, regenerate project files if needed, build, and enable the copied plugin in Unreal's Plugins window. BertaDualSense, BertaSystemInfo, and BertaProcessBridge are disabled by default. BertaDualSense stages SDL3 from its own directory; BertaSystemInfo enables UE's built-in Audio Capture plugin for microphone-device enumeration.
+Target UE 5.8, regenerate project files if needed, build, and enable the copied plugin in Unreal's Plugins window. BertaDualSense, BertaSystemInfo, BertaProcessBridge, and BertaWindowTools are disabled by default. BertaDualSense stages SDL3 from its own directory; BertaSystemInfo enables UE's built-in Audio Capture plugin for microphone-device enumeration.
 
-Copied-plugin guidance remains available in the [BertaDualSense README](BertaDevKitHost/Plugins/BertaDualSense/README.md), [BertaSystemInfo README](BertaDevKitHost/Plugins/BertaSystemInfo/README.md), and [BertaProcessBridge README](BertaDevKitHost/Plugins/BertaProcessBridge/README.md).
+Copied-plugin guidance remains available in the [BertaDualSense README](BertaDevKitHost/Plugins/BertaDualSense/README.md), [BertaSystemInfo README](BertaDevKitHost/Plugins/BertaSystemInfo/README.md), [BertaProcessBridge README](BertaDevKitHost/Plugins/BertaProcessBridge/README.md), and [BertaWindowTools README](BertaDevKitHost/Plugins/BertaWindowTools/README.md).
 
 ## Development host
 
@@ -61,7 +66,8 @@ ue5-bertadevkit/
         ├── BertaDevKit/
         ├── BertaDualSense/
         ├── BertaSystemInfo/
-        └── BertaProcessBridge/
+        ├── BertaProcessBridge/
+        └── BertaWindowTools/
 ```
 
 `BertaDevKitHost` is the development and verification harness. The primary Editor target is:
@@ -88,6 +94,7 @@ See the [documentation site](https://nbertoa.github.io/ue5-bertadevkit/) for fea
 | `LogBertaDualSense` | BertaDualSense discovery, lifecycle, and SDL output failures |
 | `LogBertaSystemInfo` | BertaSystemInfo Runtime query diagnostics |
 | `LogBertaProcessBridge` | BertaProcessBridge launch and lifecycle diagnostics |
+| `LogBertaWindowTools` | BertaWindowTools native window-operation diagnostics |
 
 ## About
 
