@@ -13,10 +13,22 @@ BertaDevKit is a general-purpose Unreal Engine 5.8 toolbox. Its Runtime module p
 | `UBertaWorldUtils` | Actor queries, traces, player/camera access, and delayed-action timer helpers. |
 | `UBertaUIUtils` | Blueprint conveniences for common UI/player-input boilerplate. |
 | `UBertaControllerUtils` | Controller feedback, light output, and Input Device Property conveniences without PlayerController casts. |
+| `UBertaBTDecorator_GameplayTag` / `UBertaBTDecorator_GameplayTagQuery` | Reactive GAS conditions for Behavior Trees without mirroring tag state into a Blackboard. |
 
 Debug-facing Blueprint nodes use Unreal's `DevelopmentOnly` metadata where appropriate. This signals intended development use; it is not a blanket claim about all Runtime code or runtime cost.
 
 `UBertaControllerUtils` plays native dynamic vibration either uniformly or per motor, returning a handle for stopping only its own actions. It also delegates controller light color/reset and asset-based `ForceFeedbackEffect` play/stop to `APlayerController`, preserving Unreal's native client-RPC behavior for the effect calls. Input Device Property activation uses the resolved controller's Platform User and lets Unreal select that user's default input device; a controller does not identify one unique physical device. Properties can be queried or removed by handle. **Remove All Input Device Properties (Global)** removes active properties for every local Platform User, so use it only when global cleanup is intended.
+
+### Reactive Gameplay Tag decorators
+
+Both decorators read the controlled Pawn's `UAbilitySystemComponent` directly and use Unreal's normal Behavior Tree **Observer Aborts** setting. They register Gameplay Tag change events only while relevant, so configured `Self`, `Lower Priority`, or `Both` aborts react without a tick, timer, or Blackboard boolean.
+
+- **Gameplay Tag** is the simple single-tag condition.
+- **Gameplay Tag Query** evaluates an `FGameplayTagQuery` and automatically observes every unique tag referenced by the query. The query must be non-empty; an empty query or a controlled Pawn without an Ability System Component evaluates false.
+
+For example, a query combining `ALL(State.Combat, Weapon.Ranged)` with `NONE(Status.Stunned)` expresses `(State.Combat && Weapon.Ranged) && !Status.Stunned`. Adding or removing any referenced tag requests immediate Behavior Tree condition re-evaluation according to the configured Observer Aborts policy. Gameplay Tag hierarchy is preserved by GAS, so a query for `State.Combat` also reacts when a child such as `State.Combat.Melee` changes the parent's effective count.
+
+The source is specifically the controlled Pawn's Ability System Component; these decorators do not read arbitrary `IGameplayTagAssetInterface` actors.
 
 ## Editor tools
 
