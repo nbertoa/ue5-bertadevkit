@@ -17,6 +17,7 @@ BertaDevKit is a general-purpose Unreal Engine 5.8 toolbox. Its Runtime module p
 | `UBertaBTTask_WaitGameplayTagQuery` | Event-driven Behavior Tree wait for a Gameplay Tag Query state without Blackboard mirroring. |
 | `UBertaBTTask_ActivateGameplayAbilityAndWait` | Activates one granted Gameplay Ability and waits for that exact execution to end. |
 | `UBertaBTTask_WaitGameplayEvent` | Event-driven wait for the next exact or hierarchical GAS Gameplay Event. |
+| `UBertaBTDecorator_AttributeThreshold` | Reactive numeric comparison against one controlled-Pawn GAS attribute. |
 
 Debug-facing Blueprint nodes use Unreal's `DevelopmentOnly` metadata where appropriate. This signals intended development use; it is not a blanket claim about all Runtime code or runtime cost.
 
@@ -60,6 +61,10 @@ The task listens before requesting activation, including abilities that end sync
 ### Wait Gameplay Event
 
 **Wait Gameplay Event** waits for the next matching event received by the controlled Pawn's Ability System Component. Exact mode listens only for the configured tag; hierarchical mode uses GAS's native tag-container event routing and also accepts descendant event tags. The task is event-driven, does not queue earlier events or expose payload data, and unregisters immediately after one match or a Behavior Tree abort.
+
+### Attribute Threshold
+
+**Attribute Threshold** compares one attribute on the controlled Pawn's Ability System Component with a configured threshold using `<`, `<=`, `==`, `!=`, `>=`, or `>`. Equality and inequality use the configured non-negative tolerance. Missing attributes evaluate false. The decorator observes GAS's native attribute-value delegate while relevant and drives standard Observer Aborts without ticking or mirroring a Blackboard value.
 
 ## Editor tools
 
