@@ -18,7 +18,7 @@ BertaDevKit is a general-purpose Unreal Engine 5.8 toolbox. Its Runtime module p
 | `UBertaBTTask_ActivateGameplayAbilityAndWait` | Activates one granted Gameplay Ability and waits for that exact execution to end. |
 | `UBertaBTTask_WaitGameplayEvent` | Event-driven wait for the next exact or hierarchical GAS Gameplay Event. |
 | `UBertaBTDecorator_AttributeThreshold` | Reactive numeric comparison against one controlled-Pawn GAS attribute. |
-| `UBertaBTTask_WaitAttributeThreshold` | Event-driven wait until one GAS attribute satisfies the shared numeric condition. |
+| `UBertaBTTask_WaitAttributeThreshold` / `UBertaBTTask_WaitTargetAttributeThreshold` | Event-driven waits until a self or Blackboard-target GAS attribute satisfies the shared numeric condition. |
 | `UBertaBTTask_WaitAbilityEnd` | Waits until no active execution remains for an exact granted ability class. |
 | `UBertaBTDecorator_AbilityActive` | Reactive condition for active executions of one exact granted ability class. |
 | `UBertaBTTask_CancelGameplayAbility` | Immediate cancellation request for one exact granted ability spec. |
@@ -97,6 +97,8 @@ The task listens before requesting activation, including abilities that end sync
 ### Wait Attribute Threshold
 
 **Wait Attribute Threshold** uses the same comparison and tolerance semantics as the decorator. It succeeds immediately when the current value already satisfies the condition; otherwise it listens to GAS's attribute-value delegate and completes on the first satisfying change. Invalid or missing attributes fail, and Behavior Tree abort/stop removes the observer without ticking.
+
+**Wait Target Attribute Threshold** applies that contract to an Actor-compatible Blackboard key. It observes the key even while the target is null, unbinds the previous target ASC before rebinding a replacement, and evaluates each valid target immediately. Missing targets never satisfy the condition; completion and Behavior Tree abort remove both the Blackboard and attribute observers without ticking.
 
 ### Wait Ability End
 
