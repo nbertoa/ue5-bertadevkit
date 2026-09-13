@@ -32,6 +32,7 @@ BertaDevKit is a general-purpose Unreal Engine 5.8 toolbox. Its Runtime module p
 | `UBertaBTTask_WaitGameplayEffectRemoved` | Waits until no active Gameplay Effect matching a query remains. |
 | `UBertaBTDecorator_GameplayEffectQuery` | Reactive condition for active Gameplay Effects matching a query. |
 | `UBertaBTDecorator_CanActivateAbility` | Side-effect-free check of an exact granted ability's current activation rules. |
+| `UBertaBTTask_WaitAbilityReady` | Bounded periodic wait for arbitrary Gameplay Ability readiness logic. |
 
 Debug-facing Blueprint nodes use Unreal's `DevelopmentOnly` metadata where appropriate. This signals intended development use; it is not a blanket claim about all Runtime code or runtime cost.
 
@@ -137,6 +138,12 @@ The task listens before requesting activation, including abilities that end sync
 **Can Activate Ability** resolves the exact granted class and calls the ability's native `CanActivateAbility` path without attempting activation or causing side effects. Invalid, ungranted, or missing-ASC configurations evaluate false.
 
 This decorator is intentionally not advertised as reactive. A custom Gameplay Ability can base `CanActivateAbility` on arbitrary C++ or Blueprint world state for which GAS provides no universal change event. Unreal evaluates the condition whenever the Behavior Tree normally reaches or rechecks it, but configured Observer Aborts cannot be guaranteed to react immediately to every custom readiness change unless some other Behavior Tree event causes reevaluation. Use **Wait Ability Ready** when explicit periodic readiness waiting is required.
+
+### Wait Ability Ready
+
+**Wait Ability Ready** resolves the exact granted ability class and calls its native `CanActivateAbility` immediately. It succeeds at once when ready; otherwise it uses the Behavior Tree's native interval-tick support to recheck at the configured cadence until ready. The interval defaults to `0.1` seconds and is clamped to at least `0.01` seconds. Invalid, ungranted, removed, or missing-ASC abilities fail, and abort clears the per-AI wait state.
+
+This is the campaign's deliberate polling exception: arbitrary custom `CanActivateAbility` logic has no generic GAS change delegate. The task does not create a world timer and does not attempt activation.
 
 ## Editor tools
 
