@@ -24,6 +24,7 @@ BertaDevKit is a general-purpose Unreal Engine 5.8 toolbox. Its Runtime module p
 | `UBertaBTTask_CancelGameplayAbility` | Immediate cancellation request for one exact granted ability spec. |
 | `UBertaBTTask_SendGameplayEvent` | Sends a compact GAS Gameplay Event payload to the controlled Pawn. |
 | `UBertaBTTask_ApplyGameplayEffectToSelf` | Applies an instant, duration, or infinite Gameplay Effect to the controlled Pawn. |
+| `UBertaBTDecorator_TargetGameplayTagQuery` | Reactive Gameplay Tag Query on an Actor selected from Blackboard. |
 
 Debug-facing Blueprint nodes use Unreal's `DevelopmentOnly` metadata where appropriate. This signals intended development use; it is not a blanket claim about all Runtime code or runtime cost.
 
@@ -95,6 +96,10 @@ The task listens before requesting activation, including abilities that end sync
 ### Apply Gameplay Effect To Self
 
 **Apply Gameplay Effect To Self** builds a normal outgoing spec at the configured finite level and applies it to the controlled Pawn's Ability System Component. It uses UE 5.8's `WasSuccessfullyApplied()` result, which correctly represents both active duration/infinite effects and the special completed handle returned by successful instant effects. GAS authority and prediction rules still determine whether application is accepted.
+
+### Target Gameplay Tag Query
+
+**Target Gameplay Tag Query** resolves an Actor-compatible Blackboard key and evaluates the query against that Actor's Ability System Component. It observes both the Blackboard key and every query tag on the current target. Replacing or clearing the target first unbinds the old ASC, binds the new one when available, and requests standard Observer Abort re-evaluation. Missing targets, missing ASCs, and empty queries evaluate false; no Tick is used.
 
 ## Editor tools
 
