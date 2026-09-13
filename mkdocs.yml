@@ -20,4 +20,5 @@ nav:
   - BertaSystemInfo: bertasysteminfo/index.md
   - BertaProcessBridge: bertaprocessbridge/index.md
   - BertaWindowTools: bertawindowtools/index.md
+  - BertaDesktopCapture: bertadesktopcapture/index.md
   - Development: development/index.md
