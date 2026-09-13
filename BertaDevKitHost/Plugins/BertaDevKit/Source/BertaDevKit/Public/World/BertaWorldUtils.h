@@ -23,6 +23,16 @@ class BERTADEVKIT_API UBertaWorldUtils : public UBlueprintFunctionLibrary
 
 public:
 	// ------------------------------------------------------------------
+	// Debug
+	// ------------------------------------------------------------------
+
+	/** Returns a human-readable snapshot of the resolved world and its gameplay state. */
+	UFUNCTION(BlueprintPure,
+		Category = "BertaDevKit|World|Debug",
+		meta = (WorldContext = "WorldContextObject", DevelopmentOnly, DisplayName = "Get World Debug Summary"))
+	static FString GetWorldDebugSummary(const UObject* WorldContextObject);
+
+	// ------------------------------------------------------------------
 	// Actor Queries
 	// ------------------------------------------------------------------
 

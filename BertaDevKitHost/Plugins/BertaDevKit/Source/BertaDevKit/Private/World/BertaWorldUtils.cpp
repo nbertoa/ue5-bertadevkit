@@ -2,13 +2,103 @@
 #include "World/BertaWorldUtils.h"
 #include "Log/BertaDevKitLog.h"
 #include "EngineUtils.h"
+#include "Engine/Engine.h"
+#include "Engine/EngineBaseTypes.h"
+#include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
+#include "GameFramework/GameModeBase.h"
+#include "GameFramework/GameStateBase.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "CollisionQueryParams.h"
+#include "UObject/Package.h"
+
+namespace BertaWorldUtilsPrivate
+{
+	const TCHAR* FormatWorldType(const EWorldType::Type WorldType)
+	{
+		switch (WorldType)
+		{
+		case EWorldType::None: return TEXT("None");
+		case EWorldType::Game: return TEXT("Game");
+		case EWorldType::Editor: return TEXT("Editor");
+		case EWorldType::PIE: return TEXT("PIE");
+		case EWorldType::EditorPreview: return TEXT("EditorPreview");
+		case EWorldType::GamePreview: return TEXT("GamePreview");
+		case EWorldType::GameRPC: return TEXT("GameRPC");
+		case EWorldType::Inactive: return TEXT("Inactive");
+		default: return TEXT("Unknown");
+		}
+	}
+
+	const TCHAR* FormatNetMode(const ENetMode NetMode)
+	{
+		switch (NetMode)
+		{
+		case NM_Standalone: return TEXT("Standalone");
+		case NM_DedicatedServer: return TEXT("DedicatedServer");
+		case NM_ListenServer: return TEXT("ListenServer");
+		case NM_Client: return TEXT("Client");
+		default: return TEXT("Unknown");
+		}
+	}
+
+	FString FormatObjectName(const UObject* Object)
+	{
+		return Object != nullptr ? Object->GetName() : TEXT("None");
+	}
+
+	UWorld* ResolveWorld(const UObject* WorldContextObject)
+	{
+		if (!IsValid(WorldContextObject))
+		{
+			return nullptr;
+		}
+
+		return GEngine != nullptr
+			? GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull)
+			: WorldContextObject->GetWorld();
+	}
+}
+
+// --------------------------------------------------------------------
+// Debug
+// --------------------------------------------------------------------
+
+FString UBertaWorldUtils::GetWorldDebugSummary(const UObject* WorldContextObject)
+{
+	const UWorld* World = BertaWorldUtilsPrivate::ResolveWorld(WorldContextObject);
+	if (World == nullptr)
+	{
+		return TEXT("World: None");
+	}
+
+	const UPackage* WorldPackage = World->GetPackage();
+	const int32 PIEInstanceID = WorldPackage != nullptr ? WorldPackage->GetPIEInstanceID() : INDEX_NONE;
+	const FString PIEInstance = PIEInstanceID != INDEX_NONE ? FString::FromInt(PIEInstanceID) : TEXT("None");
+
+	return FString::Printf(
+		TEXT("World: %s\n")
+		TEXT("WorldType: %s\n")
+		TEXT("PIEInstance: %s\n")
+		TEXT("NetMode: %s\n\n")
+		TEXT("Gameplay:\n")
+		TEXT("GameInstance: %s\n")
+		TEXT("GameMode: %s\n")
+		TEXT("GameState: %s\n")
+		TEXT("PlayerControllers: %d"),
+		*World->GetName(),
+		BertaWorldUtilsPrivate::FormatWorldType(World->WorldType),
+		*PIEInstance,
+		BertaWorldUtilsPrivate::FormatNetMode(World->GetNetMode()),
+		*BertaWorldUtilsPrivate::FormatObjectName(World->GetGameInstance()),
+		*BertaWorldUtilsPrivate::FormatObjectName(World->GetAuthGameMode()),
+		*BertaWorldUtilsPrivate::FormatObjectName(World->GetGameState()),
+		World->GetNumPlayerControllers());
+}
 
 // --------------------------------------------------------------------
 // Internal Helpers
