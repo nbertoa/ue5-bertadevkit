@@ -10,7 +10,7 @@ This repository is a UE 5.8 development host for seven independent sibling plugi
 
 ### BertaDevKit
 
-A general-purpose UE 5.8 toolbox with Runtime Blueprint utilities for debug output and drawing, screen stats, math, world queries, UI helpers, and controller feedback/output. Its Editor module adds conservative Asset Naming, Asset Cleaner, Asset Insights, Blueprint Usage Finder, Project Setup, Blueprint Audit, and World Validation workflows.
+A general-purpose UE 5.8 toolbox with Runtime Blueprint utilities for debug output and drawing, screen stats, math, world queries, UI helpers, controller feedback/output, and a focused GAS + Behavior Tree bridge for reactive conditions, waits, actions, and state snapshots. Its Editor module adds conservative Asset Naming, Asset Cleaner, Asset Insights, Blueprint Usage Finder, Project Setup, Blueprint Audit, and World Validation workflows.
 
 ### BertaDualSense
 

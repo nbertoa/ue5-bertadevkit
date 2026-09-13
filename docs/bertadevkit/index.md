@@ -34,10 +34,22 @@ BertaDevKit is a general-purpose Unreal Engine 5.8 toolbox. Its Runtime module p
 | `UBertaBTDecorator_CanActivateAbility` | Side-effect-free check of an exact granted ability's current activation rules. |
 | `UBertaBTTask_WaitAbilityReady` | Bounded periodic wait for arbitrary Gameplay Ability readiness logic. |
 | `UBertaGASDebugUtils` | Deterministic text snapshot of an Actor's current GAS state. |
+| `UBertaBTTask_DebugGASState` | Logs the controlled Pawn's GAS snapshot at a Behavior Tree execution point. |
 
 Debug-facing Blueprint nodes use Unreal's `DevelopmentOnly` metadata where appropriate. This signals intended development use; it is not a blanket claim about all Runtime code or runtime cost.
 
 `UBertaControllerUtils` plays native dynamic vibration either uniformly or per motor, returning a handle for stopping only its own actions. It also delegates controller light color/reset and asset-based `ForceFeedbackEffect` play/stop to `APlayerController`, preserving Unreal's native client-RPC behavior for the effect calls. Input Device Property activation uses the resolved controller's Platform User and lets Unreal select that user's default input device; a controller does not identify one unique physical device. Properties can be queried or removed by handle. **Remove All Input Device Properties (Global)** removes active properties for every local Platform User, so use it only when global cleanup is intended.
+
+## GAS + Behavior Tree
+
+These Runtime nodes bridge UE 5.8 Behavior Trees to the controlled Pawn's Ability System Component without requiring a custom ASC, Pawn, or AIController. Target nodes instead resolve an Actor-compatible Blackboard key and rebind whenever that key changes. With the single documented exception of **Wait Ability Ready**, waits and reactive decorators use GAS/Blackboard delegates rather than Tick, timers, or mirrored Blackboard state. Normal Behavior Tree aborts and relevance changes unregister observers.
+
+- **Conditions:** Gameplay Tag, Gameplay Tag Query, Attribute Threshold, Ability Active, Can Activate Ability, Gameplay Effect Query, Target Gameplay Tag Query, and Target Attribute Threshold.
+- **Waits:** Wait Gameplay Tag Query, Wait Gameplay Event, Wait Attribute Threshold, Wait Ability End, Wait Target Gameplay Tag Query, Wait Gameplay Effect Applied, Wait Gameplay Effect Removed, and Wait Ability Ready.
+- **Actions:** Activate Gameplay Ability And Wait, Cancel Gameplay Ability, Send Gameplay Event, Apply Gameplay Effect To Self, and Activate Gameplay Ability With Target.
+- **Debug:** Get GAS Debug Summary and Debug GAS State.
+
+AI Behavior Trees normally execute on authority, but these helpers do not add RPCs or override GAS networking. Ability activation, Gameplay Event routing, Gameplay Effect application, prediction, and replicated notifications retain their native GAS authority/network semantics. In particular, the applied-effect wait uses the server-side application delegate, while active-effect state reflects the effects visible to that ASC.
 
 ### Reactive Gameplay Tag decorators
 
@@ -151,6 +163,10 @@ This is the campaign's deliberate polling exception: arbitrary custom `CanActiva
 **Get GAS Debug Summary** is a `DevelopmentOnly` Blueprint-callable snapshot for logs, bug reports, and R&D inspection. Given an Actor exposed through the normal GAS interface, it reports the Actor and ASC identity followed by sorted owned tags, granted abilities with active state and level, active effects with stack/timing information, and available attributes with current values. Empty sections are explicit, output contains no pointer addresses, and invalid Actors or Actors without an ASC return false.
 
 The utility is a compact copy/paste diagnostic, not a logging UI or a replacement for GAS Companion's specialized tooling.
+
+### Debug GAS State
+
+**Debug GAS State** is an immediate Behavior Tree task that resolves the controlled Pawn, reuses **Get GAS Debug Summary**, writes one snapshot to `LogBertaDebug` with an optional label, and succeeds. It fails when there is no valid controlled Pawn/ASC, never ticks, and is intended for development and R&D checkpoints rather than continuous telemetry.
 
 ## Editor tools
 
