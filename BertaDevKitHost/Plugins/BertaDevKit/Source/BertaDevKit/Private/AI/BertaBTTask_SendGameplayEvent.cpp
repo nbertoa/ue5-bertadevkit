@@ -3,8 +3,10 @@
 #include "AIController.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemGlobals.h"
+#include "BehaviorTree/BehaviorTree.h"
 #include "BehaviorTree/BlackboardComponent.h"
 #include "BehaviorTree/BehaviorTreeComponent.h"
+#include "GameFramework/Actor.h"
 #include "GameFramework/Pawn.h"
 
 UBertaBTTask_SendGameplayEvent::UBertaBTTask_SendGameplayEvent(const FObjectInitializer& ObjectInitializer)
@@ -16,6 +18,19 @@ UBertaBTTask_SendGameplayEvent::UBertaBTTask_SendGameplayEvent(const FObjectInit
 		GET_MEMBER_NAME_CHECKED(ThisClass, TargetActorKey),
 		AActor::StaticClass());
 	TargetActorKey.AllowNoneAsValue(true);
+}
+
+void UBertaBTTask_SendGameplayEvent::InitializeFromAsset(UBehaviorTree& Asset)
+{
+	Super::InitializeFromAsset(Asset);
+	if (const UBlackboardData* BlackboardAsset = GetBlackboardAsset())
+	{
+		TargetActorKey.ResolveSelectedKey(*BlackboardAsset);
+	}
+	else
+	{
+		TargetActorKey.InvalidateResolvedKey();
+	}
 }
 
 EBTNodeResult::Type UBertaBTTask_SendGameplayEvent::ExecuteTask(

@@ -6,6 +6,8 @@
 
 #include "BertaBTTask_SendGameplayEvent.generated.h"
 
+class UBehaviorTree;
+
 /** Sends one GAS Gameplay Event to the controlled Pawn. */
 UCLASS()
 class BERTADEVKIT_API UBertaBTTask_SendGameplayEvent : public UBTTaskNode
@@ -15,6 +17,7 @@ class BERTADEVKIT_API UBertaBTTask_SendGameplayEvent : public UBTTaskNode
 public:
 	UBertaBTTask_SendGameplayEvent(const FObjectInitializer& ObjectInitializer);
 
+	virtual void InitializeFromAsset(UBehaviorTree& Asset) override;
 	virtual FString GetStaticDescription() const override;
 
 protected:

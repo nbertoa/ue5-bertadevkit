@@ -156,7 +156,10 @@ void UBertaBTTask_ActivateGameplayAbilityAndWait::HandleAbilityFailed(
 	const UGameplayAbility* Ability,
 	const FGameplayTagContainer& FailureTags)
 {
-	if (bIsWaiting && Ability && Ability->GetClass() == AbilityClass)
+	// GAS's public failure delegate does not include the spec handle. Only accept it
+	// while this task's own TryActivateAbility call is on the stack; after activation,
+	// a same-class failure from another spec must not terminate this wait.
+	if (bIsWaiting && bIsExecutingTask && Ability && Ability->GetClass() == AbilityClass)
 	{
 		CompleteTask(EBTNodeResult::Failed);
 	}
