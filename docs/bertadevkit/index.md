@@ -20,6 +20,7 @@ BertaDevKit is a general-purpose Unreal Engine 5.8 toolbox. Its Runtime module p
 | `UBertaBTDecorator_AttributeThreshold` | Reactive numeric comparison against one controlled-Pawn GAS attribute. |
 | `UBertaBTTask_WaitAttributeThreshold` | Event-driven wait until one GAS attribute satisfies the shared numeric condition. |
 | `UBertaBTTask_WaitAbilityEnd` | Waits until no active execution remains for an exact granted ability class. |
+| `UBertaBTDecorator_AbilityActive` | Reactive condition for active executions of one exact granted ability class. |
 
 Debug-facing Blueprint nodes use Unreal's `DevelopmentOnly` metadata where appropriate. This signals intended development use; it is not a blanket claim about all Runtime code or runtime cost.
 
@@ -75,6 +76,10 @@ The task listens before requesting activation, including abilities that end sync
 ### Wait Ability End
 
 **Wait Ability End** succeeds immediately when the exact configured class is not granted or its spec is already inactive. When active, it listens for GAS ability-end events and re-queries the spec after each matching end; it completes only when no execution remains, including concurrent per-execution abilities. It never ticks and a Behavior Tree abort unregisters the observer without canceling the ability.
+
+### Ability Active
+
+**Ability Active** evaluates the exact granted ability spec's native active state. GAS activation and end callbacks request standard decorator condition re-evaluation, while the spec remains the source of truth so concurrent executions are handled correctly. Missing classes/specs evaluate false; no Blackboard mirror or Tick is used.
 
 ## Editor tools
 
