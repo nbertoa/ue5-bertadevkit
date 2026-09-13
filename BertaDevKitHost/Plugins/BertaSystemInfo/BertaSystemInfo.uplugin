@@ -1,0 +1,28 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "1.0",
+  "FriendlyName": "BertaSystemInfo",
+  "Description": "Runtime system, hardware, display, and audio-device information for Unreal Engine 5.8.",
+  "Category": "Utilities",
+  "CreatedBy": "Nicolas Bertoa",
+  "CreatedByURL": "https://github.com/nbertoa",
+  "CanContainContent": false,
+  "IsBetaVersion": false,
+  "IsExperimentalVersion": false,
+  "Installed": false,
+  "EnabledByDefault": false,
+  "Modules": [
+    {
+      "Name": "BertaSystemInfo",
+      "Type": "Runtime",
+      "LoadingPhase": "Default"
+    }
+  ],
+  "Plugins": [
+    {
+      "Name": "AudioCapture",
+      "Enabled": true
+    }
+  ]
+}

@@ -17,4 +17,5 @@ nav:
   - Home: index.md
   - BertaDevKit: bertadevkit/index.md
   - BertaDualSense: bertadualsense/index.md
+  - BertaSystemInfo: bertasysteminfo/index.md
   - Development: development/index.md
