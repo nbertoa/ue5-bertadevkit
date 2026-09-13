@@ -2,25 +2,26 @@
 
 #include "AI/BertaGASBehaviorTreeTypes.h"
 #include "BehaviorTree/BTTaskNode.h"
+#include "BehaviorTree/BehaviorTreeTypes.h"
 #include "GameplayTagContainer.h"
 
-#include "BertaBTTask_WaitGameplayTagQuery.generated.h"
+#include "BertaBTTask_WaitTargetGameplayTagQuery.generated.h"
 
 class UAbilitySystemComponent;
+class UBehaviorTree;
 class UBehaviorTreeComponent;
+class UBlackboardComponent;
 
-/**
- * Waits until a Gameplay Tag Query reaches the requested state on the controlled
- * Pawn's Ability System Component. Referenced tag changes drive evaluation without ticking.
- */
+/** Waits for a tag-query state on the current Blackboard-selected Actor. */
 UCLASS()
-class BERTADEVKIT_API UBertaBTTask_WaitGameplayTagQuery : public UBTTaskNode
+class BERTADEVKIT_API UBertaBTTask_WaitTargetGameplayTagQuery : public UBTTaskNode
 {
 	GENERATED_BODY()
 
 public:
-	UBertaBTTask_WaitGameplayTagQuery(const FObjectInitializer& ObjectInitializer);
+	UBertaBTTask_WaitTargetGameplayTagQuery(const FObjectInitializer& ObjectInitializer);
 
+	virtual void InitializeFromAsset(UBehaviorTree& Asset) override;
 	virtual FString GetStaticDescription() const override;
 
 protected:
@@ -31,6 +32,9 @@ protected:
 		uint8* NodeMemory,
 		EBTNodeResult::Type TaskResult) override;
 	virtual void OnInstanceDestroyed(UBehaviorTreeComponent& OwnerComp) override;
+
+	UPROPERTY(EditAnywhere, Category = "Blackboard")
+	FBlackboardKeySelector TargetActorKey;
 
 	UPROPERTY(EditAnywhere, Category = "Gameplay Tags")
 	FGameplayTagQuery GameplayTagQuery;
@@ -45,13 +49,22 @@ private:
 		FDelegateHandle Handle;
 	};
 
-	UAbilitySystemComponent* ResolveAbilitySystemComponent(const UBehaviorTreeComponent& OwnerComp) const;
+	UAbilitySystemComponent* ResolveTargetAbilitySystemComponent(const UBlackboardComponent& Blackboard) const;
 	bool IsWaitConditionSatisfied(bool bQueryMatches) const;
+	bool IsCurrentTargetSatisfied(const UBlackboardComponent& Blackboard) const;
+	void BindTargetAbilitySystemComponent(UBlackboardComponent& Blackboard);
+	void UnbindTargetGameplayTagEvents();
+	void UnregisterObservers();
+	void CompleteIfSatisfied();
 	void HandleGameplayTagChanged(FGameplayTag CallbackTag, int32 NewCount);
-	void UnregisterGameplayTagEvents();
+	EBlackboardNotificationResult HandleTargetActorChanged(
+		const UBlackboardComponent& Blackboard,
+		FBlackboard::FKey ChangedKeyId);
 
 	TWeakObjectPtr<UAbilitySystemComponent> ObservedAbilitySystemComponent;
 	TWeakObjectPtr<UBehaviorTreeComponent> ObservedBehaviorTreeComponent;
+	TWeakObjectPtr<UBlackboardComponent> ObservedBlackboardComponent;
 	TArray<FRegisteredGameplayTagEvent> RegisteredGameplayTagEvents;
+	FDelegateHandle BlackboardObserverHandle;
 	bool bIsWaiting = false;
 };

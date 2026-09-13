@@ -16,6 +16,13 @@ enum class EBertaNumericComparison : uint8
 	Greater
 };
 
+UENUM(BlueprintType)
+enum class EBertaGameplayTagQueryWaitCondition : uint8
+{
+	Matches,
+	DoesNotMatch UMETA(DisplayName = "Does Not Match")
+};
+
 USTRUCT(BlueprintType)
 struct BERTADEVKIT_API FBertaGameplayAttributeCondition
 {
