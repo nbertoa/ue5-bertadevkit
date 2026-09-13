@@ -25,6 +25,7 @@ BertaDevKit is a general-purpose Unreal Engine 5.8 toolbox. Its Runtime module p
 | `UBertaBTTask_SendGameplayEvent` | Sends a compact GAS Gameplay Event payload to the controlled Pawn. |
 | `UBertaBTTask_ApplyGameplayEffectToSelf` | Applies an instant, duration, or infinite Gameplay Effect to the controlled Pawn. |
 | `UBertaBTDecorator_TargetGameplayTagQuery` | Reactive Gameplay Tag Query on an Actor selected from Blackboard. |
+| `UBertaBTDecorator_TargetAttributeThreshold` | Reactive attribute comparison on an Actor selected from Blackboard. |
 
 Debug-facing Blueprint nodes use Unreal's `DevelopmentOnly` metadata where appropriate. This signals intended development use; it is not a blanket claim about all Runtime code or runtime cost.
 
@@ -100,6 +101,10 @@ The task listens before requesting activation, including abilities that end sync
 ### Target Gameplay Tag Query
 
 **Target Gameplay Tag Query** resolves an Actor-compatible Blackboard key and evaluates the query against that Actor's Ability System Component. It observes both the Blackboard key and every query tag on the current target. Replacing or clearing the target first unbinds the old ASC, binds the new one when available, and requests standard Observer Abort re-evaluation. Missing targets, missing ASCs, and empty queries evaluate false; no Tick is used.
+
+### Target Attribute Threshold
+
+**Target Attribute Threshold** applies the shared numeric comparison to an attribute on the Actor selected by Blackboard. It observes both the target key and the current target ASC's attribute delegate, rebinding without stale callbacks whenever the target changes. A null target, missing ASC, or missing attribute evaluates false; no Tick or Blackboard value mirror is used.
 
 ## Editor tools
 
