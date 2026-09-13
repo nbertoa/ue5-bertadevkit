@@ -31,6 +31,7 @@ BertaDevKit is a general-purpose Unreal Engine 5.8 toolbox. Its Runtime module p
 | `UBertaBTTask_WaitGameplayEffectApplied` | Waits for the next matching Gameplay Effect application, including instant effects. |
 | `UBertaBTTask_WaitGameplayEffectRemoved` | Waits until no active Gameplay Effect matching a query remains. |
 | `UBertaBTDecorator_GameplayEffectQuery` | Reactive condition for active Gameplay Effects matching a query. |
+| `UBertaBTDecorator_CanActivateAbility` | Side-effect-free check of an exact granted ability's current activation rules. |
 
 Debug-facing Blueprint nodes use Unreal's `DevelopmentOnly` metadata where appropriate. This signals intended development use; it is not a blanket claim about all Runtime code or runtime cost.
 
@@ -130,6 +131,12 @@ The task listens before requesting activation, including abilities that end sync
 ### Gameplay Effect Query
 
 **Gameplay Effect Query** is true when at least one active duration/infinite effect on the controlled Pawn's ASC matches the configured query. Native active-effect addition and removal delegates request standard Observer Abort re-evaluation; each evaluation runs UE's query instead of maintaining a parallel count. Instant effects never become active and therefore do not make this decorator true. Empty queries evaluate false and no Tick is used.
+
+### Can Activate Ability
+
+**Can Activate Ability** resolves the exact granted class and calls the ability's native `CanActivateAbility` path without attempting activation or causing side effects. Invalid, ungranted, or missing-ASC configurations evaluate false.
+
+This decorator is intentionally not advertised as reactive. A custom Gameplay Ability can base `CanActivateAbility` on arbitrary C++ or Blueprint world state for which GAS provides no universal change event. Unreal evaluates the condition whenever the Behavior Tree normally reaches or rechecks it, but configured Observer Aborts cannot be guaranteed to react immediately to every custom readiness change unless some other Behavior Tree event causes reevaluation. Use **Wait Ability Ready** when explicit periodic readiness waiting is required.
 
 ## Editor tools
 
