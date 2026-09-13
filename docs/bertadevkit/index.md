@@ -23,6 +23,7 @@ BertaDevKit is a general-purpose Unreal Engine 5.8 toolbox. Its Runtime module p
 | `UBertaBTDecorator_AbilityActive` | Reactive condition for active executions of one exact granted ability class. |
 | `UBertaBTTask_CancelGameplayAbility` | Immediate cancellation request for one exact granted ability spec. |
 | `UBertaBTTask_SendGameplayEvent` | Sends a compact GAS Gameplay Event payload to the controlled Pawn. |
+| `UBertaBTTask_ApplyGameplayEffectToSelf` | Applies an instant, duration, or infinite Gameplay Effect to the controlled Pawn. |
 
 Debug-facing Blueprint nodes use Unreal's `DevelopmentOnly` metadata where appropriate. This signals intended development use; it is not a blanket claim about all Runtime code or runtime cost.
 
@@ -90,6 +91,10 @@ The task listens before requesting activation, including abilities that end sync
 ### Send Gameplay Event
 
 **Send Gameplay Event** dispatches a configured tag and magnitude to the controlled Pawn's Ability System Component. The Pawn is the instigator; an optional Actor Blackboard key populates the payload target. Success means the valid event was dispatched through GAS, not that any ability consumed it or activated. Network and prediction behavior remains GAS-owned.
+
+### Apply Gameplay Effect To Self
+
+**Apply Gameplay Effect To Self** builds a normal outgoing spec at the configured finite level and applies it to the controlled Pawn's Ability System Component. It uses UE 5.8's `WasSuccessfullyApplied()` result, which correctly represents both active duration/infinite effects and the special completed handle returned by successful instant effects. GAS authority and prediction rules still determine whether application is accepted.
 
 ## Editor tools
 
