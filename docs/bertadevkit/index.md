@@ -29,6 +29,7 @@ BertaDevKit is a general-purpose Unreal Engine 5.8 toolbox. Its Runtime module p
 | `UBertaBTTask_WaitTargetGameplayTagQuery` | Waits across Blackboard target replacement for a target tag-query state. |
 | `UBertaBTTask_ActivateGameplayAbilityWithTarget` | Triggers one granted ability with a Blackboard Actor in its Gameplay Event context. |
 | `UBertaBTTask_WaitGameplayEffectApplied` | Waits for the next matching Gameplay Effect application, including instant effects. |
+| `UBertaBTTask_WaitGameplayEffectRemoved` | Waits until no active Gameplay Effect matching a query remains. |
 
 Debug-facing Blueprint nodes use Unreal's `DevelopmentOnly` metadata where appropriate. This signals intended development use; it is not a blanket claim about all Runtime code or runtime cost.
 
@@ -120,6 +121,10 @@ The task listens before requesting activation, including abilities that end sync
 ### Wait Gameplay Effect Applied
 
 **Wait Gameplay Effect Applied** observes the next matching application to the controlled Pawn's ASC. It uses UE's server-side applied delegate, which includes instant and duration effects, and matches the incoming `FGameplayEffectSpec`; it does not inspect effects that existed before the task started. Because spec matching cannot evaluate active-effect custom match delegates, queries containing native or Blueprint custom delegates fail configuration explicitly. The task is event-driven and unregisters on match or abort.
+
+### Wait Gameplay Effect Removed
+
+**Wait Gameplay Effect Removed** succeeds immediately when no active duration/infinite effect matches its non-empty query. Otherwise it observes all effect removals and re-runs the native query after each one, completing only when zero matches remain. This correctly handles multiple matching effects; instant effects are never active and do not participate. Abort removes the delegate and the task never ticks.
 
 ## Editor tools
 
