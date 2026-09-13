@@ -61,14 +61,15 @@ FString UBertaComponentUtils::GetAttachmentDebugSummary(const USceneComponent* C
 	return FString::Printf(
 		TEXT("Component: %s\n")
 		TEXT("Class: %s\n")
-		TEXT("Owner: %s\n\n")
+		TEXT("Owner: %s\n")
+		TEXT("Registered: %s\n\n")
 		TEXT("Attachment:\n")
-		TEXT("ParentComponent: %s\n")
-		TEXT("ParentOwner: %s\n")
-		TEXT("Socket: %s\n")
-		TEXT("RootComponent: %s\n")
-		TEXT("RootActor: %s\n\n")
-		TEXT("Stored Relative Transform:\n")
+		TEXT("AttachParentComponent: %s\n")
+		TEXT("AttachParentActor: %s\n")
+		TEXT("AttachSocket: %s\n")
+		TEXT("AttachmentRootComponent: %s\n")
+		TEXT("AttachmentRootActor: %s\n\n")
+		TEXT("Stored Transform Properties:\n")
 		TEXT("Location: %s\n")
 		TEXT("Rotation: %s\n")
 		TEXT("Scale: %s\n\n")
@@ -84,6 +85,7 @@ FString UBertaComponentUtils::GetAttachmentDebugSummary(const USceneComponent* C
 		*Component->GetName(),
 		*Component->GetClass()->GetName(),
 		*BertaComponentUtilsPrivate::FormatObjectName(Component->GetOwner()),
+		BertaComponentUtilsPrivate::FormatBool(Component->IsRegistered()),
 		*BertaComponentUtilsPrivate::FormatObjectName(AttachParent),
 		*BertaComponentUtilsPrivate::FormatObjectName(Component->GetAttachParentActor()),
 		*SocketName,

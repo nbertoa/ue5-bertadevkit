@@ -33,19 +33,43 @@ bool FBertaComponentUtilsStandaloneTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("The component identity is present"), Summary.Contains(TEXT("Component: StandaloneComponent")));
 	TestTrue(TEXT("The component class is present"), Summary.Contains(TEXT("Class: SceneComponent")));
 	TestTrue(TEXT("A standalone component has no owner"), Summary.Contains(TEXT("Owner: None")));
+	TestTrue(TEXT("The actual registration state is present"),
+		Summary.Contains(FString::Printf(
+			TEXT("Registered: %s"),
+			Component->IsRegistered() ? TEXT("true") : TEXT("false"))));
 	TestTrue(TEXT("A standalone component has no attachment parent"),
-		Summary.Contains(TEXT("ParentComponent: None")) && Summary.Contains(TEXT("ParentOwner: None")));
-	TestTrue(TEXT("A standalone component has no attachment socket"), Summary.Contains(TEXT("Socket: None")));
+		Summary.Contains(TEXT("AttachParentComponent: None"))
+		&& Summary.Contains(TEXT("AttachParentActor: None")));
+	TestTrue(TEXT("A standalone component has no attachment socket"), Summary.Contains(TEXT("AttachSocket: None")));
 	TestTrue(TEXT("A standalone component is its own attachment root"),
-		Summary.Contains(TEXT("RootComponent: StandaloneComponent")));
-	TestTrue(TEXT("A standalone component without an owner has no root actor"), Summary.Contains(TEXT("RootActor: None")));
+		Summary.Contains(TEXT("AttachmentRootComponent: StandaloneComponent")));
+	TestTrue(TEXT("A standalone component without an owner has no root actor"),
+		Summary.Contains(TEXT("AttachmentRootActor: None")));
 	TestTrue(TEXT("Both transform sections are present"),
-		Summary.Contains(TEXT("Stored Relative Transform:")) && Summary.Contains(TEXT("World Transform:")));
+		Summary.Contains(TEXT("Stored Transform Properties:")) && Summary.Contains(TEXT("World Transform:")));
 	TestTrue(TEXT("All absolute flags are present"),
 		Summary.Contains(TEXT("AbsoluteLocation: false"))
 		&& Summary.Contains(TEXT("AbsoluteRotation: false"))
 		&& Summary.Contains(TEXT("AbsoluteScale: false")));
 	TestTrue(TEXT("Mobility is present"), Summary.Contains(TEXT("Mobility: Movable")));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FBertaComponentUtilsOwnerTest,
+	"BertaDevKit.Component.Debug.Owner",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FBertaComponentUtilsOwnerTest::RunTest(const FString& Parameters)
+{
+	AActor* Owner = NewObject<AActor>(GetTransientPackage(), TEXT("ComponentOwner"));
+	USceneComponent* Component = NewObject<USceneComponent>(Owner, TEXT("OwnedComponent"));
+
+	const FString Summary = UBertaComponentUtils::GetAttachmentDebugSummary(Component);
+	TestTrue(TEXT("The direct owner is present"), Summary.Contains(TEXT("Owner: ComponentOwner")));
+	TestTrue(TEXT("An unattached owned component is its own attachment root"),
+		Summary.Contains(TEXT("AttachmentRootComponent: OwnedComponent")));
+	TestTrue(TEXT("The native attachment root actor is the component owner"),
+		Summary.Contains(TEXT("AttachmentRootActor: ComponentOwner")));
 	return true;
 }
 
@@ -63,11 +87,40 @@ bool FBertaComponentUtilsAttachmentTest::RunTest(const FString& Parameters)
 
 	const FString Summary = UBertaComponentUtils::GetAttachmentDebugSummary(Child);
 	TestTrue(TEXT("The component owner is present"), Summary.Contains(TEXT("Owner: ChildOwner")));
-	TestTrue(TEXT("The attachment parent is present"), Summary.Contains(TEXT("ParentComponent: ParentComponent")));
-	TestTrue(TEXT("The attachment parent owner is present"), Summary.Contains(TEXT("ParentOwner: ParentOwner")));
-	TestTrue(TEXT("The attachment socket is present"), Summary.Contains(TEXT("Socket: hand_r_socket")));
-	TestTrue(TEXT("The native attachment root is present"), Summary.Contains(TEXT("RootComponent: ParentComponent")));
-	TestTrue(TEXT("The native attachment root actor is present"), Summary.Contains(TEXT("RootActor: ParentOwner")));
+	TestTrue(TEXT("The attachment parent is present"),
+		Summary.Contains(TEXT("AttachParentComponent: ParentComponent")));
+	TestTrue(TEXT("The attachment parent actor is present"),
+		Summary.Contains(TEXT("AttachParentActor: ParentOwner")));
+	TestTrue(TEXT("The attachment socket is present"), Summary.Contains(TEXT("AttachSocket: hand_r_socket")));
+	TestTrue(TEXT("The native attachment root is present"),
+		Summary.Contains(TEXT("AttachmentRootComponent: ParentComponent")));
+	TestTrue(TEXT("The native attachment root actor is present"),
+		Summary.Contains(TEXT("AttachmentRootActor: ParentOwner")));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FBertaComponentUtilsAttachmentHierarchyTest,
+	"BertaDevKit.Component.Debug.AttachmentHierarchy",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FBertaComponentUtilsAttachmentHierarchyTest::RunTest(const FString& Parameters)
+{
+	AActor* ActorA = NewObject<AActor>(GetTransientPackage(), TEXT("ActorA"));
+	AActor* ActorB = NewObject<AActor>(GetTransientPackage(), TEXT("ActorB"));
+	AActor* ActorC = NewObject<AActor>(GetTransientPackage(), TEXT("ActorC"));
+	USceneComponent* Root = NewObject<USceneComponent>(ActorA, TEXT("RootComponent"));
+	USceneComponent* Middle = NewObject<USceneComponent>(ActorB, TEXT("MiddleComponent"));
+	USceneComponent* Child = NewObject<USceneComponent>(ActorC, TEXT("ChildComponent"));
+	Middle->SetupAttachment(Root);
+	Child->SetupAttachment(Middle);
+
+	const FString Summary = UBertaComponentUtils::GetAttachmentDebugSummary(Child);
+	TestTrue(TEXT("The direct attachment parent differs from the hierarchy root"),
+		Summary.Contains(TEXT("AttachParentComponent: MiddleComponent"))
+		&& Summary.Contains(TEXT("AttachmentRootComponent: RootComponent")));
+	TestTrue(TEXT("The direct parent actor differs from the hierarchy root actor"),
+		Summary.Contains(TEXT("AttachParentActor: ActorB"))
+		&& Summary.Contains(TEXT("AttachmentRootActor: ActorA")));
 	return true;
 }
 
@@ -86,11 +139,11 @@ bool FBertaComponentUtilsTransformTest::RunTest(const FString& Parameters)
 	Component->SetUsingAbsoluteScale(true);
 
 	const FString Summary = UBertaComponentUtils::GetAttachmentDebugSummary(Component);
-	TestTrue(TEXT("Stored relative location is formatted explicitly"),
-		Summary.Contains(TEXT("Stored Relative Transform:\nLocation: X=1.250 Y=-2.500 Z=3.750")));
-	TestTrue(TEXT("Stored relative rotation is formatted explicitly"),
+	TestTrue(TEXT("Stored location is formatted explicitly"),
+		Summary.Contains(TEXT("Stored Transform Properties:\nLocation: X=1.250 Y=-2.500 Z=3.750")));
+	TestTrue(TEXT("Stored rotation is formatted explicitly"),
 		Summary.Contains(TEXT("Rotation: P=10.000 Y=20.000 R=30.000")));
-	TestTrue(TEXT("Stored relative scale is formatted explicitly"),
+	TestTrue(TEXT("Stored scale is formatted explicitly"),
 		Summary.Contains(TEXT("Scale: X=1.500 Y=2.000 Z=0.500")));
 	TestTrue(TEXT("Absolute location is present"), Summary.Contains(TEXT("AbsoluteLocation: true")));
 	TestTrue(TEXT("Absolute rotation is present"), Summary.Contains(TEXT("AbsoluteRotation: false")));
