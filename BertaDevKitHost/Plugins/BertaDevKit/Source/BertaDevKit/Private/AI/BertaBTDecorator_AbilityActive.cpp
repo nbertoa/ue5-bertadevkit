@@ -29,7 +29,8 @@ bool UBertaBTDecorator_AbilityActive::CalculateRawConditionValue(
 	const FGameplayAbilitySpec* AbilitySpec = AbilitySystemComponent
 		? AbilitySystemComponent->FindAbilitySpecFromClass(AbilityClass)
 		: nullptr;
-	return AbilitySpec && AbilitySpec->IsActive();
+	return AbilitySpec && (AbilitySpec->IsActive() ||
+		(bIsHandlingObservedActivation && AbilitySpec->Handle == AbilitySpecHandle));
 }
 
 void UBertaBTDecorator_AbilityActive::OnBecomeRelevant(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory)
@@ -41,12 +42,12 @@ void UBertaBTDecorator_AbilityActive::OnBecomeRelevant(UBehaviorTreeComponent& O
 	const FGameplayAbilitySpec* AbilitySpec = AbilitySystemComponent && AbilityClass
 		? AbilitySystemComponent->FindAbilitySpecFromClass(AbilityClass)
 		: nullptr;
-	if (!AbilitySpec)
+	if (!AbilitySystemComponent || !AbilityClass)
 	{
 		return;
 	}
 
-	AbilitySpecHandle = AbilitySpec->Handle;
+	AbilitySpecHandle = AbilitySpec ? AbilitySpec->Handle : FGameplayAbilitySpecHandle();
 	ObservedAbilitySystemComponent = AbilitySystemComponent;
 	ObservedBehaviorTreeComponent = &OwnerComp;
 	AbilityActivatedDelegateHandle = AbilitySystemComponent->AbilityActivatedCallbacks.AddUObject(
@@ -84,10 +85,21 @@ UAbilitySystemComponent* UBertaBTDecorator_AbilityActive::ResolveAbilitySystemCo
 
 void UBertaBTDecorator_AbilityActive::HandleAbilityActivated(UGameplayAbility* Ability)
 {
-	if (Ability && Ability->GetCurrentAbilitySpecHandle() == AbilitySpecHandle)
+	UAbilitySystemComponent* AbilitySystemComponent = ObservedAbilitySystemComponent.Get();
+	const FGameplayAbilitySpec* AbilitySpec = AbilitySystemComponent && AbilityClass
+		? AbilitySystemComponent->FindAbilitySpecFromClass(AbilityClass)
+		: nullptr;
+	if (!Ability || !AbilitySpec || Ability->GetCurrentAbilitySpecHandle() != AbilitySpec->Handle)
 	{
-		RequestConditionReevaluation();
+		return;
 	}
+
+	AbilitySpecHandle = AbilitySpec->Handle;
+	// UE broadcasts AbilityActivatedCallbacks from PreActivate before ActiveCount is incremented.
+	// Keep the raw condition truthful during this synchronous observer re-evaluation window.
+	bIsHandlingObservedActivation = true;
+	RequestConditionReevaluation();
+	bIsHandlingObservedActivation = false;
 }
 
 void UBertaBTDecorator_AbilityActive::HandleAbilityEnded(const FAbilityEndedData& EndedData)
@@ -127,6 +139,7 @@ void UBertaBTDecorator_AbilityActive::UnregisterAbilityEvents()
 	AbilityActivatedDelegateHandle.Reset();
 	AbilityEndedDelegateHandle.Reset();
 	AbilitySpecHandle = FGameplayAbilitySpecHandle();
+	bIsHandlingObservedActivation = false;
 	ObservedAbilitySystemComponent.Reset();
 	ObservedBehaviorTreeComponent.Reset();
 }

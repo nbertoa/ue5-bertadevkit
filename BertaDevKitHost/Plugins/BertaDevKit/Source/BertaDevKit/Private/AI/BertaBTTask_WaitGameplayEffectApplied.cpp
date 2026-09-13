@@ -98,7 +98,9 @@ void UBertaBTTask_WaitGameplayEffectApplied::HandleGameplayEffectApplied(
 	const FGameplayEffectSpec& AppliedSpec,
 	const FActiveGameplayEffectHandle ActiveHandle)
 {
-	if (!bIsWaiting || !GameplayEffectQuery.Matches(AppliedSpec))
+	// The spec overload cannot evaluate IgnoreHandles because it has no active handle.
+	if (!bIsWaiting || GameplayEffectQuery.IgnoreHandles.Contains(ActiveHandle) ||
+		!GameplayEffectQuery.Matches(AppliedSpec))
 	{
 		return;
 	}

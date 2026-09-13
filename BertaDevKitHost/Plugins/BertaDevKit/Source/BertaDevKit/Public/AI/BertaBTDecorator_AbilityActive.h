@@ -42,4 +42,5 @@ private:
 	FGameplayAbilitySpecHandle AbilitySpecHandle;
 	FDelegateHandle AbilityActivatedDelegateHandle;
 	FDelegateHandle AbilityEndedDelegateHandle;
+	bool bIsHandlingObservedActivation = false;
 };
