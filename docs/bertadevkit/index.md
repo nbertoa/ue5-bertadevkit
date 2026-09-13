@@ -18,6 +18,7 @@ BertaDevKit is a general-purpose Unreal Engine 5.8 toolbox. Its Runtime module p
 | `UBertaBTTask_ActivateGameplayAbilityAndWait` | Activates one granted Gameplay Ability and waits for that exact execution to end. |
 | `UBertaBTTask_WaitGameplayEvent` | Event-driven wait for the next exact or hierarchical GAS Gameplay Event. |
 | `UBertaBTDecorator_AttributeThreshold` | Reactive numeric comparison against one controlled-Pawn GAS attribute. |
+| `UBertaBTTask_WaitAttributeThreshold` | Event-driven wait until one GAS attribute satisfies the shared numeric condition. |
 
 Debug-facing Blueprint nodes use Unreal's `DevelopmentOnly` metadata where appropriate. This signals intended development use; it is not a blanket claim about all Runtime code or runtime cost.
 
@@ -65,6 +66,10 @@ The task listens before requesting activation, including abilities that end sync
 ### Attribute Threshold
 
 **Attribute Threshold** compares one attribute on the controlled Pawn's Ability System Component with a configured threshold using `<`, `<=`, `==`, `!=`, `>=`, or `>`. Equality and inequality use the configured non-negative tolerance. Missing attributes evaluate false. The decorator observes GAS's native attribute-value delegate while relevant and drives standard Observer Aborts without ticking or mirroring a Blackboard value.
+
+### Wait Attribute Threshold
+
+**Wait Attribute Threshold** uses the same comparison and tolerance semantics as the decorator. It succeeds immediately when the current value already satisfies the condition; otherwise it listens to GAS's attribute-value delegate and completes on the first satisfying change. Invalid or missing attributes fail, and Behavior Tree abort/stop removes the observer without ticking.
 
 ## Editor tools
 
