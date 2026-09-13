@@ -33,6 +33,7 @@ BertaDevKit is a general-purpose Unreal Engine 5.8 toolbox. Its Runtime module p
 | `UBertaBTDecorator_GameplayEffectQuery` | Reactive condition for active Gameplay Effects matching a query. |
 | `UBertaBTDecorator_CanActivateAbility` | Side-effect-free check of an exact granted ability's current activation rules. |
 | `UBertaBTTask_WaitAbilityReady` | Bounded periodic wait for arbitrary Gameplay Ability readiness logic. |
+| `UBertaGASDebugUtils` | Deterministic text snapshot of an Actor's current GAS state. |
 
 Debug-facing Blueprint nodes use Unreal's `DevelopmentOnly` metadata where appropriate. This signals intended development use; it is not a blanket claim about all Runtime code or runtime cost.
 
@@ -144,6 +145,12 @@ This decorator is intentionally not advertised as reactive. A custom Gameplay Ab
 **Wait Ability Ready** resolves the exact granted ability class and calls its native `CanActivateAbility` immediately. It succeeds at once when ready; otherwise it uses the Behavior Tree's native interval-tick support to recheck at the configured cadence until ready. The interval defaults to `0.1` seconds and is clamped to at least `0.01` seconds. Invalid, ungranted, removed, or missing-ASC abilities fail, and abort clears the per-AI wait state.
 
 This is the campaign's deliberate polling exception: arbitrary custom `CanActivateAbility` logic has no generic GAS change delegate. The task does not create a world timer and does not attempt activation.
+
+### GAS Debug Summary
+
+**Get GAS Debug Summary** is a `DevelopmentOnly` Blueprint-callable snapshot for logs, bug reports, and R&D inspection. Given an Actor exposed through the normal GAS interface, it reports the Actor and ASC identity followed by sorted owned tags, granted abilities with active state and level, active effects with stack/timing information, and available attributes with current values. Empty sections are explicit, output contains no pointer addresses, and invalid Actors or Actors without an ASC return false.
+
+The utility is a compact copy/paste diagnostic, not a logging UI or a replacement for GAS Companion's specialized tooling.
 
 ## Editor tools
 
