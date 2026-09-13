@@ -22,6 +22,7 @@ BertaDevKit is a general-purpose Unreal Engine 5.8 toolbox. Its Runtime module p
 | `UBertaBTTask_WaitAbilityEnd` | Waits until no active execution remains for an exact granted ability class. |
 | `UBertaBTDecorator_AbilityActive` | Reactive condition for active executions of one exact granted ability class. |
 | `UBertaBTTask_CancelGameplayAbility` | Immediate cancellation request for one exact granted ability spec. |
+| `UBertaBTTask_SendGameplayEvent` | Sends a compact GAS Gameplay Event payload to the controlled Pawn. |
 
 Debug-facing Blueprint nodes use Unreal's `DevelopmentOnly` metadata where appropriate. This signals intended development use; it is not a blanket claim about all Runtime code or runtime cost.
 
@@ -85,6 +86,10 @@ The task listens before requesting activation, including abilities that end sync
 ### Cancel Gameplay Ability
 
 **Cancel Gameplay Ability** resolves the exact granted class and calls GAS's spec-handle cancellation only when it is active. An already inactive granted spec succeeds because the desired state already holds; invalid, missing-ASC, and ungranted configurations fail. The request may affect multiple active executions of that same spec, but never unrelated ability classes. Compose with **Wait Ability End** when subsequent Behavior Tree flow must wait for termination.
+
+### Send Gameplay Event
+
+**Send Gameplay Event** dispatches a configured tag and magnitude to the controlled Pawn's Ability System Component. The Pawn is the instigator; an optional Actor Blackboard key populates the payload target. Success means the valid event was dispatched through GAS, not that any ability consumed it or activated. Network and prediction behavior remains GAS-owned.
 
 ## Editor tools
 
