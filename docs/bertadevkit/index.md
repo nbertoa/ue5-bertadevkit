@@ -28,6 +28,7 @@ BertaDevKit is a general-purpose Unreal Engine 5.8 toolbox. Its Runtime module p
 | `UBertaBTDecorator_TargetAttributeThreshold` | Reactive attribute comparison on an Actor selected from Blackboard. |
 | `UBertaBTTask_WaitTargetGameplayTagQuery` | Waits across Blackboard target replacement for a target tag-query state. |
 | `UBertaBTTask_ActivateGameplayAbilityWithTarget` | Triggers one granted ability with a Blackboard Actor in its Gameplay Event context. |
+| `UBertaBTTask_WaitGameplayEffectApplied` | Waits for the next matching Gameplay Effect application, including instant effects. |
 
 Debug-facing Blueprint nodes use Unreal's `DevelopmentOnly` metadata where appropriate. This signals intended development use; it is not a blanket claim about all Runtime code or runtime cost.
 
@@ -115,6 +116,10 @@ The task listens before requesting activation, including abilities that end sync
 ### Activate Gameplay Ability With Target
 
 **Activate Gameplay Ability With Target** resolves the exact granted ability spec and triggers it through GAS with a compact Gameplay Event payload. The controlled Pawn is the instigator and the Actor from the configured Blackboard key is the target. It does not invent generic target data and does not wait for the ability to end; success means GAS accepted the trigger. Compose with **Wait Ability End** when sequencing requires completion.
+
+### Wait Gameplay Effect Applied
+
+**Wait Gameplay Effect Applied** observes the next matching application to the controlled Pawn's ASC. It uses UE's server-side applied delegate, which includes instant and duration effects, and matches the incoming `FGameplayEffectSpec`; it does not inspect effects that existed before the task started. Because spec matching cannot evaluate active-effect custom match delegates, queries containing native or Blueprint custom delegates fail configuration explicitly. The task is event-driven and unregisters on match or abort.
 
 ## Editor tools
 
