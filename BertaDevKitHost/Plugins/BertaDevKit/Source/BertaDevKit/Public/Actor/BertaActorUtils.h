@@ -14,7 +14,7 @@ class UActorComponent;
 class UAnimInstance;
 class UBlackboardComponent;
 
-/** Blueprint conveniences for traversing common Actor relationships. */
+/** Blueprint conveniences for inspecting and traversing common Actor relationships. */
 UCLASS()
 class BERTADEVKIT_API UBertaActorUtils : public UBlueprintFunctionLibrary
 {
@@ -56,4 +56,10 @@ public:
 	/** Returns Actor's instigator controller when it is a PlayerController, or null otherwise. */
 	UFUNCTION(BlueprintPure, Category = "BertaDevKit|Actor|Traversal")
 	static APlayerController* GetInstigatorPlayerController(const AActor* Actor);
+
+	/** Returns a human-readable snapshot of Actor networking and relationship state. */
+	UFUNCTION(BlueprintPure,
+		Category = "BertaDevKit|Actor|Debug",
+		meta = (DevelopmentOnly, DisplayName = "Get Actor Network Debug Summary"))
+	static FString GetNetworkDebugSummary(const AActor* Actor);
 };

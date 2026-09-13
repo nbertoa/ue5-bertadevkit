@@ -9,6 +9,7 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
+#include "GameFramework/PlayerState.h"
 #include "Misc/AutomationTest.h"
 #include "UObject/UObjectGlobals.h"
 
@@ -211,6 +212,95 @@ bool FBertaActorUtilsInstigatorPlayerControllerTest::RunTest(const FString& Para
 	Instigator->SetController(PlayerController);
 	TestEqual(TEXT("An actor with a player-controlled instigator returns its player controller"),
 	          UBertaActorUtils::GetInstigatorPlayerController(Actor), PlayerController);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FBertaActorUtilsNetworkDebugSummaryTest,
+	"BertaDevKit.Actor.Debug.NetworkSummary",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FBertaActorUtilsNetworkDebugSummaryTest::RunTest(const FString& Parameters)
+{
+	TestEqual(TEXT("A null actor has the minimal summary"),
+	          UBertaActorUtils::GetNetworkDebugSummary(nullptr), FString(TEXT("Actor: None")));
+
+	AActor* Actor = NewObject<AActor>();
+	const FString ActorSummary = UBertaActorUtils::GetNetworkDebugSummary(Actor);
+	TestTrue(TEXT("A plain actor includes its name"),
+	         ActorSummary.Contains(FString::Printf(TEXT("Actor: %s"), *Actor->GetName())));
+	TestTrue(TEXT("A plain actor includes its class"),
+	         ActorSummary.Contains(FString::Printf(TEXT("Class: %s"), *Actor->GetClass()->GetName())));
+	TestTrue(TEXT("A transient actor reports standalone net mode"), ActorSummary.Contains(TEXT("NetMode: Standalone")));
+	TestTrue(TEXT("A plain actor includes local role"), ActorSummary.Contains(TEXT("LocalRole: Authority")));
+	TestTrue(TEXT("A plain actor includes remote role"), ActorSummary.Contains(TEXT("RemoteRole: None")));
+	TestTrue(TEXT("A plain actor includes authority"), ActorSummary.Contains(TEXT("Authority: true")));
+	TestTrue(TEXT("A plain actor includes replication state"), ActorSummary.Contains(TEXT("Replicates: false")));
+	TestTrue(TEXT("A plain actor includes movement replication state"), ActorSummary.Contains(TEXT("ReplicateMovement: false")));
+	TestTrue(TEXT("A plain actor renders a null owner as None"), ActorSummary.Contains(TEXT("Owner: None")));
+	TestTrue(TEXT("A plain actor renders a null net owner as None"), ActorSummary.Contains(TEXT("NetOwner: None")));
+	TestTrue(TEXT("A plain actor includes net ownership state"), ActorSummary.Contains(TEXT("HasNetOwner: false")));
+	TestTrue(TEXT("A plain actor includes local net ownership state"), ActorSummary.Contains(TEXT("HasLocalNetOwner: false")));
+	TestTrue(TEXT("A plain actor renders a null instigator as None"), ActorSummary.Contains(TEXT("Instigator: None")));
+	TestFalse(TEXT("A plain actor omits the Pawn section"), ActorSummary.Contains(TEXT("Pawn.")));
+	TestFalse(TEXT("A plain actor omits the Controller section"), ActorSummary.Contains(TEXT("Controller.")));
+
+	APawn* UnpossessedPawn = NewObject<APawn>();
+	const FString UnpossessedPawnSummary = UBertaActorUtils::GetNetworkDebugSummary(UnpossessedPawn);
+	TestTrue(TEXT("An unpossessed pawn renders a null controller as None"),
+	         UnpossessedPawnSummary.Contains(TEXT("Pawn.Controller: None")));
+	TestTrue(TEXT("An unpossessed pawn reports the actual player-controlled state"),
+	         UnpossessedPawnSummary.Contains(FString::Printf(TEXT("Pawn.PlayerControlled: %s"), UnpossessedPawn->IsPlayerControlled() ? TEXT("true") : TEXT("false"))));
+	TestTrue(TEXT("An unpossessed pawn reports the actual locally-controlled state"),
+	         UnpossessedPawnSummary.Contains(FString::Printf(TEXT("Pawn.LocallyControlled: %s"), UnpossessedPawn->IsLocallyControlled() ? TEXT("true") : TEXT("false"))));
+	TestFalse(TEXT("A pawn omits the Controller section"), UnpossessedPawnSummary.Contains(TEXT("Controller.")));
+
+	APawn* AIPawn = NewObject<APawn>();
+	AAIController* AIController = NewObject<AAIController>();
+	AIPawn->SetController(AIController);
+	const FString AIPawnSummary = UBertaActorUtils::GetNetworkDebugSummary(AIPawn);
+	TestTrue(TEXT("An AI pawn includes its controller name"),
+	         AIPawnSummary.Contains(FString::Printf(TEXT("Pawn.Controller: %s"), *AIController->GetName())));
+	TestTrue(TEXT("An AI pawn reports the actual player-controlled state"),
+	         AIPawnSummary.Contains(FString::Printf(TEXT("Pawn.PlayerControlled: %s"), AIPawn->IsPlayerControlled() ? TEXT("true") : TEXT("false"))));
+	TestTrue(TEXT("An AI pawn reports the actual locally-controlled state"),
+	         AIPawnSummary.Contains(FString::Printf(TEXT("Pawn.LocallyControlled: %s"), AIPawn->IsLocallyControlled() ? TEXT("true") : TEXT("false"))));
+
+	APawn* PlayerPawn = NewObject<APawn>();
+	APlayerController* PlayerController = NewObject<APlayerController>();
+	APlayerState* PlayerState = NewObject<APlayerState>();
+	PlayerState->SetIsABot(false);
+	PlayerPawn->SetController(PlayerController);
+	PlayerPawn->SetPlayerState(PlayerState);
+	const FString PlayerPawnSummary = UBertaActorUtils::GetNetworkDebugSummary(PlayerPawn);
+	TestTrue(TEXT("A player pawn includes its controller name"),
+	         PlayerPawnSummary.Contains(FString::Printf(TEXT("Pawn.Controller: %s"), *PlayerController->GetName())));
+	TestTrue(TEXT("A player pawn reports the actual player-controlled state"),
+	         PlayerPawnSummary.Contains(FString::Printf(TEXT("Pawn.PlayerControlled: %s"), PlayerPawn->IsPlayerControlled() ? TEXT("true") : TEXT("false"))));
+	TestTrue(TEXT("A player pawn reports the actual locally-controlled state"),
+	         PlayerPawnSummary.Contains(FString::Printf(TEXT("Pawn.LocallyControlled: %s"), PlayerPawn->IsLocallyControlled() ? TEXT("true") : TEXT("false"))));
+
+	PlayerController->SetAsLocalPlayerController();
+	const FString LocalPlayerPawnSummary = UBertaActorUtils::GetNetworkDebugSummary(PlayerPawn);
+	TestTrue(TEXT("A pawn with a configured local player controller reports local control"),
+	         LocalPlayerPawnSummary.Contains(TEXT("Pawn.LocallyControlled: true")));
+
+	AAIController* UnpossessedAIController = NewObject<AAIController>();
+	const FString AIControllerSummary = UBertaActorUtils::GetNetworkDebugSummary(UnpossessedAIController);
+	TestTrue(TEXT("An unpossessed controller renders a null pawn as None"),
+	         AIControllerSummary.Contains(TEXT("Controller.ControlledPawn: None")));
+	TestTrue(TEXT("An AI controller reports the actual local-controller state"),
+	         AIControllerSummary.Contains(FString::Printf(TEXT("Controller.LocalController: %s"), UnpossessedAIController->IsLocalController() ? TEXT("true") : TEXT("false"))));
+	TestTrue(TEXT("An AI controller is not reported as a player controller"),
+	         AIControllerSummary.Contains(TEXT("Controller.PlayerController: false")));
+	TestFalse(TEXT("A controller omits the Pawn section"), AIControllerSummary.Contains(TEXT("Pawn.")));
+
+	APlayerController* LocalPlayerController = NewObject<APlayerController>();
+	LocalPlayerController->SetAsLocalPlayerController();
+	const FString LocalPlayerControllerSummary = UBertaActorUtils::GetNetworkDebugSummary(LocalPlayerController);
+	TestTrue(TEXT("A local player controller reports local controller state"),
+	         LocalPlayerControllerSummary.Contains(TEXT("Controller.LocalController: true")));
+	TestTrue(TEXT("A player controller uses the engine type query"),
+	         LocalPlayerControllerSummary.Contains(TEXT("Controller.PlayerController: true")));
 	return true;
 }
 
