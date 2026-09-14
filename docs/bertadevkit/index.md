@@ -13,6 +13,7 @@ BertaDevKit is a general-purpose Unreal Engine 5.8 toolbox. Its Runtime module p
 | `UBertaWorldUtils` | Actor queries, traces, player/camera access, and delayed-action timer helpers. |
 | `UBertaUIUtils` | Blueprint conveniences for common UI/player-input boilerplate. |
 | `UBertaVideoPlayerWidget` | Self-contained fullscreen Media Framework playback with optional UI audio and gameplay pause ownership. |
+| `UBertaFadeWidget` | Reusable fullscreen black fade driven by real UI elapsed time. |
 | `UBertaControllerUtils` | Controller feedback, light output, and Input Device Property conveniences without PlayerController casts. |
 | `UBertaBTDecorator_GameplayTag` / `UBertaBTDecorator_GameplayTagQuery` | Reactive GAS conditions controlling whether Behavior Tree branches may execute. |
 | `UBertaBTTask_WaitGameplayTagQuery` | Event-driven Behavior Tree wait for a Gameplay Tag Query state without Blackboard mirroring. |
@@ -72,6 +73,23 @@ Media open and playback completion are delegate-driven rather than polled. `OnPl
 When audio is enabled, the widget creates a `UMediaSoundComponent` for the same player and marks it as UI sound so it can continue while gameplay is paused. Pause acquisition uses an authoritative `AGameModeBase` pause delegate tied to this widget. If the world was already paused, the widget records no ownership and therefore never unpauses it. If another pause delegate still blocks unpause, releasing the video pause leaves the world paused. Consequently, **Pause Game** requires an owning Player Controller and authoritative Game Mode; client-only playback should disable that option and leave network pause policy to the game.
 
 The widget accepts `UMediaSource` assets rather than raw file paths and intentionally provides no loop, playlist, subtitle, skip, fade, URL, or playback-rate API. Actual codec/container availability remains determined by the selected Media Framework backend and target platform. Runtime visual/audio behavior still requires manual Unreal verification; the repository verification compiles the feature without launching Unreal.
+
+## Fullscreen fade widget
+
+`UBertaFadeWidget` is an independent Runtime fullscreen transition primitive. It constructs a solid-black native UMG layer and changes only that layer's `RenderOpacity`; no texture, material, Widget Animation, or Widget Blueprint graph is required.
+
+```text
+Create Widget (BertaFadeWidget)
+→ set Fade Type, Duration, and Remove On Finished
+→ optionally bind On Fade Finished
+→ Add to Viewport
+```
+
+Adding the widget starts a fresh fade automatically. **Fade Out** is transparent to black (`0 → 1` opacity), while **Fade In** is black to transparent (`1 → 0`). `PlayFade` always restarts from the canonical initial opacity using the current properties, including after a completed fade that remained attached. Calling it during playback cancels the previous progression without emitting completion and starts again.
+
+Duration is clamped to at least zero and measured with a monotonic real-time clock from Slate-driven `NativeTick`, so gameplay pause and world time dilation do not control progress. A zero-duration fade sets its final opacity and completes immediately. Natural completion first reaches the exact final opacity, then broadcasts `OnFadeFinished` once, and finally removes the widget when configured. External removal cancels playback without broadcasting; adding that widget instance again starts a new fade.
+
+The black layer is `HitTestInvisible`, fills the root overlay, and is placed above any existing Widget Blueprint content. A convenient optional asset can therefore be created at `/BertaDevKit/UI/WBP_BertaFade` as an empty Widget Blueprint subclass of `UBertaFadeWidget`; it needs no graph logic or animation. The C++ class remains directly usable. Color, curves, reverse/pause controls, queues, materials, and composition with video playback are intentionally outside this focused API.
 
 ## AI / Behavior Tree Debugging
 
