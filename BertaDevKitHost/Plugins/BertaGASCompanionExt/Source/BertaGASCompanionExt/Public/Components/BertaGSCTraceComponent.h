@@ -66,6 +66,10 @@ struct BERTAGASCOMPANIONEXT_API FBertaGSCTraceEvent
 	UPROPERTY(BlueprintReadOnly, Category = "Trace")
 	FString AttributeName;
 
+	/** True only when OldValue came from an earlier observed value or an explicit old-value delegate parameter. */
+	UPROPERTY(BlueprintReadOnly, Category = "Trace")
+	bool bOldValueKnown = false;
+
 	UPROPERTY(BlueprintReadOnly, Category = "Trace")
 	float OldValue = 0.0f;
 
@@ -135,6 +139,7 @@ private:
 	TArray<FBertaGSCTraceEvent> Events;
 
 	TMap<FActiveGameplayEffectHandle, FString> GameplayEffectPaths;
+	TMap<FGameplayAttribute, float> LastObservedAttributeValues;
 	float TraceStartWorldTimeSeconds = 0.0f;
 
 	FBertaGSCTraceEvent MakeEvent(EBertaGSCTraceEventType Type) const;

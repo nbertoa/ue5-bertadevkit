@@ -9,8 +9,8 @@ UENUM(BlueprintType)
 enum class EBertaGameplayTagUsageScope : uint8
 {
 	SelectedContentBrowserAssets,
-	ExplicitGameRoot,
-	WholeGame
+	ExplicitGameRoot UMETA(DisplayName = "Explicit Project Content Root"),
+	WholeGame UMETA(DisplayName = "Whole Project")
 };
 
 UENUM(BlueprintType)
@@ -55,7 +55,7 @@ struct BERTADEVKITEDITOR_API FBertaGameplayTagUsageResult
 	FString Description;
 };
 
-/** Read-only, scoped reflection search for stored Gameplay Tag references in project assets. */
+/** Read-only, scoped reflection search for stored Gameplay Tag references in project and project-plugin assets. */
 UCLASS()
 class BERTADEVKITEDITOR_API UBertaGameplayTagUsageFinder final : public UBlueprintFunctionLibrary
 {

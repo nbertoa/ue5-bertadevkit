@@ -1,12 +1,17 @@
 #include "Components/BertaGSCAbilityQueueInputBridgeComponent.h"
 
+#include "Components/BertaGSCAbilityQueueInputBridgeInternal.h"
+
 #include "BertaGASCompanionExt.h"
 #include "Abilities/GameplayAbility.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
+#include "Components/GSCAbilityInputBindingComponent.h"
 #include "Components/GSCAbilityQueueComponent.h"
+#include "Components/GSCCoreComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
+#include "InputAction.h"
 #include "TimerManager.h"
 
 UBertaGSCAbilityQueueInputBridgeComponent::UBertaGSCAbilityQueueInputBridgeComponent()
@@ -17,9 +22,9 @@ UBertaGSCAbilityQueueInputBridgeComponent::UBertaGSCAbilityQueueInputBridgeCompo
 void UBertaGSCAbilityQueueInputBridgeComponent::BeginPlay()
 {
 	Super::BeginPlay();
-	if (bStartAutomatically && !StartBridge())
+	if (bStartAutomatically)
 	{
-		EmitDiagnostic(TEXT("Bridge inactive: owner requires both an ASC and UGSCAbilityQueueComponent."));
+		StartBridge();
 	}
 }
 
@@ -37,109 +42,193 @@ void UBertaGSCAbilityQueueInputBridgeComponent::BeginDestroy()
 
 bool UBertaGSCAbilityQueueInputBridgeComponent::StartBridge()
 {
-	if (BoundAbilitySystemComponent.IsValid() && AbilityQueueComponent)
+	if (bBridgeStarted)
 	{
+		if (!RefreshAbilitySystemBinding())
+		{
+			EmitDiagnostic(TEXT("Bridge waiting: GAS Companion has not initialized an ASC for this owner yet."));
+		}
 		return true;
 	}
 
 	AActor* Owner = GetOwner();
-	UAbilitySystemComponent* AbilitySystemComponent = Owner
-		? UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Owner)
+	UGSCCoreComponent* NewCoreComponent = Owner ? Owner->FindComponentByClass<UGSCCoreComponent>() : nullptr;
+	UGSCAbilityInputBindingComponent* NewInputBindingComponent = Owner
+		? Owner->FindComponentByClass<UGSCAbilityInputBindingComponent>()
 		: nullptr;
-	UGSCAbilityQueueComponent* QueueComponent = Owner ? Owner->FindComponentByClass<UGSCAbilityQueueComponent>() : nullptr;
-	if (!AbilitySystemComponent || !QueueComponent)
+	UGSCAbilityQueueComponent* NewQueueComponent = Owner ? Owner->FindComponentByClass<UGSCAbilityQueueComponent>() : nullptr;
+	if (!NewCoreComponent || !NewInputBindingComponent || !NewQueueComponent)
 	{
+		EmitDiagnostic(TEXT("Bridge could not start: owner requires UGSCAbilityInputBindingComponent, UGSCAbilityQueueComponent, and UGSCCoreComponent."));
 		return false;
 	}
 
-	AbilityFailedDelegateHandle = AbilitySystemComponent->AbilityFailedCallbacks.AddUObject(this, &ThisClass::HandleAbilityFailed);
-	AbilityEndedDelegateHandle = AbilitySystemComponent->AbilityEndedCallbacks.AddUObject(this, &ThisClass::HandleAbilityEnded);
-	BoundAbilitySystemComponent = AbilitySystemComponent;
-	AbilityQueueComponent = QueueComponent;
-	EmitDiagnostic(TEXT("Bridge active: observing native ASC ability failure and end events."));
+	CoreComponent = NewCoreComponent;
+	AbilityInputBindingComponent = NewInputBindingComponent;
+	AbilityQueueComponent = NewQueueComponent;
+	CoreComponent->OnInitAbilityActorInfo.AddUniqueDynamic(this, &ThisClass::HandleAbilityActorInfoInitialized);
+	bBridgeStarted = true;
+	if (!RefreshAbilitySystemBinding())
+	{
+		EmitDiagnostic(TEXT("Bridge waiting: GAS Companion has not initialized an ASC for this owner yet."));
+	}
 	return true;
 }
 
 void UBertaGSCAbilityQueueInputBridgeComponent::StopBridge()
 {
-	if (UAbilitySystemComponent* AbilitySystemComponent = BoundAbilitySystemComponent.Get())
+	if (CoreComponent)
 	{
-		AbilitySystemComponent->AbilityFailedCallbacks.Remove(AbilityFailedDelegateHandle);
-		AbilitySystemComponent->AbilityEndedCallbacks.Remove(AbilityEndedDelegateHandle);
+		CoreComponent->OnInitAbilityActorInfo.RemoveDynamic(this, &ThisClass::HandleAbilityActorInfoInitialized);
 	}
-	AbilityFailedDelegateHandle.Reset();
-	AbilityEndedDelegateHandle.Reset();
+	UnbindAbilitySystemComponent();
+	CoreComponent = nullptr;
+	AbilityInputBindingComponent = nullptr;
+	AbilityQueueComponent = nullptr;
+	bBridgeStarted = false;
+}
 
+bool UBertaGSCAbilityQueueInputBridgeComponent::IsBridgeActive() const
+{
+	return bBridgeStarted
+		&& BoundAbilitySystemComponent.IsValid()
+		&& CoreComponent != nullptr
+		&& AbilityInputBindingComponent != nullptr
+		&& AbilityQueueComponent != nullptr;
+}
+
+bool UBertaGSCAbilityQueueInputBridgeComponent::ReportInputDrivenFailure(
+	UInputAction* SourceInputAction,
+	const TSubclassOf<UGameplayAbility> AbilityClass,
+	const FGameplayTagContainer& ReasonTags)
+{
+	using namespace BertaGSCAbilityQueueInputBridgePrivate;
+
+	FInputFailureContext Context;
+	Context.bBridgeActive = IsBridgeActive();
+	Context.bRequestValid = SourceInputAction && AbilityClass;
+	if (Context.bBridgeActive && Context.bRequestValid)
+	{
+		Context.bQueueEnabledAndOpen = AbilityQueueComponent->bAbilityQueueEnabled
+			&& AbilityQueueComponent->IsAbilityQueueOpened();
+		Context.bRuntimeBindingMatches = AbilityInputBindingComponent->GetBoundInputActionForAbilityClass(AbilityClass)
+			== SourceInputAction;
+		Context.bAbilityAllowed = IsAbilityAllowed(AbilityClass);
+	}
+
+	switch (EvaluateInputFailure(Context))
+	{
+	case EInputFailureDecision::BridgeInactive:
+		EmitDiagnostic(TEXT("Input failure rejected: bridge is waiting for a valid ASC or is stopped."));
+		return false;
+	case EInputFailureDecision::InvalidRequest:
+		EmitDiagnostic(TEXT("Input failure rejected: SourceInputAction and AbilityClass must both be valid."));
+		return false;
+	case EInputFailureDecision::QueueUnavailable:
+		EmitDiagnostic(TEXT("Input failure rejected: ability queue is disabled or closed."));
+		return false;
+	case EInputFailureDecision::BindingMismatch:
+		EmitDiagnostic(FString::Printf(
+			TEXT("Input failure rejected: %s is not the runtime GSC binding for %s."),
+			*SourceInputAction->GetPathName(),
+			*AbilityClass->GetPathName()));
+		return false;
+	case EInputFailureDecision::AbilityNotAllowed:
+		EmitDiagnostic(FString::Printf(TEXT("Input failure rejected: %s is not allowed by the open queue."), *AbilityClass->GetPathName()));
+		return false;
+	case EInputFailureDecision::Accept:
+		break;
+	default:
+		checkNoEntry();
+		return false;
+	}
+
+	const UGameplayAbility* AlreadyQueued = AbilityQueueComponent->GetCurrentQueuedAbility();
+	if (AlreadyQueued && AlreadyQueued->GetClass() == AbilityClass.Get())
+	{
+		EmitDiagnostic(FString::Printf(TEXT("Input failure already queued by native GSC handling: %s."), *AbilityClass->GetPathName()));
+		return true;
+	}
+
+	const UGameplayAbility* Ability = AbilityClass->GetDefaultObject<UGameplayAbility>();
+	AbilityQueueComponent->OnAbilityFailed(Ability, ReasonTags);
+	const UGameplayAbility* QueuedAbility = AbilityQueueComponent->GetCurrentQueuedAbility();
+	const bool bAccepted = QueuedAbility && QueuedAbility->GetClass() == AbilityClass.Get();
+	if (bAccepted)
+	{
+		ExplicitlySubmittedAbilityClass = AbilityClass;
+		EmitDiagnostic(FString::Printf(TEXT("Forwarded explicit input failure for %s."), *AbilityClass->GetPathName()));
+	}
+	else
+	{
+		EmitDiagnostic(FString::Printf(TEXT("Input failure was not accepted by the public GSC queue for %s."), *AbilityClass->GetPathName()));
+	}
+	return bAccepted;
+}
+
+void UBertaGSCAbilityQueueInputBridgeComponent::HandleAbilityEnded(UGameplayAbility* Ability)
+{
+	const UGameplayAbility* QueuedAbility = IsBridgeActive() ? AbilityQueueComponent->GetCurrentQueuedAbility() : nullptr;
+	if (!ExplicitlySubmittedAbilityClass
+		|| !QueuedAbility
+		|| QueuedAbility->GetClass() != ExplicitlySubmittedAbilityClass.Get())
+	{
+		return;
+	}
+
+	PendingEndedAbility = Ability;
+	PendingEndedAbilityClass = Ability ? Ability->GetClass() : nullptr;
+	ScheduleReconciliation();
+}
+
+bool UBertaGSCAbilityQueueInputBridgeComponent::RefreshAbilitySystemBinding()
+{
+	AActor* Owner = GetOwner();
+	UAbilitySystemComponent* CurrentAbilitySystemComponent = Owner
+		? UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Owner)
+		: nullptr;
+	if (BoundAbilitySystemComponent.Get() == CurrentAbilitySystemComponent && CurrentAbilitySystemComponent)
+	{
+		return true;
+	}
+
+	UnbindAbilitySystemComponent();
+	if (!CurrentAbilitySystemComponent)
+	{
+		return false;
+	}
+
+	AbilityEndedDelegateHandle = CurrentAbilitySystemComponent->AbilityEndedCallbacks.AddUObject(this, &ThisClass::HandleAbilityEnded);
+	BoundAbilitySystemComponent = CurrentAbilitySystemComponent;
+	EmitDiagnostic(FString::Printf(TEXT("Bridge active: bound to ASC %s."), *CurrentAbilitySystemComponent->GetPathName()));
+	return true;
+}
+
+void UBertaGSCAbilityQueueInputBridgeComponent::UnbindAbilitySystemComponent()
+{
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(ReconciliationTimerHandle);
 	}
 	ReconciliationTimerHandle.Invalidate();
-	PendingFailures.Reset();
 	PendingEndedAbility.Reset();
 	PendingEndedAbilityClass = nullptr;
+	ExplicitlySubmittedAbilityClass = nullptr;
+
+	if (UAbilitySystemComponent* AbilitySystemComponent = BoundAbilitySystemComponent.Get())
+	{
+		AbilitySystemComponent->AbilityEndedCallbacks.Remove(AbilityEndedDelegateHandle);
+	}
+	AbilityEndedDelegateHandle.Reset();
 	BoundAbilitySystemComponent.Reset();
-	AbilityQueueComponent = nullptr;
 }
 
-bool UBertaGSCAbilityQueueInputBridgeComponent::IsBridgeActive() const
+void UBertaGSCAbilityQueueInputBridgeComponent::HandleAbilityActorInfoInitialized()
 {
-	return BoundAbilitySystemComponent.IsValid() && AbilityQueueComponent != nullptr;
-}
-
-void UBertaGSCAbilityQueueInputBridgeComponent::HandleAbilityFailed(
-	const UGameplayAbility* Ability,
-	const FGameplayTagContainer& ReasonTags)
-{
-	if (!Ability)
+	if (bBridgeStarted && !RefreshAbilitySystemBinding())
 	{
-		EmitDiagnostic(TEXT("Observed ability failure without an ability; ignored."));
-		return;
+		EmitDiagnostic(TEXT("Bridge waiting: Ability Actor Info changed but no ASC is currently available."));
 	}
-
-	const UGameplayAbility* AlreadyQueued = AbilityQueueComponent ? AbilityQueueComponent->GetCurrentQueuedAbility() : nullptr;
-	UClass* AbilityClass = Ability->GetClass();
-	if (FPendingFailure* Existing = PendingFailures.FindByPredicate(
-		[AbilityClass](const FPendingFailure& Pending)
-		{
-			return Pending.AbilityClass.Get() == AbilityClass;
-		}))
-	{
-		Existing->ReasonTags.AppendTags(ReasonTags);
-		Existing->bObservedInPublicQueue |= AlreadyQueued && AlreadyQueued->GetClass() == AbilityClass;
-		EmitDiagnostic(FString::Printf(TEXT("Coalesced duplicate failure signal for %s."), *AbilityClass->GetPathName()));
-		ScheduleReconciliation();
-		return;
-	}
-
-	FPendingFailure& Pending = PendingFailures.AddDefaulted_GetRef();
-	Pending.Ability = const_cast<UGameplayAbility*>(Ability);
-	Pending.AbilityClass = AbilityClass;
-	Pending.ReasonTags = ReasonTags;
-	Pending.bObservedInPublicQueue = AlreadyQueued && AlreadyQueued->GetClass() == AbilityClass;
-	EmitDiagnostic(FString::Printf(TEXT("Observed ability failure: %s."), *AbilityClass->GetPathName()));
-	ScheduleReconciliation();
-}
-
-void UBertaGSCAbilityQueueInputBridgeComponent::HandleAbilityEnded(UGameplayAbility* Ability)
-{
-	PendingEndedAbility = Ability;
-	PendingEndedAbilityClass = Ability ? Ability->GetClass() : nullptr;
-	const UGameplayAbility* QueuedAtEnd = AbilityQueueComponent ? AbilityQueueComponent->GetCurrentQueuedAbility() : nullptr;
-	if (QueuedAtEnd)
-	{
-		for (FPendingFailure& Pending : PendingFailures)
-		{
-			Pending.bObservedInPublicQueue |= Pending.AbilityClass.Get() == QueuedAtEnd->GetClass();
-		}
-	}
-	else if (!PendingFailures.IsEmpty())
-	{
-		PendingFailures.Reset();
-		EmitDiagnostic(TEXT("Failure/end completed before reconciliation with no queued ability; skipped because public state cannot distinguish native consumption from an unhandled failure."));
-	}
-	EmitDiagnostic(FString::Printf(TEXT("Observed ability end: %s."), *GetPathNameSafe(Ability ? Ability->GetClass() : nullptr)));
-	ScheduleReconciliation();
 }
 
 void UBertaGSCAbilityQueueInputBridgeComponent::ScheduleReconciliation()
@@ -153,65 +242,43 @@ void UBertaGSCAbilityQueueInputBridgeComponent::ScheduleReconciliation()
 	{
 		ReconciliationTimerHandle = World->GetTimerManager().SetTimerForNextTick(this, &ThisClass::ReconcilePublicQueueState);
 	}
+	else
+	{
+		PendingEndedAbility.Reset();
+		PendingEndedAbilityClass = nullptr;
+		ExplicitlySubmittedAbilityClass = nullptr;
+	}
 }
 
 void UBertaGSCAbilityQueueInputBridgeComponent::ReconcilePublicQueueState()
 {
 	ReconciliationTimerHandle.Invalidate();
-	if (!BoundAbilitySystemComponent.IsValid()
-		|| !AbilityQueueComponent
-		|| !AbilityQueueComponent->bAbilityQueueEnabled
-		|| !AbilityQueueComponent->IsAbilityQueueOpened())
+	if (!IsBridgeActive() || !AbilityQueueComponent->bAbilityQueueEnabled)
 	{
-		PendingFailures.Reset();
 		PendingEndedAbility.Reset();
 		PendingEndedAbilityClass = nullptr;
-		EmitDiagnostic(TEXT("Reconciliation skipped: queue is missing, disabled, or closed."));
+		ExplicitlySubmittedAbilityClass = nullptr;
+		EmitDiagnostic(TEXT("Ability end reconciliation skipped: bridge is inactive or queue is disabled."));
 		return;
 	}
-
-	for (const FPendingFailure& Pending : PendingFailures)
-	{
-		if (Pending.bObservedInPublicQueue)
-		{
-			EmitDiagnostic(FString::Printf(TEXT("Native GSC handling exposed queued state for %s; no forwarding."), *GetPathNameSafe(Pending.AbilityClass)));
-			continue;
-		}
-
-		UGameplayAbility* Ability = Pending.Ability.Get();
-		if (!Ability && Pending.AbilityClass)
-		{
-			Ability = Pending.AbilityClass->GetDefaultObject<UGameplayAbility>();
-		}
-		if (!Ability || !IsAbilityAllowed(*Ability))
-		{
-			continue;
-		}
-
-		const UGameplayAbility* AlreadyQueued = AbilityQueueComponent->GetCurrentQueuedAbility();
-		if (AlreadyQueued && AlreadyQueued->GetClass() == Ability->GetClass())
-		{
-			EmitDiagnostic(FString::Printf(TEXT("Native GSC handling already queued %s; no forwarding."), *Ability->GetClass()->GetPathName()));
-			continue;
-		}
-
-		AbilityQueueComponent->OnAbilityFailed(Ability, Pending.ReasonTags);
-		EmitDiagnostic(FString::Printf(TEXT("Forwarded unhandled failure for %s exactly once."), *Ability->GetClass()->GetPathName()));
-	}
-	PendingFailures.Reset();
 
 	UGameplayAbility* EndedAbility = PendingEndedAbility.Get();
 	if (!EndedAbility && PendingEndedAbilityClass)
 	{
 		EndedAbility = PendingEndedAbilityClass->GetDefaultObject<UGameplayAbility>();
 	}
-	if (EndedAbility && AbilityQueueComponent->GetCurrentQueuedAbility())
+	const UGameplayAbility* QueuedAbility = AbilityQueueComponent->GetCurrentQueuedAbility();
+	if (EndedAbility
+		&& ExplicitlySubmittedAbilityClass
+		&& QueuedAbility
+		&& QueuedAbility->GetClass() == ExplicitlySubmittedAbilityClass.Get())
 	{
 		AbilityQueueComponent->OnAbilityEnded(EndedAbility);
-		EmitDiagnostic(TEXT("Forwarded unhandled ability end for the remaining queued ability exactly once."));
+		EmitDiagnostic(TEXT("Forwarded ability end because native GSC handling left an explicitly submitted input failure queued."));
 	}
 	PendingEndedAbility.Reset();
 	PendingEndedAbilityClass = nullptr;
+	ExplicitlySubmittedAbilityClass = nullptr;
 }
 
 void UBertaGSCAbilityQueueInputBridgeComponent::EmitDiagnostic(const FString& Message)
@@ -223,7 +290,7 @@ void UBertaGSCAbilityQueueInputBridgeComponent::EmitDiagnostic(const FString& Me
 	OnDiagnostic.Broadcast(Message);
 }
 
-bool UBertaGSCAbilityQueueInputBridgeComponent::IsAbilityAllowed(const UGameplayAbility& Ability) const
+bool UBertaGSCAbilityQueueInputBridgeComponent::IsAbilityAllowed(const TSubclassOf<UGameplayAbility> AbilityClass) const
 {
 	if (!AbilityQueueComponent)
 	{
@@ -234,10 +301,9 @@ bool UBertaGSCAbilityQueueInputBridgeComponent::IsAbilityAllowed(const UGameplay
 		return true;
 	}
 
-	const UClass* AbilityClass = Ability.GetClass();
 	return AbilityQueueComponent->GetQueuedAllowedAbilities().ContainsByPredicate(
 		[AbilityClass](const TSubclassOf<UGameplayAbility> AllowedClass)
 		{
-			return AllowedClass.Get() == AbilityClass;
+			return AllowedClass.Get() == AbilityClass.Get();
 		});
 }

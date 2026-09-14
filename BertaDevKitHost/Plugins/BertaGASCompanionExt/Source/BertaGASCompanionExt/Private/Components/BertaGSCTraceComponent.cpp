@@ -80,6 +80,7 @@ bool UBertaGSCTraceComponent::StartTracing()
 	CoreComponent->OnAttributeChange.AddUniqueDynamic(this, &ThisClass::HandleAttributeChanged);
 
 	BoundCoreComponent = CoreComponent;
+	LastObservedAttributeValues.Reset();
 	TraceStartWorldTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
 	return true;
 }
@@ -105,11 +106,13 @@ void UBertaGSCTraceComponent::StopTracing()
 	BoundCoreComponent->OnAttributeChange.RemoveDynamic(this, &ThisClass::HandleAttributeChanged);
 	BoundCoreComponent = nullptr;
 	GameplayEffectPaths.Reset();
+	LastObservedAttributeValues.Reset();
 }
 
 void UBertaGSCTraceComponent::ClearTrace()
 {
 	Events.Reset();
+	LastObservedAttributeValues.Reset();
 	TraceStartWorldTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
 }
 
@@ -136,8 +139,11 @@ bool UBertaGSCTraceComponent::IsTracing() const
 
 FString UBertaGSCTraceComponent::FormatTraceEvent(const FBertaGSCTraceEvent& Event)
 {
+	const FString OldValueText = Event.bOldValueKnown
+		? FString::Printf(TEXT("%.3f"), Event.OldValue)
+		: TEXT("unknown");
 	return FString::Printf(
-		TEXT("[+%.3fs @ %.3fs] %s | Actor=%s | Ability=%s | Effect=%s | Tag=%s Present=%s | Tags=[%s] | FailureTags=[%s] | Attribute=%s | Old=%.3f New=%.3f Delta=%.3f | Remaining=%.3fs Duration=%.3fs EffectStart=%.3fs | %s"),
+		TEXT("[+%.3fs @ %.3fs] %s | Actor=%s | Ability=%s | Effect=%s | Tag=%s Present=%s | Tags=[%s] | FailureTags=[%s] | Attribute=%s | Old=%s New=%.3f Delta=%.3f | Remaining=%.3fs Duration=%.3fs EffectStart=%.3fs | %s"),
 		Event.RelativeTimeSeconds,
 		Event.WorldTimeSeconds,
 		BertaGSCTracePrivate::TypeName(Event.Type),
@@ -149,7 +155,7 @@ FString UBertaGSCTraceComponent::FormatTraceEvent(const FBertaGSCTraceEvent& Eve
 		*BertaGSCTracePrivate::SortedTags(Event.GameplayTags),
 		*BertaGSCTracePrivate::SortedTags(Event.FailureTags),
 		Event.AttributeName.IsEmpty() ? TEXT("None") : *Event.AttributeName,
-		Event.OldValue,
+		*OldValueText,
 		Event.NewValue,
 		Event.DeltaValue,
 		Event.TimeRemainingSeconds,
@@ -290,6 +296,7 @@ void UBertaGSCTraceComponent::HandleGameplayEffectStackChanged(FGameplayTagConta
 	Event.GameplayEffectClassPath = ResolveGameplayEffectPath(ActiveHandle);
 	Event.GameplayTags = AssetTags;
 	Event.GameplayTags.AppendTags(GrantedTags);
+	Event.bOldValueKnown = true;
 	Event.OldValue = OldStackCount;
 	Event.NewValue = NewStackCount;
 	Event.DeltaValue = NewStackCount - OldStackCount;
@@ -323,6 +330,11 @@ void UBertaGSCTraceComponent::HandleAttributeChanged(const FGameplayAttribute At
 	Event.DeltaValue = DeltaValue;
 	Event.GameplayTags = EventTags;
 	Event.NewValue = BoundCoreComponent ? BoundCoreComponent->GetCurrentAttributeValue(Attribute) : 0.0f;
-	Event.OldValue = Event.NewValue - DeltaValue;
+	if (const float* PreviousValue = LastObservedAttributeValues.Find(Attribute))
+	{
+		Event.bOldValueKnown = true;
+		Event.OldValue = *PreviousValue;
+	}
+	LastObservedAttributeValues.Add(Attribute, Event.NewValue);
 	AddEvent(MoveTemp(Event));
 }

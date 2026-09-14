@@ -11,10 +11,10 @@ Install GAS Companion locally at `BertaDevKitHost/Plugins/GASCompanion/`. That c
 ## Included tools
 
 - `UBertaGSCAbilityActivationLibrary`: structured, side-effect-free activation reports.
-- `UBertaGSCTraceComponent`: opt-in event trace with a bounded buffer and no Tick.
-- `UBertaGSCAbilityQueueInputBridgeComponent`: deferred public-state reconciliation for the documented Enhanced Input queue gap.
-- `UBertaGSCAbilitySetValidator`: Editor Data Validation for objective Ability Set configuration errors.
+- `UBertaGSCTraceComponent`: opt-in event trace with a bounded buffer, no Tick, and no fabricated attribute history.
+- `UBertaGSCAbilityQueueInputBridgeComponent`: explicit, runtime-binding-validated Enhanced Input failure forwarding with Ability Actor Info lifecycle rebinding.
+- `UBertaGSCAbilitySetValidator`: Editor Data Validation for objective Ability Set configuration errors, including broken attribute initialization tables.
 - `UBertaGSCTargetType_DebugProxy`: result-preserving target diagnostics.
 - `UBertaGSCTargetType_TargetingPreset`: synchronous UE 5.8 Targeting System preset adapter.
 
-The generic `UBertaGameplayTagUsageFinder` lives in `BertaDevKitEditor`, where it remains independent of GAS Companion. Full setup and manual verification steps are in the repository documentation.
+The generic `UBertaGameplayTagUsageFinder` lives in `BertaDevKitEditor`, where it remains independent of GAS Companion. Its Whole Project scope covers `/Game` plus mounted project/plugin content roots, presents cancelable progress, and reports complete or partial scan counts. Full setup and manual verification steps are in the repository documentation.

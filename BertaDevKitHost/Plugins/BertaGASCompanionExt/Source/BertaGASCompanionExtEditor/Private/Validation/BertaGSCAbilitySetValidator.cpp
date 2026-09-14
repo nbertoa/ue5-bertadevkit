@@ -3,6 +3,7 @@
 #include "Abilities/GSCAbilitySet.h"
 #include "Abilities/GameplayAbility.h"
 #include "AttributeSet.h"
+#include "Engine/DataTable.h"
 #include "GameplayEffect.h"
 #include "InputAction.h"
 #include "Misc/DataValidation.h"
@@ -14,6 +15,11 @@ namespace BertaGSCAbilitySetValidation
 	bool IsGameplayEffectLevelValid(const float Level)
 	{
 		return FMath::IsFinite(Level);
+	}
+
+	bool IsInitializationDataResolvable(const TSoftObjectPtr<UDataTable>& InitializationData)
+	{
+		return InitializationData.IsNull() || InitializationData.LoadSynchronous() != nullptr;
 	}
 }
 
@@ -126,6 +132,15 @@ EDataValidationResult UBertaGSCAbilitySetValidator::ValidateLoadedAsset_Implemen
 	for (int32 Index = 0; Index < AbilitySet->GrantedAttributes.Num(); ++Index)
 	{
 		const FGSCGameFeatureAttributeSetMapping& Mapping = AbilitySet->GrantedAttributes[Index];
+		const FString InitializationDataPath = Mapping.InitializationData.ToSoftObjectPath().ToString();
+		if (!BertaGSCAbilitySetValidation::IsInitializationDataResolvable(Mapping.InitializationData))
+		{
+			AssetFails(InAsset, FText::Format(
+				LOCTEXT("InvalidInitializationData", "{0}: GrantedAttributes[{1}] references InitializationData {2}, but it cannot be resolved."),
+				FText::FromString(AssetPath), FText::AsNumber(Index), FText::FromString(InitializationDataPath)));
+			bHasErrors = true;
+		}
+
 		UClass* AttributeClass = Mapping.AttributeSet.LoadSynchronous();
 		if (!AttributeClass)
 		{
@@ -144,7 +159,7 @@ EDataValidationResult UBertaGSCAbilitySetValidator::ValidateLoadedAsset_Implemen
 		}
 
 		const FString ExactKey = MappingKey(
-			AttributeClass->GetPathName(), Mapping.InitializationData.ToSoftObjectPath().ToString(), TEXT(""));
+			AttributeClass->GetPathName(), InitializationDataPath, TEXT(""));
 		if (ExactAttributeMappings.Contains(ExactKey))
 		{
 			AssetFails(InAsset, FText::Format(
