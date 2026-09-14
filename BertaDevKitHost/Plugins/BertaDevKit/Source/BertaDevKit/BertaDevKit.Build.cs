@@ -19,6 +19,7 @@ public class BertaDevKit : ModuleRules
 			"DeveloperSettings", // UDeveloperSettings
 			"GameplayAbilities", // UGameplayAbility is part of the public AI API.
 			"GameplayTags", // FGameplayTag is part of the public API.
+			"MediaAssets", // UMediaSource is part of the public video widget API.
 			"UMG" // UUserWidget is part of the public Blueprint API.
 		});
 
@@ -27,8 +28,7 @@ public class BertaDevKit : ModuleRules
 		// implementation details that shouldn't leak into the public API.
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
-			// Examples:
-			// "EnhancedInput"    — when input helpers are added
+			"AudioMixer" // UMediaSoundComponent implementation uses USynthComponent.
 		});
 	}
 }

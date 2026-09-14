@@ -12,6 +12,7 @@ BertaDevKit is a general-purpose Unreal Engine 5.8 toolbox. Its Runtime module p
 | `UBertaMathUtils` | Remapping, easing, angular helpers, snapping, distributions, and lightweight prediction helpers. |
 | `UBertaWorldUtils` | Actor queries, traces, player/camera access, and delayed-action timer helpers. |
 | `UBertaUIUtils` | Blueprint conveniences for common UI/player-input boilerplate. |
+| `UBertaVideoPlayerWidget` | Self-contained fullscreen Media Framework playback with optional UI audio and gameplay pause ownership. |
 | `UBertaControllerUtils` | Controller feedback, light output, and Input Device Property conveniences without PlayerController casts. |
 | `UBertaBTDecorator_GameplayTag` / `UBertaBTDecorator_GameplayTagQuery` | Reactive GAS conditions controlling whether Behavior Tree branches may execute. |
 | `UBertaBTTask_WaitGameplayTagQuery` | Event-driven Behavior Tree wait for a Gameplay Tag Query state without Blackboard mirroring. |
@@ -52,6 +53,25 @@ BertaDevKit is a general-purpose Unreal Engine 5.8 toolbox. Its Runtime module p
 Debug-facing Blueprint nodes use Unreal's `DevelopmentOnly` metadata where appropriate. This signals intended development use; it is not a blanket claim about all Runtime code or runtime cost.
 
 `UBertaControllerUtils` plays native dynamic vibration either uniformly or per motor, returning a handle for stopping only its own actions. It also delegates controller light color/reset and asset-based `ForceFeedbackEffect` play/stop to `APlayerController`, preserving Unreal's native client-RPC behavior for the effect calls. Input Device Property activation uses the resolved controller's Platform User and lets Unreal select that user's default input device; a controller does not identify one unique physical device. Properties can be queried or removed by handle. **Remove All Input Device Properties (Global)** removes active properties for every local Platform User, so use it only when global cleanup is intended.
+
+## Video playback widget
+
+`UBertaVideoPlayerWidget` is a focused Runtime convenience layer over UE 5.8 Media Framework. It builds its own fullscreen `UImage`, transient `UMediaPlayer`, and transient `UMediaTexture`, so a separate Widget Blueprint or Media Texture asset is not required. Configure a `UMediaSource` and `FBertaVideoPlaybackOptions` on **Create Widget**, optionally bind the events, and then call **Add to Viewport**; construction in the viewport is the activation point.
+
+```text
+Create Widget (BertaVideoPlayerWidget)
+→ set Media Source and Options
+→ bind On Playback Started / Completed / Failed as needed
+→ Add to Viewport
+```
+
+The options control autoplay, gameplay pause, removal after natural completion, and audio. With autoplay disabled, the source opens and remains ready until `Play` is called. `Play` also safely queues the request while an asynchronous open is in progress. `Close` is terminal and idempotent: it closes the player, detaches and releases the audio/texture resources, releases only the pause reason acquired by this widget, and removes the widget. External removal performs the same resource cleanup but leaves a nonterminal widget reusable if it is later added again.
+
+Media open and playback completion are delegate-driven rather than polled. `OnPlaybackStarted` fires after Media Framework reports playback resumed, `OnPlaybackCompleted` is reserved for a natural end, and `OnPlaybackFailed` carries a concise error before cleanup and removal. A natural end always releases resources and owned pause; **Remove on Completion** only determines whether the now-closed widget remains in its parent. Explicit `Close` and failures do not broadcast natural completion.
+
+When audio is enabled, the widget creates a `UMediaSoundComponent` for the same player and marks it as UI sound so it can continue while gameplay is paused. Pause acquisition uses an authoritative `AGameModeBase` pause delegate tied to this widget. If the world was already paused, the widget records no ownership and therefore never unpauses it. If another pause delegate still blocks unpause, releasing the video pause leaves the world paused. Consequently, **Pause Game** requires an owning Player Controller and authoritative Game Mode; client-only playback should disable that option and leave network pause policy to the game.
+
+The widget accepts `UMediaSource` assets rather than raw file paths and intentionally provides no loop, playlist, subtitle, skip, fade, URL, or playback-rate API. Actual codec/container availability remains determined by the selected Media Framework backend and target platform. Runtime visual/audio behavior still requires manual Unreal verification; the repository verification compiles the feature without launching Unreal.
 
 ## AI / Behavior Tree Debugging
 
