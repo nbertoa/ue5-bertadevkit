@@ -23,6 +23,7 @@ BertaDevKit is a general-purpose Unreal Engine 5.8 toolbox. Its Runtime module p
 | `UBertaBTDecorator_AbilityActive` | Reactive condition for active executions of one exact granted ability class. |
 | `UBertaBTTask_CancelGameplayAbility` | Immediate cancellation request for one exact granted ability spec. |
 | `UBertaBTTask_SendGameplayEvent` | Sends a compact GAS Gameplay Event payload to the controlled Pawn. |
+| `UBertaBTTask_SendGameplayEventToTarget` | Sends a compact GAS Gameplay Event payload to a Blackboard target Actor. |
 | `UBertaBTTask_ApplyGameplayEffectToSelf` | Applies an instant, duration, or infinite Gameplay Effect to the controlled Pawn. |
 | `UBertaBTTask_ApplyGameplayEffectToTarget` | Applies an outgoing Gameplay Effect from the controlled Pawn ASC to a Blackboard target ASC. |
 | `UBertaBTTask_RemoveGameplayEffectsFromSelf` / `UBertaBTTask_RemoveGameplayEffectsFromTarget` | Remove active Gameplay Effects matching a non-empty query. |
@@ -117,6 +118,8 @@ The task listens before requesting activation, including abilities that end sync
 ### Send Gameplay Event
 
 **Send Gameplay Event** dispatches a configured tag and magnitude to the controlled Pawn's Ability System Component. The Pawn is the instigator; an optional Actor Blackboard key populates the payload target. Success means the valid event was dispatched through GAS, not that any ability consumed it or activated. Network and prediction behavior remains GAS-owned.
+
+**Send Gameplay Event To Target** instead dispatches to the ASC exposed by a required Actor-compatible Blackboard key. Its payload uses the controlled Pawn as `Instigator`, the selected Actor as `Target`, and preserves the configured magnitude. Success only confirms that a valid target dispatch was issued; it does not imply that an ability consumed the event. The task adds no custom RPC or network policy.
 
 ### Apply Gameplay Effect To Self
 
