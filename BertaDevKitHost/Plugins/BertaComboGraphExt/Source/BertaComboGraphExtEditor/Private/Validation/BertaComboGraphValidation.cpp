@@ -367,7 +367,7 @@ bool UBertaComboGraphValidationLibrary::BuildValidationReport(UComboGraph* Graph
 	if (bUsesCues)
 	{
 		const FBertaComboGraphEffectContextCompatibilityReport Compatibility = UBertaComboGraphEffectContextCompatibilityLibrary::InspectConfiguredGlobals();
-		if (!Compatibility.bCueContainersSafe) AddFinding(OutReport, EBertaComboGraphValidationSeverity::Error, TEXT("CG.IncompatibleAbilitySystemGlobals"), nullptr, nullptr, TEXT("AbilitySystemGlobalsClassName"), TEXT("Graph uses Cue Containers with an incompatible AbilitySystemGlobals class."), Compatibility.Evidence);
+		if (!Compatibility.bCueContainersSafe) AddFinding(OutReport, EBertaComboGraphValidationSeverity::Error, TEXT("CG.IncompatibleEffectContext"), nullptr, nullptr, TEXT("AllocGameplayEffectContext"), TEXT("Graph uses Cue Containers without a proven Combo Graph-compatible allocated EffectContext."), Compatibility.Evidence);
 	}
 	SortAndCount(OutReport);
 	return true;

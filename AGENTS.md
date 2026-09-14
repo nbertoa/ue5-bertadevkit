@@ -19,7 +19,7 @@ Never invent Unreal APIs or behavior.
 
 ### Repository Structure
 
-The repository contains a host project around seven independent sibling plugins and one optional GAS Companion extension:
+The repository contains a host project around seven independent sibling base plugins and two optional integration plugins:
 
 ```text
 ue5-bertadevkit/
@@ -52,12 +52,15 @@ ue5-bertadevkit/
         ├── BertaSerial/
         │   ├── BertaSerial.uplugin
         │   └── Source/
-        └── BertaGASCompanionExt/
-            ├── BertaGASCompanionExt.uplugin
+        ├── BertaGASCompanionExt/
+        │   ├── BertaGASCompanionExt.uplugin
+        │   └── Source/
+        └── BertaComboGraphExt/
+            ├── BertaComboGraphExt.uplugin
             └── Source/
 ```
 
-The independent plugin roots are:
+The seven independent base plugin roots are:
 
 ```text
 BertaDevKitHost/Plugins/BertaDevKit/
@@ -67,11 +70,18 @@ BertaDevKitHost/Plugins/BertaProcessBridge/
 BertaDevKitHost/Plugins/BertaWindowTools/
 BertaDevKitHost/Plugins/BertaDesktopCapture/
 BertaDevKitHost/Plugins/BertaSerial/
-BertaDevKitHost/Plugins/BertaGASCompanionExt/
 ```
 
-`BertaGASCompanionExt` is the deliberate exception to sibling independence: it is disabled by default and depends on
-the locally installed, Git-ignored commercial GAS Companion plugin plus BertaDevKit.
+The optional integration plugin roots are:
+
+```text
+BertaDevKitHost/Plugins/BertaGASCompanionExt/
+BertaDevKitHost/Plugins/BertaComboGraphExt/
+```
+
+`BertaGASCompanionExt` is disabled by default and depends on the locally installed, Git-ignored GAS Companion plugin
+plus BertaDevKit. `BertaComboGraphExt` is disabled by default and depends on the locally installed, Git-ignored Combo
+Graph plugin; it must not force Combo Graph onto the base plugins and must preserve its Runtime/Editor separation.
 
 The host project exists for development and verification.
 

@@ -14,7 +14,7 @@ class BERTACOMBOGRAPHEXT_API UBertaComboGraphAbilityTask_StartGraphTargeting fin
 	GENERATED_BODY()
 
 public:
-	UFUNCTION(BlueprintCallable, Category = "BertaComboGraphExt|Targeting", meta = (DisplayName = "Start Combo Graph with Berta Targeting", AdvancedDisplay = "bBroadcastInternalEvents, InitialInput", HidePin = "OwningAbility", DefaultToSelf = "OwningAbility", BlueprintInternalUseOnly = "TRUE"))
+	UFUNCTION(BlueprintCallable, Category = "BertaComboGraphExt|Targeting", meta = (DisplayName = "Start Combo Graph with Berta Targeting", AdvancedDisplay = "bBroadcastInternalEvents, InputAction", HidePin = "OwningAbility", DefaultToSelf = "OwningAbility", BlueprintInternalUseOnly = "TRUE"))
 	static UBertaComboGraphAbilityTask_StartGraphTargeting* StartComboGraphWithTargeting(
 		UGameplayAbility* OwningAbility,
 		UComboGraph* ComboGraph,

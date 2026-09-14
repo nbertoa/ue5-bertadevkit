@@ -54,4 +54,7 @@ public:
 
 	static EBertaComboGraphEffectContextCompatibility ClassifyGlobalsClass(const UClass* GlobalsClass);
 	static EBertaComboGraphEffectContextCompatibility ClassifyContextStruct(const UScriptStruct* ContextStruct);
+	static EBertaComboGraphEffectContextCompatibility ClassifyRuntimeCompatibility(
+		EBertaComboGraphEffectContextCompatibility GlobalsClassCompatibility,
+		EBertaComboGraphEffectContextCompatibility AllocatedContextCompatibility);
 };

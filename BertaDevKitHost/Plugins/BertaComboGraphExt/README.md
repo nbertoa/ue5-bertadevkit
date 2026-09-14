@@ -18,7 +18,7 @@ Graph start/end and task `EventReceived` are `Direct`. Node, queue, montage, and
 
 ## EffectContext compatibility
 
-`UBertaComboGraphEffectContextCompatibilityLibrary` reports both whether configured `AbilitySystemGlobals` derives from `UComboGraphAbilitySystemGlobals` and whether the instance actually allocates a `FComboGraphGameplayEffectContext`-compatible struct. Both checks must pass for Cue Containers to be reported safe. No class or config is installed automatically. This release deliberately avoids an empty derived EffectContext: without Berta-owned payload it adds no current value while creating a new `Duplicate`/`NetSerialize`/Iris contract.
+`UBertaComboGraphEffectContextCompatibilityLibrary` reports both whether configured `AbilitySystemGlobals` derives from `UComboGraphAbilitySystemGlobals` and whether the instance actually allocates a `FComboGraphGameplayEffectContext`-compatible struct. The allocated context is the authoritative runtime contract for Cue Containers: a custom Globals class can be runtime-safe without deriving from Combo Graph's Globals when it allocates a compatible context, although Combo Graph Editor startup validation may still warn. No class or config is installed automatically. This release deliberately avoids an empty derived EffectContext: without Berta-owned payload it adds no current value while creating a new `Duplicate`/`NetSerialize`/Iris contract.
 
 ## Targeting System adapter
 

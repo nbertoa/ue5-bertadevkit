@@ -27,25 +27,45 @@ EBertaComboGraphEffectContextCompatibility UBertaComboGraphEffectContextCompatib
 		: EBertaComboGraphEffectContextCompatibility::Incompatible;
 }
 
+EBertaComboGraphEffectContextCompatibility UBertaComboGraphEffectContextCompatibilityLibrary::ClassifyRuntimeCompatibility(
+	const EBertaComboGraphEffectContextCompatibility GlobalsClassCompatibility,
+	const EBertaComboGraphEffectContextCompatibility AllocatedContextCompatibility)
+{
+	// Globals inheritance is useful configuration evidence, but Combo Graph runtime consumes
+	// the context returned by AllocGameplayEffectContext(). That allocated struct is authoritative.
+	(void)GlobalsClassCompatibility;
+	return AllocatedContextCompatibility;
+}
+
 FBertaComboGraphEffectContextCompatibilityReport UBertaComboGraphEffectContextCompatibilityLibrary::InspectConfiguredGlobals()
 {
 	FBertaComboGraphEffectContextCompatibilityReport Report;
 	const UAbilitySystemGlobals& Globals = UAbilitySystemGlobals::Get();
 	const UClass* GlobalsClass = Globals.GetClass();
 	Report.ConfiguredGlobalsClassPath = GetPathNameSafe(GlobalsClass);
-	Report.bGlobalsClassCompatible = ClassifyGlobalsClass(GlobalsClass) == EBertaComboGraphEffectContextCompatibility::Compatible;
+	const EBertaComboGraphEffectContextCompatibility GlobalsClassCompatibility = ClassifyGlobalsClass(GlobalsClass);
+	Report.bGlobalsClassCompatible = GlobalsClassCompatibility == EBertaComboGraphEffectContextCompatibility::Compatible;
 	TUniquePtr<FGameplayEffectContext> AllocatedContext(Globals.AllocGameplayEffectContext());
 	const UScriptStruct* ContextStruct = AllocatedContext ? AllocatedContext->GetScriptStruct() : nullptr;
 	Report.AllocatedContextStructPath = GetPathNameSafe(ContextStruct);
-	Report.bAllocatedContextCompatible = ClassifyContextStruct(ContextStruct) == EBertaComboGraphEffectContextCompatibility::Compatible;
-	Report.Compatibility = Report.bGlobalsClassCompatible && Report.bAllocatedContextCompatible
-		? EBertaComboGraphEffectContextCompatibility::Compatible
-		: EBertaComboGraphEffectContextCompatibility::Incompatible;
+	const EBertaComboGraphEffectContextCompatibility AllocatedContextCompatibility = ClassifyContextStruct(ContextStruct);
+	Report.bAllocatedContextCompatible = AllocatedContextCompatibility == EBertaComboGraphEffectContextCompatibility::Compatible;
+	Report.Compatibility = ClassifyRuntimeCompatibility(GlobalsClassCompatibility, AllocatedContextCompatibility);
 	Report.bCueContainersSafe = Report.Compatibility == EBertaComboGraphEffectContextCompatibility::Compatible;
-	Report.Evidence = FString::Printf(
-		TEXT("Globals subclass=%s; allocated context derives from FComboGraphGameplayEffectContext=%s."),
-		Report.bGlobalsClassCompatible ? TEXT("Yes") : TEXT("No"),
-		Report.bAllocatedContextCompatible ? TEXT("Yes") : TEXT("No"));
+	if (AllocatedContextCompatibility == EBertaComboGraphEffectContextCompatibility::Compatible)
+	{
+		Report.Evidence = Report.bGlobalsClassCompatible
+			? TEXT("Allocated context is Combo Graph compatible, and configured AbilitySystemGlobals derives from UComboGraphAbilitySystemGlobals.")
+			: TEXT("Allocated context is Combo Graph compatible. Configured AbilitySystemGlobals does not derive from UComboGraphAbilitySystemGlobals, so Combo Graph Editor startup validation may still warn.");
+	}
+	else if (AllocatedContextCompatibility == EBertaComboGraphEffectContextCompatibility::Incompatible)
+	{
+		Report.Evidence = TEXT("Allocated context is not Combo Graph compatible; Cue Containers are runtime unsafe regardless of the configured AbilitySystemGlobals inheritance.");
+	}
+	else
+	{
+		Report.Evidence = TEXT("Allocated context compatibility could not be determined; Cue Container runtime safety is unknown.");
+	}
 	return Report;
 }
 

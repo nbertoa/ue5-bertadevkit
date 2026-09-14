@@ -34,6 +34,26 @@ bool FBertaComboGraphCompatibilityClassificationTest::RunTest(const FString& Par
 	TestEqual(TEXT("Base context is incompatible"),
 		UBertaComboGraphEffectContextCompatibilityLibrary::ClassifyContextStruct(FGameplayEffectContext::StaticStruct()),
 		EBertaComboGraphEffectContextCompatibility::Incompatible);
+	TestEqual(TEXT("Compatible globals and context are runtime compatible"),
+		UBertaComboGraphEffectContextCompatibilityLibrary::ClassifyRuntimeCompatibility(
+			EBertaComboGraphEffectContextCompatibility::Compatible,
+			EBertaComboGraphEffectContextCompatibility::Compatible),
+		EBertaComboGraphEffectContextCompatibility::Compatible);
+	TestEqual(TEXT("A compatible allocated context is authoritative over globals inheritance"),
+		UBertaComboGraphEffectContextCompatibilityLibrary::ClassifyRuntimeCompatibility(
+			EBertaComboGraphEffectContextCompatibility::Incompatible,
+			EBertaComboGraphEffectContextCompatibility::Compatible),
+		EBertaComboGraphEffectContextCompatibility::Compatible);
+	TestEqual(TEXT("An incompatible allocated context is runtime incompatible"),
+		UBertaComboGraphEffectContextCompatibilityLibrary::ClassifyRuntimeCompatibility(
+			EBertaComboGraphEffectContextCompatibility::Compatible,
+			EBertaComboGraphEffectContextCompatibility::Incompatible),
+		EBertaComboGraphEffectContextCompatibility::Incompatible);
+	TestEqual(TEXT("Unknown allocated context remains unknown"),
+		UBertaComboGraphEffectContextCompatibilityLibrary::ClassifyRuntimeCompatibility(
+			EBertaComboGraphEffectContextCompatibility::Compatible,
+			EBertaComboGraphEffectContextCompatibility::Unknown),
+		EBertaComboGraphEffectContextCompatibility::Unknown);
 	return true;
 }
 
