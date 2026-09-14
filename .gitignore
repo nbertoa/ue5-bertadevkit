@@ -76,5 +76,8 @@ ehthumbs.db
 # Compiled shader cache (platform-specific, regenerated on load)
 ShaderCache/
 
+# Local third-party plugin
+/BertaDevKitHost/Plugins/GASCompanion/
+
 # MkDocs generated site
 /site/
