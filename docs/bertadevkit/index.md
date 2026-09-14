@@ -40,6 +40,7 @@ BertaDevKit is a general-purpose Unreal Engine 5.8 toolbox. Its Runtime module p
 | `UBertaGASAbilityUtils` | Read-only cooldown, cost, and activation inspection for granted Gameplay Abilities. |
 | `UBertaBTTask_DebugGASState` | Logs the controlled Pawn's GAS snapshot at a Behavior Tree execution point. |
 | `UBertaBTTask_DebugTargetGASState` | Logs a Blackboard target Actor's GAS snapshot at a Behavior Tree execution point. |
+| `UBertaBTTask_AssertGameplayTagQuery` / `UBertaBTTask_AssertAttributeThreshold` / `UBertaBTTask_AssertAbilityActive` | Immediate non-crashing GAS assertions for Behavior Tree R&D. |
 
 Debug-facing Blueprint nodes use Unreal's `DevelopmentOnly` metadata where appropriate. This signals intended development use; it is not a blanket claim about all Runtime code or runtime cost.
 
@@ -194,6 +195,12 @@ The utility is a compact copy/paste diagnostic, not a logging UI or a replacemen
 **Debug GAS State** is an immediate Behavior Tree task that resolves the controlled Pawn, reuses **Get GAS Debug Summary**, writes one snapshot to `LogBertaDebug` with an optional label, and succeeds. It fails when there is no valid controlled Pawn/ASC, never ticks, and is intended for development and R&D checkpoints rather than continuous telemetry.
 
 **Debug Target GAS State** applies the same one-shot diagnostic to an Actor-compatible Blackboard target. It reuses the exact same summary formatter, adds an optional label, and fails cleanly for a missing target or ASC. It has no Tick, observer, or persistent logging state.
+
+### GAS Assertion Tasks
+
+**Assert Gameplay Tag Query**, **Assert Attribute Threshold**, and **Assert Ability Active** are immediate R&D tasks for validating controlled-Pawn GAS state at a precise Behavior Tree execution point. A satisfied expectation succeeds silently. Invalid configuration, missing GAS state, or a mismatch emits one bounded `LogBertaDebug` diagnostic with the optional label and returns `Failed`; these nodes never use crash-style C++ assertions.
+
+The tag assertion uses native query matching, the attribute assertion reuses `FBertaGameplayAttributeCondition`, and the ability assertion uses the same exact granted-spec `IsActive()` state as the active-ability decorator. They do not Tick, wait, register delegates, or automatically dump the full GAS summary.
 
 ## Editor tools
 
