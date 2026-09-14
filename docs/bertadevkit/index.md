@@ -51,9 +51,10 @@ Debug-facing Blueprint nodes use Unreal's `DevelopmentOnly` metadata where appro
 These Runtime nodes bridge UE 5.8 Behavior Trees to the controlled Pawn's Ability System Component without requiring a custom ASC, Pawn, or AIController. Target nodes instead resolve an Actor-compatible Blackboard key and rebind whenever that key changes. With the single documented exception of **Wait Ability Ready**, waits and reactive decorators use GAS/Blackboard delegates rather than Tick, timers, or mirrored Blackboard state. Normal Behavior Tree aborts and relevance changes unregister observers.
 
 - **Conditions:** Gameplay Tag, Gameplay Tag Query, Attribute Threshold, Ability Active, Can Activate Ability, Gameplay Effect Query, Target Gameplay Tag Query, and Target Attribute Threshold.
-- **Waits:** Wait Gameplay Tag Query, Wait Gameplay Event, Wait Attribute Threshold, Wait Ability End, Wait Target Gameplay Tag Query, Wait Gameplay Effect Applied, Wait Gameplay Effect Removed, and Wait Ability Ready.
-- **Actions:** Activate Gameplay Ability And Wait, Cancel Gameplay Ability, Send Gameplay Event, Apply Gameplay Effect To Self, and Activate Gameplay Ability With Target.
-- **Debug:** Get GAS Debug Summary and Debug GAS State.
+- **Waits:** Wait Gameplay Tag Query, Wait Gameplay Event, Wait Attribute Threshold, Wait Target Attribute Threshold, Wait Ability End, Wait Target Gameplay Tag Query, Wait Gameplay Effect Applied, Wait Gameplay Effect Removed, and Wait Ability Ready.
+- **Actions:** Activate Gameplay Ability And Wait, Cancel Gameplay Ability, Send Gameplay Event, Send Gameplay Event To Target, Apply Gameplay Effect To Self/Target, Remove Gameplay Effects From Self/Target, and Activate Gameplay Ability With Target.
+- **Inspection:** Ability cooldown, cost, and full activation readiness without activation or cost side effects.
+- **Debug:** GAS Debug Summary, Debug GAS State/Target GAS State, and focused tag-query, attribute, and active-ability assertions.
 
 AI Behavior Trees normally execute on authority, but these helpers do not add RPCs or override GAS networking. Ability activation, Gameplay Event routing, Gameplay Effect application, prediction, and replicated notifications retain their native GAS authority/network semantics. In particular, the applied-effect wait uses the server-side application delegate, while active-effect state reflects the effects visible to that ASC.
 
