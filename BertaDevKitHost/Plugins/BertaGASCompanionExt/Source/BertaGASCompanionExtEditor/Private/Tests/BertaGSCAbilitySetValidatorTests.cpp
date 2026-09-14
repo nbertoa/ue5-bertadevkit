@@ -2,6 +2,7 @@
 
 #if WITH_DEV_AUTOMATION_TESTS
 
+#include "AttributeSet.h"
 #include "Engine/DataTable.h"
 #include "Misc/AutomationTest.h"
 #include "UObject/SoftObjectPath.h"
@@ -40,6 +41,15 @@ bool FBertaGSCAbilitySetInitializationDataValidationTest::RunTest(const FString&
 	TestTrue(
 		TEXT("A configured loaded DataTable resolves"),
 		BertaGSCAbilitySetValidation::IsInitializationDataResolvable(LoadedInitializationData));
+	LoadedTable->RowStruct = FAttributeMetaData::StaticStruct();
+	TestTrue(
+		TEXT("AttributeMetaData matches GSC public row contract"),
+		BertaGSCAbilitySetValidation::IsInitializationDataRowStructureValid(LoadedInitializationData));
+	UDataTable* WrongRowTable = NewObject<UDataTable>(GetTransientPackage());
+	WrongRowTable->RowStruct = FTableRowBase::StaticStruct();
+	TestFalse(
+		TEXT("A different row struct violates GSC public row contract"),
+		BertaGSCAbilitySetValidation::IsInitializationDataRowStructureValid(TSoftObjectPtr<UDataTable>(WrongRowTable)));
 
 	const TSoftObjectPtr<UDataTable> BrokenInitializationData(
 		FSoftObjectPath(TEXT("/Game/BertaDevKitTests/MissingInitializationData.MissingInitializationData")));

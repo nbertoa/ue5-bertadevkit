@@ -38,7 +38,7 @@ A Win64 Runtime C++ and Blueprint API for current COM-port enumeration, asynchro
 
 ### BertaGASCompanionExt
 
-An optional Runtime/Editor extension for projects already using GAS Companion. It adds activation explanations, event-driven tracing, a conservative Ability Queue + Enhanced Input bridge, Ability Set validation, target diagnostics, and a native UE 5.8 Targeting System adapter. It is disabled by default and depends on both BertaDevKit and a local GAS Companion installation that is never committed.
+An optional Runtime/Editor extension for projects already using GAS Companion. It adds single-ability and actor-wide readiness diagnostics, evidence-qualified effective loadout snapshots, event-driven tracing, a conservative Ability Queue + Enhanced Input bridge, Ability Set/Game Feature contract validation, target diagnostics, and a native UE 5.8 Targeting System adapter. It is disabled by default and depends on both BertaDevKit and a local GAS Companion installation that is never committed.
 
 The seven base plugins are independent siblings. BertaGASCompanionExt is an explicit optional integration plugin.
 

@@ -11,9 +11,12 @@ Install GAS Companion locally at `BertaDevKitHost/Plugins/GASCompanion/`. That c
 ## Included tools
 
 - `UBertaGSCAbilityActivationLibrary`: structured, side-effect-free activation reports.
+- `UBertaGSCAbilityReadinessLibrary`: deterministic actor-wide readiness matrix with simultaneous blockers and Problems Only output.
+- `UBertaGSCEffectiveLoadoutLibrary`: effective local ASC snapshot for abilities, active effects, Attribute Sets, and owned tags with evidence-qualified provenance.
 - `UBertaGSCTraceComponent`: opt-in event trace with a bounded buffer, no Tick, and no fabricated attribute history.
 - `UBertaGSCAbilityQueueInputBridgeComponent`: explicit, runtime-binding-validated Enhanced Input failure forwarding with Ability Actor Info lifecycle rebinding.
-- `UBertaGSCAbilitySetValidator`: Editor Data Validation for objective Ability Set configuration errors, including broken attribute initialization tables.
+- `UBertaGSCAbilitySetValidator`: Editor Data Validation for objective Ability Set configuration errors, including broken or contract-incompatible attribute initialization tables.
+- `UBertaGSCContractAuditLibrary`: Editor-only deterministic audit of Ability Sets and GSC Game Feature contracts.
 - `UBertaGSCTargetType_DebugProxy`: result-preserving target diagnostics.
 - `UBertaGSCTargetType_TargetingPreset`: synchronous UE 5.8 Targeting System preset adapter.
 

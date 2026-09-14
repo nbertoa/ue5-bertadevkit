@@ -6,17 +6,22 @@ public class BertaGASCompanionExtEditor : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
+		PublicDependencyModuleNames.AddRange(new string[]
+		{
+			"Core",
+			"CoreUObject",
+			"Engine"
+		});
+
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
 			"BertaGASCompanionExt",
-			"Core",
-			"CoreUObject",
 			"DataValidation",
-			"Engine",
 			"EnhancedInput",
 			"GameplayAbilities",
 			"GameplayTags",
 			"GASCompanion",
+			"GameFeatures",
 			"UnrealEd"
 		});
 	}

@@ -10,6 +10,7 @@ namespace BertaGSCAbilitySetValidation
 {
 	bool IsGameplayEffectLevelValid(float Level);
 	bool IsInitializationDataResolvable(const TSoftObjectPtr<UDataTable>& InitializationData);
+	bool IsInitializationDataRowStructureValid(const TSoftObjectPtr<UDataTable>& InitializationData);
 }
 
 /** Objective Data Validation checks for GAS Companion Ability Set assets. */

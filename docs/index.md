@@ -9,7 +9,7 @@ BertaDevKit is a personal Unreal Engine 5.8 repository for R&D, prototyping, deb
 - [BertaWindowTools](bertawindowtools/index.md) — Runtime inspection and control of the current GameInstance's game window.
 - [BertaDesktopCapture](bertadesktopcapture/index.md) — Win64 Runtime display/window capture into live Unreal textures.
 - [BertaSerial](bertaserial/index.md) — Win64 Runtime COM-port enumeration and asynchronous raw-byte serial communication.
-- [BertaGASCompanionExt](bertagascompanionext/index.md) — optional diagnostics, validation, queue bridging, and targeting integration for GAS Companion.
+- [BertaGASCompanionExt](bertagascompanionext/index.md) — optional readiness/loadout diagnostics, contract validation, queue bridging, and targeting integration for GAS Companion.
 
 The seven base plugins can be copied independently. BertaGASCompanionExt intentionally depends on BertaDevKit and a licensed local GAS Companion installation.
 
