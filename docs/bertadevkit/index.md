@@ -38,13 +38,45 @@ BertaDevKit is a general-purpose Unreal Engine 5.8 toolbox. Its Runtime module p
 | `UBertaBTTask_WaitAbilityReady` | Bounded periodic wait for arbitrary Gameplay Ability readiness logic. |
 | `UBertaGASDebugUtils` | Deterministic text snapshot of an Actor's current GAS state. |
 | `UBertaGASAbilityUtils` | Read-only cooldown, cost, and activation inspection for granted Gameplay Abilities. |
+| `UBertaGameplayTagDebugUtils` | Sorted tag/query summaries, exact container diffs, and Actor tag-source inspection. |
+| `UBertaBlackboardDebugUtils` | Deterministic Blackboard snapshot using UE's native key-value descriptions. |
+| `UBertaBehaviorTreeDebugUtils` | Public Runtime Behavior Tree execution snapshot, including active node/path descriptions. |
+| `UBertaAIDebugUtils` | Combined AI, Behavior Tree, Blackboard, and GAS snapshot. |
 | `UBertaBTTask_DebugGASState` | Logs the controlled Pawn's GAS snapshot at a Behavior Tree execution point. |
 | `UBertaBTTask_DebugTargetGASState` | Logs a Blackboard target Actor's GAS snapshot at a Behavior Tree execution point. |
+| `UBertaBTTask_DebugBlackboardState` / `UBertaBTTask_DebugAIState` | One-shot Blackboard or combined AI snapshot tasks. |
+| `UBertaBTService_TraceBlackboardChanges` | Event-driven trace of selected or all Blackboard keys while a branch is relevant. |
+| `UBertaBTService_TraceGameplayTags` | Event-driven count trace for explicitly selected controlled-Pawn GAS tags. |
 | `UBertaBTTask_AssertGameplayTagQuery` / `UBertaBTTask_AssertAttributeThreshold` / `UBertaBTTask_AssertAbilityActive` | Immediate non-crashing GAS assertions for Behavior Tree R&D. |
 
 Debug-facing Blueprint nodes use Unreal's `DevelopmentOnly` metadata where appropriate. This signals intended development use; it is not a blanket claim about all Runtime code or runtime cost.
 
 `UBertaControllerUtils` plays native dynamic vibration either uniformly or per motor, returning a handle for stopping only its own actions. It also delegates controller light color/reset and asset-based `ForceFeedbackEffect` play/stop to `APlayerController`, preserving Unreal's native client-RPC behavior for the effect calls. Input Device Property activation uses the resolved controller's Platform User and lets Unreal select that user's default input device; a controller does not identify one unique physical device. Properties can be queried or removed by handle. **Remove All Input Device Properties (Global)** removes active properties for every local Platform User, so use it only when global cleanup is intended.
+
+## AI / Behavior Tree Debugging
+
+These Runtime helpers provide small, composable diagnostics rather than replacing Unreal's Gameplay Debugger, Visual Logger, GLS, Graph Printer, or GAS Companion. Snapshot functions run only when explicitly called; the trace services are event-driven and never Tick.
+
+### Snapshots
+
+- **Gameplay Tag Debug Utils** formats an exact `FGameplayTagContainer` in lexical order, returns UE's supported `FGameplayTagQuery` description, and computes sorted exact added/removed tags with `HasTagExact`. It does not synthesize parent tags. Actor lookup first uses `IGameplayTagAssetInterface`, then falls back to the Actor's ASC through `UAbilitySystemGlobals`; an empty provider container is a successful `None` result.
+- **Blackboard Debug Utils** reports the Blackboard asset plus every inherited/local key sorted by name. Key type and current value use `UBlackboardComponent` public APIs and `DescribeKeyValue`, so built-in Object, Class, Bool, numeric, Enum, String, Name, Vector, and Rotator types retain UE's native formatting without raw-memory interpretation.
+- **Behavior Tree Debug Utils** reports root/current tree, running and paused state, active node/tasks/trees, and the public runtime path description returned by `UBehaviorTreeComponent::GetDebugInfoString`. It does not access private execution stacks or provide debugger history; use Unreal's specialized debuggers when historical/visual execution analysis is required.
+- **AI Debug Utils** composes the Behavior Tree, Blackboard, and existing GAS summaries with controller/Pawn identity. A missing subsystem is shown as `None` without discarding the useful remainder of a valid controller snapshot.
+
+All generated summaries omit timestamps and pointer addresses so separate captures remain practical to diff. The Blueprint summary functions use `DevelopmentOnly` metadata as an authoring hint; the Runtime C++ classes are not claimed to be physically stripped from Shipping builds.
+
+### One-shot Behavior Tree tasks
+
+**Debug Blackboard State** logs one Blackboard snapshot to `LogBertaDebug`; **Debug AI State** logs the combined AI snapshot. Both accept an optional label, complete immediately, never Tick, and generate no persistent observer state. Existing **Debug GAS State** and **Debug Target GAS State** remain useful when a smaller GAS-only capture is preferable.
+
+### Event-driven traces
+
+**Trace Blackboard Changes** observes configured key names while its branch is relevant. With an empty key list and **Trace All Keys When Empty** enabled, it observes all valid Blackboard entries. Each real change emits one concise native value description; missing configured keys produce one warning during registration and are skipped.
+
+**Trace Gameplay Tags** registers `EGameplayTagEventType::AnyCountChange` for each exact configured tag on the controlled Pawn's ASC. Each event logs the callback's actual effective count and presence state. GAS propagates count changes through the changed tag's parent hierarchy, so explicitly observing a parent can also report child-driven parent-count changes. The service intentionally has no observe-all mode.
+
+Both services are instanced per AI. They register only during branch relevance, remove every observer/delegate on cease relevance and instance destruction, and explicitly disable Tick. They observe state only and never modify Blackboard, GAS, or Behavior Tree flow.
 
 ## GAS + Behavior Tree
 
