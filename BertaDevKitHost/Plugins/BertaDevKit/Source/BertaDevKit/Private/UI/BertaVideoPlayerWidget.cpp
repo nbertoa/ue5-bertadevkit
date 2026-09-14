@@ -200,6 +200,7 @@ bool UBertaVideoPlayerWidget::CreateMediaResources(FString& OutErrorMessage)
 			return false;
 		}
 		InternalMediaSound->Start();
+		InternalMediaSound->AddClockSink();
 		InternalMediaSound->UpdatePlayer();
 	}
 
@@ -306,6 +307,7 @@ void UBertaVideoPlayerWidget::CleanupMediaResources()
 
 	if (InternalMediaSound)
 	{
+		InternalMediaSound->RemoveClockSink();
 		InternalMediaSound->SetMediaPlayer(nullptr);
 		InternalMediaSound->UpdatePlayer();
 		InternalMediaSound->Stop();
