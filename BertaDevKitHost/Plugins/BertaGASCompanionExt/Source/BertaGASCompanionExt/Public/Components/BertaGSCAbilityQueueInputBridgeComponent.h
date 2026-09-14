@@ -7,12 +7,12 @@
 
 class UGameplayAbility;
 class UGSCAbilityQueueComponent;
-class UGSCCoreComponent;
+class UAbilitySystemComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FBertaGSCQueueBridgeDiagnostic, const FString&, Message);
 
 /**
- * Reconciles input-driven public GSC ability failure/end events with the public Ability Queue state.
+ * Reconciles input-driven native ASC ability failure/end events with the public GSC Ability Queue state.
  * Forwarding is deferred one frame so native GSC handling wins and duplicate activation is avoided.
  */
 UCLASS(ClassGroup = (BertaGASCompanionExt), meta = (BlueprintSpawnableComponent))
@@ -55,8 +55,7 @@ private:
 		bool bObservedInPublicQueue = false;
 	};
 
-	UPROPERTY(Transient)
-	TObjectPtr<UGSCCoreComponent> BoundCoreComponent = nullptr;
+	TWeakObjectPtr<UAbilitySystemComponent> BoundAbilitySystemComponent;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UGSCAbilityQueueComponent> AbilityQueueComponent = nullptr;
@@ -65,15 +64,15 @@ private:
 	TWeakObjectPtr<UGameplayAbility> PendingEndedAbility;
 	TSubclassOf<UGameplayAbility> PendingEndedAbilityClass;
 	FTimerHandle ReconciliationTimerHandle;
+	FDelegateHandle AbilityFailedDelegateHandle;
+	FDelegateHandle AbilityEndedDelegateHandle;
 
 	void ScheduleReconciliation();
 	void ReconcilePublicQueueState();
 	void EmitDiagnostic(const FString& Message);
 	bool IsAbilityAllowed(const UGameplayAbility& Ability) const;
 
-	UFUNCTION()
 	void HandleAbilityFailed(const UGameplayAbility* Ability, const FGameplayTagContainer& ReasonTags);
 
-	UFUNCTION()
-	void HandleAbilityEnded(const UGameplayAbility* Ability);
+	void HandleAbilityEnded(UGameplayAbility* Ability);
 };

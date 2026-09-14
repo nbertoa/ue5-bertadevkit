@@ -2,8 +2,9 @@
 
 #include "BertaGASCompanionExt.h"
 #include "Abilities/GameplayAbility.h"
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemGlobals.h"
 #include "Components/GSCAbilityQueueComponent.h"
-#include "Components/GSCCoreComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "TimerManager.h"
@@ -18,7 +19,7 @@ void UBertaGSCAbilityQueueInputBridgeComponent::BeginPlay()
 	Super::BeginPlay();
 	if (bStartAutomatically && !StartBridge())
 	{
-		EmitDiagnostic(TEXT("Bridge inactive: owner requires both UGSCCoreComponent and UGSCAbilityQueueComponent."));
+		EmitDiagnostic(TEXT("Bridge inactive: owner requires both an ASC and UGSCAbilityQueueComponent."));
 	}
 }
 
@@ -36,34 +37,38 @@ void UBertaGSCAbilityQueueInputBridgeComponent::BeginDestroy()
 
 bool UBertaGSCAbilityQueueInputBridgeComponent::StartBridge()
 {
-	if (BoundCoreComponent && AbilityQueueComponent)
+	if (BoundAbilitySystemComponent.IsValid() && AbilityQueueComponent)
 	{
 		return true;
 	}
 
 	AActor* Owner = GetOwner();
-	UGSCCoreComponent* CoreComponent = Owner ? Owner->FindComponentByClass<UGSCCoreComponent>() : nullptr;
+	UAbilitySystemComponent* AbilitySystemComponent = Owner
+		? UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Owner)
+		: nullptr;
 	UGSCAbilityQueueComponent* QueueComponent = Owner ? Owner->FindComponentByClass<UGSCAbilityQueueComponent>() : nullptr;
-	if (!CoreComponent || !QueueComponent)
+	if (!AbilitySystemComponent || !QueueComponent)
 	{
 		return false;
 	}
 
-	CoreComponent->OnAbilityFailed.AddUniqueDynamic(this, &ThisClass::HandleAbilityFailed);
-	CoreComponent->OnAbilityEnded.AddUniqueDynamic(this, &ThisClass::HandleAbilityEnded);
-	BoundCoreComponent = CoreComponent;
+	AbilityFailedDelegateHandle = AbilitySystemComponent->AbilityFailedCallbacks.AddUObject(this, &ThisClass::HandleAbilityFailed);
+	AbilityEndedDelegateHandle = AbilitySystemComponent->AbilityEndedCallbacks.AddUObject(this, &ThisClass::HandleAbilityEnded);
+	BoundAbilitySystemComponent = AbilitySystemComponent;
 	AbilityQueueComponent = QueueComponent;
-	EmitDiagnostic(TEXT("Bridge active: observing public GSC ability failure and end events."));
+	EmitDiagnostic(TEXT("Bridge active: observing native ASC ability failure and end events."));
 	return true;
 }
 
 void UBertaGSCAbilityQueueInputBridgeComponent::StopBridge()
 {
-	if (BoundCoreComponent)
+	if (UAbilitySystemComponent* AbilitySystemComponent = BoundAbilitySystemComponent.Get())
 	{
-		BoundCoreComponent->OnAbilityFailed.RemoveDynamic(this, &ThisClass::HandleAbilityFailed);
-		BoundCoreComponent->OnAbilityEnded.RemoveDynamic(this, &ThisClass::HandleAbilityEnded);
+		AbilitySystemComponent->AbilityFailedCallbacks.Remove(AbilityFailedDelegateHandle);
+		AbilitySystemComponent->AbilityEndedCallbacks.Remove(AbilityEndedDelegateHandle);
 	}
+	AbilityFailedDelegateHandle.Reset();
+	AbilityEndedDelegateHandle.Reset();
 
 	if (UWorld* World = GetWorld())
 	{
@@ -73,13 +78,13 @@ void UBertaGSCAbilityQueueInputBridgeComponent::StopBridge()
 	PendingFailures.Reset();
 	PendingEndedAbility.Reset();
 	PendingEndedAbilityClass = nullptr;
-	BoundCoreComponent = nullptr;
+	BoundAbilitySystemComponent.Reset();
 	AbilityQueueComponent = nullptr;
 }
 
 bool UBertaGSCAbilityQueueInputBridgeComponent::IsBridgeActive() const
 {
-	return BoundCoreComponent != nullptr && AbilityQueueComponent != nullptr;
+	return BoundAbilitySystemComponent.IsValid() && AbilityQueueComponent != nullptr;
 }
 
 void UBertaGSCAbilityQueueInputBridgeComponent::HandleAbilityFailed(
@@ -116,9 +121,9 @@ void UBertaGSCAbilityQueueInputBridgeComponent::HandleAbilityFailed(
 	ScheduleReconciliation();
 }
 
-void UBertaGSCAbilityQueueInputBridgeComponent::HandleAbilityEnded(const UGameplayAbility* Ability)
+void UBertaGSCAbilityQueueInputBridgeComponent::HandleAbilityEnded(UGameplayAbility* Ability)
 {
-	PendingEndedAbility = const_cast<UGameplayAbility*>(Ability);
+	PendingEndedAbility = Ability;
 	PendingEndedAbilityClass = Ability ? Ability->GetClass() : nullptr;
 	const UGameplayAbility* QueuedAtEnd = AbilityQueueComponent ? AbilityQueueComponent->GetCurrentQueuedAbility() : nullptr;
 	if (QueuedAtEnd)
@@ -153,7 +158,10 @@ void UBertaGSCAbilityQueueInputBridgeComponent::ScheduleReconciliation()
 void UBertaGSCAbilityQueueInputBridgeComponent::ReconcilePublicQueueState()
 {
 	ReconciliationTimerHandle.Invalidate();
-	if (!AbilityQueueComponent || !AbilityQueueComponent->bAbilityQueueEnabled || !AbilityQueueComponent->IsAbilityQueueOpened())
+	if (!BoundAbilitySystemComponent.IsValid()
+		|| !AbilityQueueComponent
+		|| !AbilityQueueComponent->bAbilityQueueEnabled
+		|| !AbilityQueueComponent->IsAbilityQueueOpened())
 	{
 		PendingFailures.Reset();
 		PendingEndedAbility.Reset();
