@@ -37,6 +37,7 @@ BertaDevKit is a general-purpose Unreal Engine 5.8 toolbox. Its Runtime module p
 | `UBertaBTDecorator_CanActivateAbility` | Side-effect-free check of an exact granted ability's current activation rules. |
 | `UBertaBTTask_WaitAbilityReady` | Bounded periodic wait for arbitrary Gameplay Ability readiness logic. |
 | `UBertaGASDebugUtils` | Deterministic text snapshot of an Actor's current GAS state. |
+| `UBertaGASAbilityUtils` | Read-only cooldown, cost, and activation inspection for granted Gameplay Abilities. |
 | `UBertaBTTask_DebugGASState` | Logs the controlled Pawn's GAS snapshot at a Behavior Tree execution point. |
 
 Debug-facing Blueprint nodes use Unreal's `DevelopmentOnly` metadata where appropriate. This signals intended development use; it is not a blanket claim about all Runtime code or runtime cost.
@@ -170,6 +171,16 @@ This decorator is intentionally not advertised as reactive. A custom Gameplay Ab
 **Wait Ability Ready** resolves the exact granted ability class and calls its native `CanActivateAbility` immediately. It succeeds at once when ready; otherwise it uses the Behavior Tree's native interval-tick support to recheck at the configured cadence until ready. The interval defaults to `0.1` seconds and is clamped to at least `0.01` seconds. Invalid, ungranted, removed, or missing-ASC abilities fail, and abort clears the per-AI wait state.
 
 This is the campaign's deliberate polling exception: arbitrary custom `CanActivateAbility` logic has no generic GAS change delegate. The task does not create a world timer and does not attempt activation.
+
+### Ability Inspection
+
+`UBertaGASAbilityUtils` provides three Game-Thread-only, side-effect-free Blueprint calls for an exact ability class granted to an Actor's ASC. `Success` means the Actor, ASC, granted spec, actor info, and ability object were available for inspection; the result struct contains the gameplay answer.
+
+- **Get Ability Cooldown Info** reports the ability's native cooldown state separately from general activation readiness, plus finite remaining/duration seconds and a clamped `0..1` remaining fraction. Abilities without cooldown return a ready zeroed result; an active cooldown without finite timing can still report `bIsOnCooldown=true` with zero timing fields.
+- **Check Ability Cost** invokes `CheckCost` only. It never calls `ApplyCost` or mutates attributes.
+- **Check Ability Activation** invokes `CanActivateAbility` with the granted spec handle and current actor info. It never attempts activation.
+
+Cost and activation `FailureTags` are best-effort diagnostics produced by GAS or the ability. Custom logic may return false with an empty container; BertaDevKit does not fabricate or reinterpret failure tags. These calls retain the ASC's native authority, prediction, cooldown, cost, and custom ability semantics.
 
 ### GAS Debug Summary
 
