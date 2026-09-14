@@ -2,7 +2,7 @@
 
 **Personal Unreal Engine 5.8 development toolbox with native DualSense input, system information, external-process integration, runtime game-window control, desktop capture, and serial communication.**
 
-This repository is a UE 5.8 development host for seven independent plugins plus one optional GAS Companion extension. It is personal R&D tooling, not a gameplay framework or commercial product.
+This repository is a UE 5.8 development host for seven independent plugins plus optional GAS Companion and Combo Graph extensions. It is personal R&D tooling, not a gameplay framework or commercial product.
 
 > **Documentation:** <https://nbertoa.github.io/ue5-bertadevkit/>
 
@@ -40,7 +40,11 @@ A Win64 Runtime C++ and Blueprint API for current COM-port enumeration, asynchro
 
 An optional Runtime/Editor extension for projects already using GAS Companion. It adds single-ability and actor-wide readiness diagnostics, evidence-qualified effective loadout snapshots, event-driven tracing, a conservative Ability Queue + Enhanced Input bridge, Ability Set/Game Feature contract validation, target diagnostics, and a native UE 5.8 Targeting System adapter. It is disabled by default and depends on both BertaDevKit and a local GAS Companion installation that is never committed.
 
-The seven base plugins are independent siblings. BertaGASCompanionExt is an explicit optional integration plugin.
+### BertaComboGraphExt
+
+An optional Runtime/Editor extension for projects already using Combo Graph `1.6.3+5.8`. It adds deterministic contract validation, bounded per-execution tracing and snapshots, EffectContext compatibility inspection, an opt-in multi-target UE Targeting System task, and conservative `Triggered` pre-input buffering. It is disabled by default and depends on a legitimate local Combo Graph installation that is never committed.
+
+The seven base plugins are independent siblings. BertaGASCompanionExt and BertaComboGraphExt are explicit optional integration plugins.
 
 ## Requirements
 
@@ -50,6 +54,7 @@ The seven base plugins are independent siblings. BertaGASCompanionExt is an expl
 - Windows 10 version 1903 or later and Win64 for BertaDesktopCapture
 - Win64 and a Windows COM-port device/driver for BertaSerial
 - A licensed local GAS Companion installation for BertaGASCompanionExt
+- A licensed local Combo Graph `1.6.3+5.8` installation for BertaComboGraphExt
 - Git LFS for the repository host
 
 ## Install in another project
@@ -66,10 +71,11 @@ Copy any plugin independently into the matching project plugin directory:
 | BertaDesktopCapture | `BertaDevKitHost/Plugins/BertaDesktopCapture/` | `<YourProject>/Plugins/BertaDesktopCapture/` |
 | BertaSerial | `BertaDevKitHost/Plugins/BertaSerial/` | `<YourProject>/Plugins/BertaSerial/` |
 | BertaGASCompanionExt | `BertaDevKitHost/Plugins/BertaGASCompanionExt/` | `<YourProject>/Plugins/BertaGASCompanionExt/` |
+| BertaComboGraphExt | `BertaDevKitHost/Plugins/BertaComboGraphExt/` | `<YourProject>/Plugins/BertaComboGraphExt/` |
 
-Target UE 5.8, regenerate project files if needed, build, and enable the copied plugin in Unreal's Plugins window. BertaDualSense, BertaSystemInfo, BertaProcessBridge, BertaWindowTools, BertaDesktopCapture, BertaSerial, and BertaGASCompanionExt are disabled by default. BertaGASCompanionExt additionally requires BertaDevKit and GAS Companion. BertaDualSense stages SDL3 from its own directory; BertaSystemInfo enables UE's built-in Audio Capture plugin for microphone-device enumeration. BertaDesktopCapture and BertaSerial are Win64-only.
+Target UE 5.8, regenerate project files if needed, build, and enable the copied plugin in Unreal's Plugins window. BertaDualSense, BertaSystemInfo, BertaProcessBridge, BertaWindowTools, BertaDesktopCapture, BertaSerial, BertaGASCompanionExt, and BertaComboGraphExt are disabled by default. The optional integration plugins additionally require their licensed third-party plugin. BertaDualSense stages SDL3 from its own directory; BertaSystemInfo enables UE's built-in Audio Capture plugin for microphone-device enumeration. BertaDesktopCapture and BertaSerial are Win64-only.
 
-Copied-plugin guidance remains available in the [BertaDualSense README](BertaDevKitHost/Plugins/BertaDualSense/README.md), [BertaSystemInfo README](BertaDevKitHost/Plugins/BertaSystemInfo/README.md), [BertaProcessBridge README](BertaDevKitHost/Plugins/BertaProcessBridge/README.md), [BertaWindowTools README](BertaDevKitHost/Plugins/BertaWindowTools/README.md), [BertaDesktopCapture README](BertaDevKitHost/Plugins/BertaDesktopCapture/README.md), [BertaSerial README](BertaDevKitHost/Plugins/BertaSerial/README.md), and [BertaGASCompanionExt README](BertaDevKitHost/Plugins/BertaGASCompanionExt/README.md).
+Copied-plugin guidance remains available in each plugin README, including [BertaGASCompanionExt](BertaDevKitHost/Plugins/BertaGASCompanionExt/README.md) and [BertaComboGraphExt](BertaDevKitHost/Plugins/BertaComboGraphExt/README.md).
 
 ## Development host
 
@@ -88,7 +94,8 @@ ue5-bertadevkit/
         ├── BertaWindowTools/
         ├── BertaDesktopCapture/
         ├── BertaSerial/
-        └── BertaGASCompanionExt/
+        ├── BertaGASCompanionExt/
+        └── BertaComboGraphExt/
 ```
 
 `BertaDevKitHost` is the development and verification harness. The primary Editor target is:
@@ -119,6 +126,7 @@ See the [documentation site](https://nbertoa.github.io/ue5-bertadevkit/) for fea
 | `LogBertaDesktopCapture` | BertaDesktopCapture initialization and lifecycle failures |
 | `LogBertaSerial` | BertaSerial open, configuration, worker, and cleanup failures |
 | `LogBertaGASCompanionExt` | GAS Companion extension tracing, bridge, and targeting diagnostics |
+| `LogBertaComboGraphExt` | Combo Graph extension tracing, buffering, targeting, and compatibility diagnostics |
 
 ## About
 

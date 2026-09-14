@@ -78,6 +78,7 @@ ShaderCache/
 
 # Local third-party plugin
 /BertaDevKitHost/Plugins/GASCompanion/
+/BertaDevKitHost/Plugins/ComboGraph/
 
 # MkDocs generated site
 /site/

@@ -1,6 +1,6 @@
 # BertaDevKit
 
-BertaDevKit is a personal Unreal Engine 5.8 repository for R&D, prototyping, debugging, tooling, and validation. It contains a development host with seven independent plugins and one optional integration plugin:
+BertaDevKit is a personal Unreal Engine 5.8 repository for R&D, prototyping, debugging, tooling, and validation. It contains a development host with seven independent plugins and optional integration plugins:
 
 - [BertaDevKit](bertadevkit/index.md) — Runtime Blueprint utilities and Editor development tools.
 - [BertaDualSense](bertadualsense/index.md) — Native Sony DualSense and DualSense Edge input support for Win64 through SDL3.
@@ -10,8 +10,9 @@ BertaDevKit is a personal Unreal Engine 5.8 repository for R&D, prototyping, deb
 - [BertaDesktopCapture](bertadesktopcapture/index.md) — Win64 Runtime display/window capture into live Unreal textures.
 - [BertaSerial](bertaserial/index.md) — Win64 Runtime COM-port enumeration and asynchronous raw-byte serial communication.
 - [BertaGASCompanionExt](bertagascompanionext/index.md) — optional readiness/loadout diagnostics, contract validation, queue bridging, and targeting integration for GAS Companion.
+- [BertaComboGraphExt](bertacombographext/index.md) — optional contract validation, runtime tracing, Targeting System adaptation, and conservative pre-input buffering for Combo Graph.
 
-The seven base plugins can be copied independently. BertaGASCompanionExt intentionally depends on BertaDevKit and a licensed local GAS Companion installation.
+The seven base plugins can be copied independently. BertaGASCompanionExt intentionally depends on BertaDevKit and a licensed local GAS Companion installation; BertaComboGraphExt depends only on its licensed local Combo Graph installation and Unreal modules.
 
 ## Quick installation
 
@@ -25,6 +26,7 @@ The seven base plugins can be copied independently. BertaGASCompanionExt intenti
 | BertaDesktopCapture | `BertaDevKitHost/Plugins/BertaDesktopCapture/` | `<YourProject>/Plugins/BertaDesktopCapture/` |
 | BertaSerial | `BertaDevKitHost/Plugins/BertaSerial/` | `<YourProject>/Plugins/BertaSerial/` |
 | BertaGASCompanionExt | `BertaDevKitHost/Plugins/BertaGASCompanionExt/` | `<YourProject>/Plugins/BertaGASCompanionExt/` |
+| BertaComboGraphExt | `BertaDevKitHost/Plugins/BertaComboGraphExt/` | `<YourProject>/Plugins/BertaComboGraphExt/` |
 
 Build the target project and enable the copied plugin in Unreal's Plugins window. BertaDualSense, BertaDesktopCapture, and BertaSerial are Win64-only; the other plugins have the UE 5.8 module boundaries and verification scope described in their documentation.
 

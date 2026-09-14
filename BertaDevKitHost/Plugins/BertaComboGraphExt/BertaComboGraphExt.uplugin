@@ -1,0 +1,25 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "1.0",
+  "FriendlyName": "Berta Combo Graph Extension",
+  "Description": "Read-only validation and opt-in runtime diagnostics, targeting, and input buffering for Combo Graph.",
+  "EngineVersion": "5.8.0",
+  "Category": "Gameplay",
+  "CreatedBy": "Nicolas Bertoa",
+  "CreatedByURL": "https://github.com/nbertoa",
+  "CanContainContent": false,
+  "Installed": false,
+  "EnabledByDefault": false,
+  "Modules": [
+    { "Name": "BertaComboGraphExt", "Type": "Runtime", "LoadingPhase": "Default" },
+    { "Name": "BertaComboGraphExtEditor", "Type": "Editor", "LoadingPhase": "Default" }
+  ],
+  "Plugins": [
+    { "Name": "ComboGraph", "Enabled": true },
+    { "Name": "GameplayAbilities", "Enabled": true },
+    { "Name": "EnhancedInput", "Enabled": true },
+    { "Name": "TargetingSystem", "Enabled": true },
+    { "Name": "DataValidation", "Enabled": true, "TargetAllowList": ["Editor"] }
+  ]
+}
