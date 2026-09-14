@@ -24,6 +24,7 @@ BertaDevKit is a general-purpose Unreal Engine 5.8 toolbox. Its Runtime module p
 | `UBertaBTTask_CancelGameplayAbility` | Immediate cancellation request for one exact granted ability spec. |
 | `UBertaBTTask_SendGameplayEvent` | Sends a compact GAS Gameplay Event payload to the controlled Pawn. |
 | `UBertaBTTask_ApplyGameplayEffectToSelf` | Applies an instant, duration, or infinite Gameplay Effect to the controlled Pawn. |
+| `UBertaBTTask_ApplyGameplayEffectToTarget` | Applies an outgoing Gameplay Effect from the controlled Pawn ASC to a Blackboard target ASC. |
 | `UBertaBTDecorator_TargetGameplayTagQuery` | Reactive Gameplay Tag Query on an Actor selected from Blackboard. |
 | `UBertaBTDecorator_TargetAttributeThreshold` | Reactive attribute comparison on an Actor selected from Blackboard. |
 | `UBertaBTTask_WaitTargetGameplayTagQuery` | Waits across Blackboard target replacement for a target tag-query state. |
@@ -119,6 +120,8 @@ The task listens before requesting activation, including abilities that end sync
 ### Apply Gameplay Effect To Self
 
 **Apply Gameplay Effect To Self** builds a normal outgoing spec at the configured finite level and applies it to the controlled Pawn's Ability System Component. It uses UE 5.8's `WasSuccessfullyApplied()` result, which correctly represents both active duration/infinite effects and the special completed handle returned by successful instant effects. GAS authority and prediction rules still determine whether application is accepted.
+
+**Apply Gameplay Effect To Target** uses the same application-result contract, but builds the spec and effect context on the controlled Pawn's source ASC and applies it to the ASC exposed by an Actor-compatible Blackboard key. Missing source/target ASCs, an invalid effect class, a non-finite level, or rejected spec/application fails synchronously. The task adds no RPC or authority override; native GAS networking rules remain in force.
 
 ### Target Gameplay Tag Query
 
