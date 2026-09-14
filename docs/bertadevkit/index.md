@@ -39,6 +39,7 @@ BertaDevKit is a general-purpose Unreal Engine 5.8 toolbox. Its Runtime module p
 | `UBertaGASDebugUtils` | Deterministic text snapshot of an Actor's current GAS state. |
 | `UBertaGASAbilityUtils` | Read-only cooldown, cost, and activation inspection for granted Gameplay Abilities. |
 | `UBertaBTTask_DebugGASState` | Logs the controlled Pawn's GAS snapshot at a Behavior Tree execution point. |
+| `UBertaBTTask_DebugTargetGASState` | Logs a Blackboard target Actor's GAS snapshot at a Behavior Tree execution point. |
 
 Debug-facing Blueprint nodes use Unreal's `DevelopmentOnly` metadata where appropriate. This signals intended development use; it is not a blanket claim about all Runtime code or runtime cost.
 
@@ -191,6 +192,8 @@ The utility is a compact copy/paste diagnostic, not a logging UI or a replacemen
 ### Debug GAS State
 
 **Debug GAS State** is an immediate Behavior Tree task that resolves the controlled Pawn, reuses **Get GAS Debug Summary**, writes one snapshot to `LogBertaDebug` with an optional label, and succeeds. It fails when there is no valid controlled Pawn/ASC, never ticks, and is intended for development and R&D checkpoints rather than continuous telemetry.
+
+**Debug Target GAS State** applies the same one-shot diagnostic to an Actor-compatible Blackboard target. It reuses the exact same summary formatter, adds an optional label, and fails cleanly for a missing target or ASC. It has no Tick, observer, or persistent logging state.
 
 ## Editor tools
 
