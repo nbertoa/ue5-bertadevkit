@@ -25,6 +25,7 @@ BertaDevKit is a general-purpose Unreal Engine 5.8 toolbox. Its Runtime module p
 | `UBertaBTTask_SendGameplayEvent` | Sends a compact GAS Gameplay Event payload to the controlled Pawn. |
 | `UBertaBTTask_ApplyGameplayEffectToSelf` | Applies an instant, duration, or infinite Gameplay Effect to the controlled Pawn. |
 | `UBertaBTTask_ApplyGameplayEffectToTarget` | Applies an outgoing Gameplay Effect from the controlled Pawn ASC to a Blackboard target ASC. |
+| `UBertaBTTask_RemoveGameplayEffectsFromSelf` / `UBertaBTTask_RemoveGameplayEffectsFromTarget` | Remove active Gameplay Effects matching a non-empty query. |
 | `UBertaBTDecorator_TargetGameplayTagQuery` | Reactive Gameplay Tag Query on an Actor selected from Blackboard. |
 | `UBertaBTDecorator_TargetAttributeThreshold` | Reactive attribute comparison on an Actor selected from Blackboard. |
 | `UBertaBTTask_WaitTargetGameplayTagQuery` | Waits across Blackboard target replacement for a target tag-query state. |
@@ -122,6 +123,10 @@ The task listens before requesting activation, including abilities that end sync
 **Apply Gameplay Effect To Self** builds a normal outgoing spec at the configured finite level and applies it to the controlled Pawn's Ability System Component. It uses UE 5.8's `WasSuccessfullyApplied()` result, which correctly represents both active duration/infinite effects and the special completed handle returned by successful instant effects. GAS authority and prediction rules still determine whether application is accepted.
 
 **Apply Gameplay Effect To Target** uses the same application-result contract, but builds the spec and effect context on the controlled Pawn's source ASC and applies it to the ASC exposed by an Actor-compatible Blackboard key. Missing source/target ASCs, an invalid effect class, a non-finite level, or rejected spec/application fails synchronously. The task adds no RPC or authority override; native GAS networking rules remain in force.
+
+### Remove Gameplay Effects
+
+**Remove Gameplay Effects From Self** and **Remove Gameplay Effects From Target** synchronously remove all active effects matching a configured `FGameplayEffectQuery` from the controlled Pawn or Blackboard-selected Actor ASC. An empty query is rejected so an unconfigured node cannot accidentally remove every effect. Zero matches succeeds as an already-clear state; when matches exist, success requires UE to remove at least one effect. Instant effects do not participate because they are not persistent active effects. UE 5.8 performs removal only for an authoritative ASC; these tasks add no RPC or client-side override.
 
 ### Target Gameplay Tag Query
 
