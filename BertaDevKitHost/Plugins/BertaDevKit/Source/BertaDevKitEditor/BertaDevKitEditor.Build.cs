@@ -12,6 +12,7 @@ public class BertaDevKitEditor : ModuleRules
 			"CoreUObject",
 			"Engine",
 			"AssetRegistry", // FAssetData is part of the public API.
+			"GameplayTags", // FGameplayTag and query result types are part of the public API.
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]

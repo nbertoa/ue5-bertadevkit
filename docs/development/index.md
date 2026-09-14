@@ -2,7 +2,7 @@
 
 ## Repository architecture
 
-`BertaDevKitHost` is the development and verification harness. It contains seven independent plugin roots:
+`BertaDevKitHost` is the development and verification harness. It contains seven independent plugin roots and one optional GAS Companion extension:
 
 ```text
 BertaDevKitHost/
@@ -14,10 +14,11 @@ BertaDevKitHost/
     ├── BertaProcessBridge/
     ├── BertaWindowTools/
     ├── BertaDesktopCapture/
-    └── BertaSerial/
+    ├── BertaSerial/
+    └── BertaGASCompanionExt/
 ```
 
-All seven plugins target Unreal Engine 5.8. BertaDualSense, BertaDesktopCapture, and BertaSerial are Win64-only. BertaSystemInfo, BertaProcessBridge, and BertaWindowTools compile without a platform allowlist; their runtime behavior outside Win64 has not been verified.
+All eight plugins target Unreal Engine 5.8. BertaDualSense, BertaDesktopCapture, and BertaSerial are Win64-only. BertaGASCompanionExt is disabled by default and requires the Git-ignored local GAS Companion plugin. BertaSystemInfo, BertaProcessBridge, and BertaWindowTools compile without a platform allowlist; their runtime behavior outside Win64 has not been verified.
 
 ## Build the host
 

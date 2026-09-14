@@ -22,4 +22,5 @@ nav:
   - BertaWindowTools: bertawindowtools/index.md
   - BertaDesktopCapture: bertadesktopcapture/index.md
   - BertaSerial: bertaserial/index.md
+  - BertaGASCompanionExt: bertagascompanionext/index.md
   - Development: development/index.md

@@ -19,7 +19,7 @@ Never invent Unreal APIs or behavior.
 
 ### Repository Structure
 
-The repository contains a host project around seven independent sibling plugins:
+The repository contains a host project around seven independent sibling plugins and one optional GAS Companion extension:
 
 ```text
 ue5-bertadevkit/
@@ -49,8 +49,11 @@ ue5-bertadevkit/
         ├── BertaDesktopCapture/
         │   ├── BertaDesktopCapture.uplugin
         │   └── Source/
-        └── BertaSerial/
-            ├── BertaSerial.uplugin
+        ├── BertaSerial/
+        │   ├── BertaSerial.uplugin
+        │   └── Source/
+        └── BertaGASCompanionExt/
+            ├── BertaGASCompanionExt.uplugin
             └── Source/
 ```
 
@@ -64,7 +67,11 @@ BertaDevKitHost/Plugins/BertaProcessBridge/
 BertaDevKitHost/Plugins/BertaWindowTools/
 BertaDevKitHost/Plugins/BertaDesktopCapture/
 BertaDevKitHost/Plugins/BertaSerial/
+BertaDevKitHost/Plugins/BertaGASCompanionExt/
 ```
+
+`BertaGASCompanionExt` is the deliberate exception to sibling independence: it is disabled by default and depends on
+the locally installed, Git-ignored commercial GAS Companion plugin plus BertaDevKit.
 
 The host project exists for development and verification.
 

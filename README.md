@@ -2,7 +2,7 @@
 
 **Personal Unreal Engine 5.8 development toolbox with native DualSense input, system information, external-process integration, runtime game-window control, desktop capture, and serial communication.**
 
-This repository is a UE 5.8 development host for seven independent sibling plugins. It is personal R&D tooling, not a gameplay framework or commercial product.
+This repository is a UE 5.8 development host for seven independent plugins plus one optional GAS Companion extension. It is personal R&D tooling, not a gameplay framework or commercial product.
 
 > **Documentation:** <https://nbertoa.github.io/ue5-bertadevkit/>
 
@@ -36,7 +36,11 @@ A Win64 Runtime C++ and Blueprint API for enumerating displays and visible top-l
 
 A Win64 Runtime C++ and Blueprint API for current COM-port enumeration, asynchronous raw-byte reception, ordered queued transmission, UTF-8 write helpers, explicit disconnect errors, and deterministic `GameInstance` cleanup.
 
-The plugins are independent siblings: none is a module of or dependency of another.
+### BertaGASCompanionExt
+
+An optional Runtime/Editor extension for projects already using GAS Companion. It adds activation explanations, event-driven tracing, a conservative Ability Queue + Enhanced Input bridge, Ability Set validation, target diagnostics, and a native UE 5.8 Targeting System adapter. It is disabled by default and depends on both BertaDevKit and a local GAS Companion installation that is never committed.
+
+The seven base plugins are independent siblings. BertaGASCompanionExt is an explicit optional integration plugin.
 
 ## Requirements
 
@@ -45,6 +49,7 @@ The plugins are independent siblings: none is a module of or dependency of anoth
 - Win64 for BertaDualSense
 - Windows 10 version 1903 or later and Win64 for BertaDesktopCapture
 - Win64 and a Windows COM-port device/driver for BertaSerial
+- A licensed local GAS Companion installation for BertaGASCompanionExt
 - Git LFS for the repository host
 
 ## Install in another project
@@ -60,10 +65,11 @@ Copy any plugin independently into the matching project plugin directory:
 | BertaWindowTools | `BertaDevKitHost/Plugins/BertaWindowTools/` | `<YourProject>/Plugins/BertaWindowTools/` |
 | BertaDesktopCapture | `BertaDevKitHost/Plugins/BertaDesktopCapture/` | `<YourProject>/Plugins/BertaDesktopCapture/` |
 | BertaSerial | `BertaDevKitHost/Plugins/BertaSerial/` | `<YourProject>/Plugins/BertaSerial/` |
+| BertaGASCompanionExt | `BertaDevKitHost/Plugins/BertaGASCompanionExt/` | `<YourProject>/Plugins/BertaGASCompanionExt/` |
 
-Target UE 5.8, regenerate project files if needed, build, and enable the copied plugin in Unreal's Plugins window. BertaDualSense, BertaSystemInfo, BertaProcessBridge, BertaWindowTools, BertaDesktopCapture, and BertaSerial are disabled by default. BertaDualSense stages SDL3 from its own directory; BertaSystemInfo enables UE's built-in Audio Capture plugin for microphone-device enumeration. BertaDesktopCapture and BertaSerial are Win64-only.
+Target UE 5.8, regenerate project files if needed, build, and enable the copied plugin in Unreal's Plugins window. BertaDualSense, BertaSystemInfo, BertaProcessBridge, BertaWindowTools, BertaDesktopCapture, BertaSerial, and BertaGASCompanionExt are disabled by default. BertaGASCompanionExt additionally requires BertaDevKit and GAS Companion. BertaDualSense stages SDL3 from its own directory; BertaSystemInfo enables UE's built-in Audio Capture plugin for microphone-device enumeration. BertaDesktopCapture and BertaSerial are Win64-only.
 
-Copied-plugin guidance remains available in the [BertaDualSense README](BertaDevKitHost/Plugins/BertaDualSense/README.md), [BertaSystemInfo README](BertaDevKitHost/Plugins/BertaSystemInfo/README.md), [BertaProcessBridge README](BertaDevKitHost/Plugins/BertaProcessBridge/README.md), [BertaWindowTools README](BertaDevKitHost/Plugins/BertaWindowTools/README.md), [BertaDesktopCapture README](BertaDevKitHost/Plugins/BertaDesktopCapture/README.md), and [BertaSerial README](BertaDevKitHost/Plugins/BertaSerial/README.md).
+Copied-plugin guidance remains available in the [BertaDualSense README](BertaDevKitHost/Plugins/BertaDualSense/README.md), [BertaSystemInfo README](BertaDevKitHost/Plugins/BertaSystemInfo/README.md), [BertaProcessBridge README](BertaDevKitHost/Plugins/BertaProcessBridge/README.md), [BertaWindowTools README](BertaDevKitHost/Plugins/BertaWindowTools/README.md), [BertaDesktopCapture README](BertaDevKitHost/Plugins/BertaDesktopCapture/README.md), [BertaSerial README](BertaDevKitHost/Plugins/BertaSerial/README.md), and [BertaGASCompanionExt README](BertaDevKitHost/Plugins/BertaGASCompanionExt/README.md).
 
 ## Development host
 
@@ -81,7 +87,8 @@ ue5-bertadevkit/
         ├── BertaProcessBridge/
         ├── BertaWindowTools/
         ├── BertaDesktopCapture/
-        └── BertaSerial/
+        ├── BertaSerial/
+        └── BertaGASCompanionExt/
 ```
 
 `BertaDevKitHost` is the development and verification harness. The primary Editor target is:
@@ -111,6 +118,7 @@ See the [documentation site](https://nbertoa.github.io/ue5-bertadevkit/) for fea
 | `LogBertaWindowTools` | BertaWindowTools native window-operation diagnostics |
 | `LogBertaDesktopCapture` | BertaDesktopCapture initialization and lifecycle failures |
 | `LogBertaSerial` | BertaSerial open, configuration, worker, and cleanup failures |
+| `LogBertaGASCompanionExt` | GAS Companion extension tracing, bridge, and targeting diagnostics |
 
 ## About
 

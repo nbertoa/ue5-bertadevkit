@@ -281,6 +281,7 @@ The tag assertion uses native query matching, the attribute assertion reuses `FB
 - **Project Setup** is an opt-in audit/apply utility for a curated allowlist of preferred project and per-project Editor defaults. It previews changes and does not mutate projects at startup.
 - **Blueprint Audit** is a read-only, conservative static linter and review assistant. Findings require manual review; it has no automatic graph rewriting or refactoring action.
 - **Blueprint Usage Finder** is a read-only Content Browser action for one project asset. It reports exact Blueprint graph nodes that reference the asset and offers node navigation; it is not a universal reference search.
+- **Gameplay Tag Usage Finder** is a read-only Editor Blueprint API that scans selected assets, an explicit `/Game/...` root, or all `/Game` on demand. It recursively inspects reflected `FGameplayTag`, containers, and queries, including Blueprint CDO defaults. Exact matching is the default; parent-or-child matching is a separate explicit mode.
 - **World Validation** checks the open Editor level against enabled policy checks and reports violations without changing actors.
 
 The main Editor actions are under **Tools → BertaDevKit**. Content Browser context menus provide Asset Naming, Asset Cleaner, Blueprint Audit, and Asset Insights actions for selected project assets and folders.

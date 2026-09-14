@@ -1,0 +1,56 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "1.0",
+  "FriendlyName": "Berta GAS Companion Extension",
+  "Description": "Focused diagnostics, validation, targeting, and compatibility helpers for GAS Companion.",
+  "Category": "Gameplay",
+  "CreatedBy": "Nicolas Bertoa",
+  "CreatedByURL": "https://github.com/nbertoa",
+  "CanContainContent": false,
+  "IsBetaVersion": false,
+  "IsExperimentalVersion": false,
+  "Installed": false,
+  "EnabledByDefault": false,
+  "Modules": [
+    {
+      "Name": "BertaGASCompanionExt",
+      "Type": "Runtime",
+      "LoadingPhase": "Default"
+    },
+    {
+      "Name": "BertaGASCompanionExtEditor",
+      "Type": "Editor",
+      "LoadingPhase": "Default"
+    }
+  ],
+  "Plugins": [
+    {
+      "Name": "BertaDevKit",
+      "Enabled": true
+    },
+    {
+      "Name": "GameplayAbilities",
+      "Enabled": true
+    },
+    {
+      "Name": "EnhancedInput",
+      "Enabled": true
+    },
+    {
+      "Name": "GASCompanion",
+      "Enabled": true
+    },
+    {
+      "Name": "TargetingSystem",
+      "Enabled": true
+    },
+    {
+      "Name": "DataValidation",
+      "Enabled": true,
+      "TargetAllowList": [
+        "Editor"
+      ]
+    }
+  ]
+}
