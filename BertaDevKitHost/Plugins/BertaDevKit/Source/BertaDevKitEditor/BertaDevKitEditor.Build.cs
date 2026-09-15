@@ -35,6 +35,7 @@ public class BertaDevKitEditor : ModuleRules
 			"Kismet", // UBlueprint and Blueprint graph inspection
 			"MessageLog", // Blueprint Audit findings listing
 			"Projects", // IProjectManager and IPluginManager
+			"GraphEditor", // SGraphNodeDefault and the node factory
 		});
 	}
 }

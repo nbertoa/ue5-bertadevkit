@@ -3,6 +3,7 @@
 #include "ContentBrowser/BertaContentBrowserMenu.h"
 #include "Toolbar/BertaEditorToolbar.h"
 #include "Log/BertaDevKitEditorLog.h"
+#include "ObjectGraph/BertaObjectGraphTab.h"
 
 #include "MessageLogModule.h"
 #include "Misc/CoreDelegates.h"
@@ -14,6 +15,7 @@ void FBertaDevKitEditorModule::StartupModule()
 	// is not guaranteed to exist at this point in the startup sequence.
 	EditorToolbar = MakeUnique<FBertaEditorToolbar>();
 	ContentBrowserMenu = MakeUnique<FBertaContentBrowserMenu>();
+	ObjectGraphTab = MakeUnique<BertaObjectGraph::FTabOwner>();
 
 	// Bind to OnPostEngineInit using a named member callback — avoids a raw lambda
 	// and makes the call traceable in the debugger.
@@ -43,6 +45,11 @@ void FBertaDevKitEditorModule::ShutdownModule()
 		ContentBrowserMenu->Unregister();
 		ContentBrowserMenu.Reset();
 	}
+	if (ObjectGraphTab)
+	{
+		ObjectGraphTab->Unregister();
+		ObjectGraphTab.Reset();
+	}
 	UnregisterBlueprintAuditMessageLog();
 	UnregisterAssetInsightsMessageLog();
 	UnregisterAssetNamingMessageLog();
@@ -67,6 +74,10 @@ void FBertaDevKitEditorModule::OnPostEngineInit()
 	if (ContentBrowserMenu)
 	{
 		ContentBrowserMenu->Register();
+	}
+	if (ObjectGraphTab)
+	{
+		ObjectGraphTab->Register();
 	}
 }
 

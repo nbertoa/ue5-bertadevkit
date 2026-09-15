@@ -4,6 +4,7 @@
 
 class FBertaEditorToolbar;
 class FBertaContentBrowserMenu;
+namespace BertaObjectGraph { class FTabOwner; }
 
 /**
  * Editor module for BertaDevKit.
@@ -33,4 +34,5 @@ private:
 	/** Owns the Tools menu entry for BertaDevKit. Null before StartupModule, valid after. */
 	TUniquePtr<FBertaEditorToolbar> EditorToolbar;
 	TUniquePtr<FBertaContentBrowserMenu> ContentBrowserMenu;
+	TUniquePtr<BertaObjectGraph::FTabOwner> ObjectGraphTab;
 };

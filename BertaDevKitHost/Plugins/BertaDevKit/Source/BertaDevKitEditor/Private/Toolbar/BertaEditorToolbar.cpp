@@ -2,6 +2,7 @@
 
 #include "AssetActions/BertaAssetAuditor.h"
 #include "Log/BertaDevKitEditorLog.h"
+#include "ObjectGraph/BertaObjectGraphTab.h"
 #include "ProjectSetup/BertaProjectSetup.h"
 #include "WorldValidation/BertaWorldValidation.h"
 
@@ -126,6 +127,17 @@ void FBertaEditorToolbar::Register()
 		Section.AddEntry(Entry);
 	}
 
+	{
+		FToolMenuEntry Entry = FToolMenuEntry::InitMenuEntry(
+			"BertaObjectGraph",
+			NSLOCTEXT("BertaDevKit", "ObjectGraph", "Berta Object Graph"),
+			NSLOCTEXT("BertaDevKit", "ObjectGraphTooltip", "Inspect live PIE Actor GC root reference chains."),
+			FSlateIcon(),
+			FUIAction(FExecuteAction::CreateRaw(this, &FBertaEditorToolbar::OnObjectGraphClicked)));
+		Entry.Owner = FToolMenuOwner(BertaOwnerName);
+		Section.AddEntry(Entry);
+	}
+
 	UE_LOG(LogBertaDevKitEditor,
 	       Log,
 	       TEXT("[FBertaEditorToolbar::Register] BertaDevKit Tools menu entries registered."));
@@ -184,4 +196,9 @@ void FBertaEditorToolbar::OnAuditProjectDefaultsClicked()
 void FBertaEditorToolbar::OnApplyProjectDefaultsClicked()
 {
 	FBertaProjectSetup::ApplyWithConfirmation();
+}
+
+void FBertaEditorToolbar::OnObjectGraphClicked()
+{
+	BertaObjectGraph::FTabOwner::Open();
 }
