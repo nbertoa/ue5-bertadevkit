@@ -2,7 +2,7 @@
 
 **Personal Unreal Engine 5.8 development toolbox with native DualSense input, system information, external-process integration, runtime game-window control, desktop capture, and serial communication.**
 
-This repository is a UE 5.8 development host for seven independent base plugins plus three optional integration plugins. It is personal R&D tooling, not a gameplay framework or commercial product.
+This repository is a UE 5.8 development host for seven independent base plugins plus optional integration plugins. It is personal R&D tooling, not a gameplay framework or commercial product.
 
 > **Documentation:** <https://nbertoa.github.io/ue5-bertadevkit/>
 
@@ -48,7 +48,11 @@ An optional Runtime/Editor extension for projects already using Combo Graph `1.6
 
 An optional Runtime component for cycling UGC camera data assets, a compact live debug summary, and development console commands, plus read-only Editor setup auditing and preset comparison. UGC owns camera evaluation and blending. The extension is disabled by default and requires a licensed local UGC installation that is never committed.
 
-The seven base plugins are independent siblings. BertaGASCompanionExt, BertaComboGraphExt, and BertaUltimateGameplayCameraExt are explicit optional integration plugins.
+### BertaBlackEyeCameraExt
+
+An optional Runtime/Editor extension for Black Eye Camera 2.0. It adds reusable timed/manual camera reveals, overlap zones, presets, participant callbacks, prototype camera cycling, on-demand diagnostics, and undoable Editor setup plus read-only auditing. Black Eye owns procedural camera behavior and Shot Lists. The extension is disabled by default and requires a legitimate local Black Eye installation that is never committed.
+
+The seven base plugins are independent siblings. BertaGASCompanionExt, BertaComboGraphExt, BertaUltimateGameplayCameraExt, and BertaBlackEyeCameraExt are explicit optional integration plugins.
 
 ## Requirements
 
@@ -60,6 +64,7 @@ The seven base plugins are independent siblings. BertaGASCompanionExt, BertaComb
 - A licensed local GAS Companion installation for BertaGASCompanionExt
 - A licensed local Combo Graph `1.6.3+5.8` installation for BertaComboGraphExt
 - A licensed local Ultimate Gameplay Camera installation for BertaUltimateGameplayCameraExt
+- A legitimate local Black Eye Camera 2.0 installation for BertaBlackEyeCameraExt
 - Git LFS for the repository host
 
 ## Install in another project
@@ -78,10 +83,11 @@ Copy any plugin independently into the matching project plugin directory:
 | BertaGASCompanionExt | `BertaDevKitHost/Plugins/BertaGASCompanionExt/` | `<YourProject>/Plugins/BertaGASCompanionExt/` |
 | BertaComboGraphExt | `BertaDevKitHost/Plugins/BertaComboGraphExt/` | `<YourProject>/Plugins/BertaComboGraphExt/` |
 | BertaUltimateGameplayCameraExt | `BertaDevKitHost/Plugins/BertaUltimateGameplayCameraExt/` | `<YourProject>/Plugins/BertaUltimateGameplayCameraExt/` |
+| BertaBlackEyeCameraExt | `BertaDevKitHost/Plugins/BertaBlackEyeCameraExt/` | `<YourProject>/Plugins/BertaBlackEyeCameraExt/` |
 
-Target UE 5.8, regenerate project files if needed, build, and enable the copied plugin in Unreal's Plugins window. BertaDualSense, BertaSystemInfo, BertaProcessBridge, BertaWindowTools, BertaDesktopCapture, BertaSerial, BertaGASCompanionExt, BertaComboGraphExt, and BertaUltimateGameplayCameraExt are disabled by default. The optional integration plugins additionally require their licensed third-party plugin. BertaDualSense stages SDL3 from its own directory; BertaSystemInfo enables UE's built-in Audio Capture plugin for microphone-device enumeration. BertaDesktopCapture and BertaSerial are Win64-only.
+Target UE 5.8, regenerate project files if needed, build, and enable the copied plugin in Unreal's Plugins window. BertaDualSense, BertaSystemInfo, BertaProcessBridge, BertaWindowTools, BertaDesktopCapture, BertaSerial, BertaGASCompanionExt, BertaComboGraphExt, BertaUltimateGameplayCameraExt, and BertaBlackEyeCameraExt are disabled by default. The optional integration plugins additionally require their legitimate local third-party plugin. BertaDualSense stages SDL3 from its own directory; BertaSystemInfo enables UE's built-in Audio Capture plugin for microphone-device enumeration. BertaDesktopCapture and BertaSerial are Win64-only.
 
-Copied-plugin guidance remains available in each plugin README, including [BertaGASCompanionExt](BertaDevKitHost/Plugins/BertaGASCompanionExt/README.md), [BertaComboGraphExt](BertaDevKitHost/Plugins/BertaComboGraphExt/README.md), and [BertaUltimateGameplayCameraExt](BertaDevKitHost/Plugins/BertaUltimateGameplayCameraExt/README.md).
+Copied-plugin guidance remains available in each plugin README, including [BertaGASCompanionExt](BertaDevKitHost/Plugins/BertaGASCompanionExt/README.md), [BertaComboGraphExt](BertaDevKitHost/Plugins/BertaComboGraphExt/README.md), [BertaUltimateGameplayCameraExt](BertaDevKitHost/Plugins/BertaUltimateGameplayCameraExt/README.md), and [BertaBlackEyeCameraExt](BertaDevKitHost/Plugins/BertaBlackEyeCameraExt/README.md).
 
 ## Development host
 
@@ -102,7 +108,8 @@ ue5-bertadevkit/
         ├── BertaSerial/
         ├── BertaGASCompanionExt/
         ├── BertaComboGraphExt/
-        └── BertaUltimateGameplayCameraExt/
+        ├── BertaUltimateGameplayCameraExt/
+        └── BertaBlackEyeCameraExt/
 ```
 
 `BertaDevKitHost` is the development and verification harness. The primary Editor target is:
@@ -135,6 +142,7 @@ See the [documentation site](https://nbertoa.github.io/ue5-bertadevkit/) for fea
 | `LogBertaGASCompanionExt` | GAS Companion extension tracing, bridge, and targeting diagnostics |
 | `LogBertaComboGraphExt` | Combo Graph extension tracing, buffering, targeting, and compatibility diagnostics |
 | `LogBertaUltimateGameplayCameraExt` | UGC preset configuration and selection failures |
+| `LogBertaBlackEyeReveal`, `LogBertaBlackEyeSwitcher`, `LogBertaBlackEyeConsole`, `LogBertaBlackEyeEditor` | Black Eye reveal, switcher, on-demand diagnostics, and Editor setup/audit |
 
 ## About
 

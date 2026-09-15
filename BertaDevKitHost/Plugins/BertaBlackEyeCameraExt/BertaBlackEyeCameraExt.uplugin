@@ -10,7 +10,8 @@
   "Installed": false,
   "EnabledByDefault": false,
   "Modules": [
-    { "Name": "BertaBlackEyeCameraExt", "Type": "Runtime", "LoadingPhase": "Default" }
+    { "Name": "BertaBlackEyeCameraExt", "Type": "Runtime", "LoadingPhase": "Default" },
+    { "Name": "BertaBlackEyeCameraExtEditor", "Type": "Editor", "LoadingPhase": "Default" }
   ],
   "Plugins": [
     { "Name": "Black_Eye", "Enabled": true }
