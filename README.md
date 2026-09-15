@@ -46,7 +46,7 @@ An optional Runtime/Editor extension for projects already using Combo Graph `1.6
 
 ### BertaUltimateGameplayCameraExt
 
-An optional Runtime component for cycling an ordered list of Ultimate Gameplay Camera data assets on a `PlayerController`, plus a read-only Editor audit of setup, presets, and explicit Blueprint camera writes. UGC owns camera evaluation and blending. The extension is disabled by default and requires a licensed local UGC installation that is never committed.
+An optional Runtime component for cycling an ordered list of Ultimate Gameplay Camera data assets on a `PlayerController`, plus read-only Editor setup auditing and preset comparison. UGC owns camera evaluation and blending. The extension is disabled by default and requires a licensed local UGC installation that is never committed.
 
 The seven base plugins are independent siblings. BertaGASCompanionExt, BertaComboGraphExt, and BertaUltimateGameplayCameraExt are explicit optional integration plugins.
 

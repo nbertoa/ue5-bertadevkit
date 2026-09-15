@@ -7,7 +7,7 @@ public class BertaUltimateGameplayCameraExtEditor : ModuleRules
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
-			"Core", "CoreUObject", "Engine", "EngineSettings", "AssetRegistry",
+			"Core", "CoreUObject", "Engine", "EngineSettings", "AssetRegistry", "ContentBrowser",
 			"BertaUltimateGameplayCameraExt", "AuroraDevs_UGC", "ToolMenus", "Slate", "SlateCore",
 			"BlueprintGraph"
 		});
