@@ -13,7 +13,7 @@
   "EnabledByDefault": false,
   "Modules": [
     { "Name": "BertaUltimateGameplayCameraExt", "Type": "Runtime", "LoadingPhase": "Default" },
-    { "Name": "BertaUltimateGameplayCameraExtEditor", "Type": "Editor", "LoadingPhase": "Default" }
+    { "Name": "BertaUltimateGameplayCameraExtEditor", "Type": "EditorNoCommandlet", "LoadingPhase": "Default" }
   ],
   "Plugins": [
     { "Name": "AuroraDevs_UGC", "Enabled": true }

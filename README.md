@@ -2,7 +2,7 @@
 
 **Personal Unreal Engine 5.8 development toolbox with native DualSense input, system information, external-process integration, runtime game-window control, desktop capture, and serial communication.**
 
-This repository is a UE 5.8 development host for seven independent plugins plus optional GAS Companion and Combo Graph extensions. It is personal R&D tooling, not a gameplay framework or commercial product.
+This repository is a UE 5.8 development host for seven independent base plugins plus three optional integration plugins. It is personal R&D tooling, not a gameplay framework or commercial product.
 
 > **Documentation:** <https://nbertoa.github.io/ue5-bertadevkit/>
 

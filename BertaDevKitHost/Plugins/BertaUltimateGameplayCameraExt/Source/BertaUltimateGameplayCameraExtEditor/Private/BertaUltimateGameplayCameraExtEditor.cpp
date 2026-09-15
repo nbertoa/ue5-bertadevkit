@@ -4,7 +4,6 @@
 #include "Camera/Data/UGC_CameraData.h"
 #include "AssetRegistry/AssetData.h"
 #include "ContentBrowserMenuContexts.h"
-#include "Misc/CoreDelegates.h"
 #include "Modules/ModuleManager.h"
 #include "ToolMenus.h"
 #include "ToolMenuEntry.h"
@@ -19,16 +18,13 @@ class FBertaUltimateGameplayCameraExtEditorModule final : public IModuleInterfac
 public:
 	virtual void StartupModule() override
 	{
-		FCoreDelegates::GetOnPostEngineInit().AddRaw(this, &FBertaUltimateGameplayCameraExtEditorModule::RegisterMenus);
+		UToolMenus::RegisterStartupCallback(FSimpleMulticastDelegate::FDelegate::CreateRaw(this, &FBertaUltimateGameplayCameraExtEditorModule::RegisterMenus));
 	}
 
 	virtual void ShutdownModule() override
 	{
-		FCoreDelegates::GetOnPostEngineInit().RemoveAll(this);
-		if (UToolMenus::IsToolMenuUIEnabled())
-		{
-			UToolMenus::Get()->UnregisterOwner(MenuOwner);
-		}
+		UToolMenus::UnRegisterStartupCallback(this);
+		UToolMenus::UnregisterOwner(MenuOwner);
 	}
 
 private:

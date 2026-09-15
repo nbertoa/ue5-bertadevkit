@@ -106,9 +106,12 @@ namespace
 			return;
 		}
 		const APlayerController* Controller = ControllerClass->GetDefaultObject<APlayerController>();
-		if (!Controller->PlayerCameraManagerClass || !Controller->PlayerCameraManagerClass->IsChildOf(AUGC_PlayerCameraManager::StaticClass()))
+		const bool bGlobalUsesUGCManager = Controller->PlayerCameraManagerClass &&
+			Controller->PlayerCameraManagerClass->IsChildOf(AUGC_PlayerCameraManager::StaticClass());
+		if (!bGlobalUsesUGCManager)
 		{
-			Report(ESeverity::Error, ControllerClass->GetPathName(), TEXT("PlayerCameraManagerClass"), TEXT("Expected AUGC_PlayerCameraManager or a subclass."));
+			Report(ESeverity::Warning, ControllerClass->GetPathName(), TEXT("PlayerCameraManagerClass"),
+				TEXT("Global Default GameMode does not configure AUGC_PlayerCameraManager; map-specific GameMode overrides are not inspected."));
 		}
 		else Report(ESeverity::Info, ControllerClass->GetPathName(), TEXT("PlayerCameraManagerClass"), TEXT("UGC camera manager class configured."));
 		AuditCycle(ControllerClass);
@@ -120,7 +123,13 @@ namespace
 			return;
 		}
 		USpringArmComponent* Arm = FindDeclaredComponent<USpringArmComponent>(PawnClass);
-		if (!Arm) Report(ESeverity::Error, PawnClass->GetPathName(), TEXT("SpringArmComponent"), TEXT("No declared SpringArm; UGC possession preparation requires one."));
+		if (!Arm)
+		{
+			if (bGlobalUsesUGCManager)
+				Report(ESeverity::Error, PawnClass->GetPathName(), TEXT("SpringArmComponent"), TEXT("No declared SpringArm; UGC possession preparation requires one."));
+			else
+				Report(ESeverity::Info, PawnClass->GetPathName(), TEXT("SpringArmComponent"), TEXT("No declared SpringArm on the Global Default Pawn; map-specific GameMode overrides are not inspected."));
+		}
 		else
 		{
 			Report(ESeverity::Info, PawnClass->GetPathName(), Arm->GetName(), TEXT("SpringArm declared."));

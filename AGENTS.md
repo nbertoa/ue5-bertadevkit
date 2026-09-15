@@ -87,7 +87,7 @@ BertaDevKitHost/Plugins/BertaUltimateGameplayCameraExt/
 plus BertaDevKit. `BertaComboGraphExt` is disabled by default and depends on the locally installed, Git-ignored Combo
 Graph plugin; it must not force Combo Graph onto the base plugins and must preserve its Runtime/Editor separation.
 `BertaUltimateGameplayCameraExt` is disabled by default and depends on a locally installed, Git-ignored Ultimate
-Gameplay Camera plugin. It is Runtime-only and must not force UGC onto the base plugins.
+Gameplay Camera plugin. It preserves Runtime/Editor separation and must not force UGC onto the base plugins.
 
 The host project exists for development and verification.
 
