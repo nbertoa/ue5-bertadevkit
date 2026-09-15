@@ -3,6 +3,7 @@
 #include "AssetActions/BertaAssetAuditor.h"
 #include "Log/BertaDevKitEditorLog.h"
 #include "ObjectGraph/BertaObjectGraphTab.h"
+#include "DelegateInspector/BertaDelegateInspectorTab.h"
 #include "ProjectSetup/BertaProjectSetup.h"
 #include "WorldValidation/BertaWorldValidation.h"
 
@@ -137,6 +138,16 @@ void FBertaEditorToolbar::Register()
 		Entry.Owner = FToolMenuOwner(BertaOwnerName);
 		Section.AddEntry(Entry);
 	}
+	{
+		FToolMenuEntry Entry = FToolMenuEntry::InitMenuEntry(
+			"BertaDelegateInspector",
+			NSLOCTEXT("BertaDevKit", "DelegateInspector", "Berta Delegate Inspector"),
+			NSLOCTEXT("BertaDevKit", "DelegateInspectorTooltip", "Inspect live reflected dynamic multicast delegate bindings on a selected PIE Actor and its components."),
+			FSlateIcon(),
+			FUIAction(FExecuteAction::CreateRaw(this, &FBertaEditorToolbar::OnDelegateInspectorClicked)));
+		Entry.Owner = FToolMenuOwner(BertaOwnerName);
+		Section.AddEntry(Entry);
+	}
 
 	UE_LOG(LogBertaDevKitEditor,
 	       Log,
@@ -201,4 +212,9 @@ void FBertaEditorToolbar::OnApplyProjectDefaultsClicked()
 void FBertaEditorToolbar::OnObjectGraphClicked()
 {
 	BertaObjectGraph::FTabOwner::Open();
+}
+
+void FBertaEditorToolbar::OnDelegateInspectorClicked()
+{
+	BertaDelegateInspector::FTabOwner::Open();
 }

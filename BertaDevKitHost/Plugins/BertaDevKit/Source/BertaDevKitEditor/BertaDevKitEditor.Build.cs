@@ -36,6 +36,7 @@ public class BertaDevKitEditor : ModuleRules
 			"MessageLog", // Blueprint Audit findings listing
 			"Projects", // IProjectManager and IPluginManager
 			"GraphEditor", // SGraphNodeDefault and the node factory
+			"InputCore", // EKeys used by the STreeView template implementation
 		});
 	}
 }

@@ -5,6 +5,7 @@
 class FBertaEditorToolbar;
 class FBertaContentBrowserMenu;
 namespace BertaObjectGraph { class FTabOwner; }
+namespace BertaDelegateInspector { class FTabOwner; }
 
 /**
  * Editor module for BertaDevKit.
@@ -35,4 +36,5 @@ private:
 	TUniquePtr<FBertaEditorToolbar> EditorToolbar;
 	TUniquePtr<FBertaContentBrowserMenu> ContentBrowserMenu;
 	TUniquePtr<BertaObjectGraph::FTabOwner> ObjectGraphTab;
+	TUniquePtr<BertaDelegateInspector::FTabOwner> DelegateInspectorTab;
 };

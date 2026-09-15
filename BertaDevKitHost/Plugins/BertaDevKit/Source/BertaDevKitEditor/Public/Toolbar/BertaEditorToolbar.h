@@ -60,4 +60,5 @@ private:
 	void OnAuditProjectDefaultsClicked();
 	void OnApplyProjectDefaultsClicked();
 	void OnObjectGraphClicked();
+	void OnDelegateInspectorClicked();
 };

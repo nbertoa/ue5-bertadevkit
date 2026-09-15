@@ -10,7 +10,7 @@ This repository is a UE 5.8 development host for seven independent plugins plus 
 
 ### BertaDevKit
 
-A general-purpose UE 5.8 toolbox with Runtime Blueprint utilities for debug output and drawing, screen stats, math, world queries, UI helpers including fullscreen video playback and real-time fades, controller feedback/output, and a focused GAS + Behavior Tree bridge for reactive conditions, waits, actions, deterministic AI snapshots, and event-driven Blackboard/Gameplay Tag tracing. Its Editor module adds conservative Asset Naming, Asset Cleaner, Asset Insights, Blueprint Usage Finder, Project Setup, Blueprint Audit, World Validation, and a read-only PIE Actor GC reference graph.
+A general-purpose UE 5.8 toolbox with Runtime Blueprint utilities for debug output and drawing, screen stats, math, world queries, UI helpers including fullscreen video playback and real-time fades, controller feedback/output, and a focused GAS + Behavior Tree bridge for reactive conditions, waits, actions, deterministic AI snapshots, and event-driven Blackboard/Gameplay Tag tracing. Its Editor module adds conservative Asset Naming, Asset Cleaner, Asset Insights, Blueprint Usage Finder, Project Setup, Blueprint Audit, World Validation, a read-only PIE Actor GC reference graph, and a manual snapshot inspector for reflected dynamic multicast delegate bindings on a selected PIE Actor and its direct components (not arbitrary native C++ delegates).
 
 ### BertaDualSense
 
