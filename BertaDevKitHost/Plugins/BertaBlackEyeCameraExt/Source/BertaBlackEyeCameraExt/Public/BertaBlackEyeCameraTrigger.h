@@ -1,21 +1,15 @@
 #pragma once
 
-#include "Camera/PlayerCameraManager.h"
+#include "BertaBlackEyeCameraRevealComponent.h"
 #include "GameFramework/Actor.h"
-#include "TimerManager.h"
-
 #include "BertaBlackEyeCameraTrigger.generated.h"
 
-class ABlackEyeCineCameraActorBase;
 class APlayerController;
 class UBoxComponent;
-class UInputComponent;
 class UPrimitiveComponent;
 class USceneComponent;
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE(FBertaCameraRevealEvent);
-
-/** Temporarily reveals a Black Eye camera, then returns to the player's previous view target. */
+/** Box activation policy and Blueprint façade for a reusable reveal component. */
 UCLASS(Blueprintable)
 class BERTABLACKEYECAMERAEXT_API ABertaBlackEyeCameraTrigger : public AActor
 {
@@ -30,35 +24,12 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Berta Black Eye Camera|Trigger")
     TObjectPtr<UBoxComponent> BoxCollision;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Berta Black Eye Camera|Camera")
-    TObjectPtr<ABlackEyeCineCameraActorBase> TargetCamera;
+    /** Configure TargetCamera, preset, timing, input and participants on this component. */
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Berta Black Eye Camera|Reveal")
+    TObjectPtr<UBertaBlackEyeCameraRevealComponent> RevealComponent;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Berta Black Eye Camera|Timing", meta = (ClampMin = "0.0", UIMin = "0.0"))
-    float BlendInTime = 0.8f;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Berta Black Eye Camera|Timing", meta = (ClampMin = "0.0", UIMin = "0.0"))
-    float HoldTime = 1.0f;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Berta Black Eye Camera|Timing", meta = (ClampMin = "0.0", UIMin = "0.0"))
-    float BlendOutTime = 0.8f;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Berta Black Eye Camera|Timing")
-    TEnumAsByte<EViewTargetBlendFunction> BlendInFunction = VTBlend_Linear;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Berta Black Eye Camera|Timing")
-    TEnumAsByte<EViewTargetBlendFunction> BlendOutFunction = VTBlend_Linear;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Berta Black Eye Camera|Timing", meta = (ClampMin = "0.0", UIMin = "0.0"))
-    float BlendInExponent = 2.0f;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Berta Black Eye Camera|Timing", meta = (ClampMin = "0.0", UIMin = "0.0"))
-    float BlendOutExponent = 2.0f;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Berta Black Eye Camera|Timing")
-    bool bLockOutgoingOnBlendIn = false;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Berta Black Eye Camera|Timing")
-    bool bLockOutgoingOnBlendOut = false;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Berta Black Eye Camera|Trigger")
+    EBertaBlackEyeRevealEndMode EndMode = EBertaBlackEyeRevealEndMode::Timed;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Berta Black Eye Camera|Trigger")
     bool bTriggerOnce = true;
@@ -66,19 +37,10 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Berta Black Eye Camera|Trigger")
     bool bEnabled = true;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Berta Black Eye Camera|Input")
-    bool bDisablePlayerInput = false;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Berta Black Eye Camera|Input")
-    bool bDisableMoveInput = false;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Berta Black Eye Camera|Input")
-    bool bDisableLookInput = false;
-
+    /** Forwarded from RevealComponent; there is one lifecycle and one event source. */
     UPROPERTY(BlueprintAssignable, Category = "Berta Black Eye Camera|Events")
     FBertaCameraRevealEvent OnRevealStarted;
 
-    /** The requested blend-in duration has elapsed; visual convergence is not measured. */
     UPROPERTY(BlueprintAssignable, Category = "Berta Black Eye Camera|Events")
     FBertaCameraRevealEvent OnRevealCameraReached;
 
@@ -107,7 +69,7 @@ public:
 protected:
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-    /** Extension hooks do not own the generic C++ input locks. */
+    /** Actor hooks are invoked through the component's forwarded lifecycle. */
     UFUNCTION(BlueprintNativeEvent, Category = "Berta Black Eye Camera|Events")
     void ApplyGameplayLock();
     virtual void ApplyGameplayLock_Implementation();
@@ -129,47 +91,39 @@ protected:
     virtual void OnCinematicFinished_Implementation();
 
 private:
-    enum class ERevealState : uint8
-    {
-        Idle,
-        BlendingIn,
-        Holding,
-        BlendingOut,
-        Finished
-    };
-
     UFUNCTION()
     void HandleBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
         UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
 
-    APlayerController* ResolvePlayerController() const;
-    bool TryStartCameraReveal(APlayerController* PlayerController);
-    bool ApplyConfiguredPlayerInputLocks(APlayerController* PlayerController);
-    void RemoveConfiguredPlayerInputLocks();
-    void BeginBlendIn();
-    void HandleBlendInFinished(uint32 ExpectedSequence);
-    void BeginHold();
-    void HandleHoldFinished(uint32 ExpectedSequence);
-    void BeginBlendOut();
-    void HandleBlendOutFinished(uint32 ExpectedSequence);
-    AActor* ResolveRestoreViewTarget(APlayerController* PlayerController) const;
-    void RestoreControlRotation();
-    void FinishReveal();
-    void ClearPhaseTimer();
+    UFUNCTION()
+    void HandleEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+        UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 
-    ERevealState RevealState = ERevealState::Idle;
-    FTimerHandle PhaseTimer;
-    uint32 SequenceSerial = 0;
+    UFUNCTION()
+    void HandleOverlapOwnerDestroyed(AActor* DestroyedActor);
+
+    UFUNCTION()
+    void HandleComponentStarted();
+
+    UFUNCTION()
+    void HandleComponentCameraReached();
+
+    UFUNCTION()
+    void HandleComponentEnding();
+
+    UFUNCTION()
+    void HandleComponentFinished();
+
+    APlayerController* ResolveLocalPlayerController() const;
+    bool StartForController(APlayerController* PlayerController, EBertaBlackEyeRevealDurationMode RequestedMode);
+    void ClearOverlapOwner();
+
     bool bHasTriggered = false;
     bool bResetAfterFinish = false;
-    bool bMoveLockAdded = false;
-    bool bLookLockAdded = false;
-    bool bBlockerPushed = false;
-    bool bGameplayLockApplied = false;
-    FRotator SavedControlRotation = FRotator::ZeroRotator;
-    TWeakObjectPtr<AActor> SavedViewTarget;
-    TWeakObjectPtr<APlayerController> ActivePlayerController;
-
-    UPROPERTY(Transient)
-    TObjectPtr<UInputComponent> InputBlocker;
+    bool bActorGameplayLockApplied = false;
+    bool bStartInProgress = false;
+    bool bResetRequestedDuringStart = false;
+    TWeakObjectPtr<AActor> OverlapOwnerActor;
+    TWeakObjectPtr<APlayerController> OverlapOwnerController;
+    AActor* OverlapActorForDestroyCallback = nullptr;
 };
