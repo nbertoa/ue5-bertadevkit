@@ -132,4 +132,4 @@ See the [documentation site](https://nbertoa.github.io/ue5-bertadevkit/) for fea
 
 Created by **Nicolás Bertoa** as a personal Unreal Engine R&D toolkit focused on C++, prototyping, tooling, and reusable development workflows.
 
-[Portfolio](https://nbertoa.wordpress.com) · [Demo Reels](https://nbertoa.wordpress.com/demo-reels/) · [GitHub](https://github.com/nbertoa)
+[Portfolio](https://nbertoa.com/) · [Demo Reels](https://nbertoa.com/demo-reels/) · [GitHub](https://github.com/nbertoa)
