@@ -4,6 +4,7 @@
 #include "Log/BertaDevKitEditorLog.h"
 #include "ObjectGraph/BertaObjectGraphTab.h"
 #include "DelegateInspector/BertaDelegateInspectorTab.h"
+#include "TickGraph/BertaTickGraphTab.h"
 #include "ProjectSetup/BertaProjectSetup.h"
 #include "WorldValidation/BertaWorldValidation.h"
 
@@ -148,6 +149,16 @@ void FBertaEditorToolbar::Register()
 		Entry.Owner = FToolMenuOwner(BertaOwnerName);
 		Section.AddEntry(Entry);
 	}
+	{
+		FToolMenuEntry Entry = FToolMenuEntry::InitMenuEntry(
+			"BertaTickGraph",
+			NSLOCTEXT("BertaDevKit", "TickGraph", "Berta Tick Graph"),
+			NSLOCTEXT("BertaDevKit", "TickGraphTooltip", "Visualize Tick prerequisites for a selected PIE Actor and its components."),
+			FSlateIcon(),
+			FUIAction(FExecuteAction::CreateRaw(this, &FBertaEditorToolbar::OnTickGraphClicked)));
+		Entry.Owner = FToolMenuOwner(BertaOwnerName);
+		Section.AddEntry(Entry);
+	}
 
 	UE_LOG(LogBertaDevKitEditor,
 	       Log,
@@ -217,4 +228,9 @@ void FBertaEditorToolbar::OnObjectGraphClicked()
 void FBertaEditorToolbar::OnDelegateInspectorClicked()
 {
 	BertaDelegateInspector::FTabOwner::Open();
+}
+
+void FBertaEditorToolbar::OnTickGraphClicked()
+{
+	BertaTickGraph::FTabOwner::Open();
 }

@@ -5,6 +5,7 @@
 #include "Log/BertaDevKitEditorLog.h"
 #include "ObjectGraph/BertaObjectGraphTab.h"
 #include "DelegateInspector/BertaDelegateInspectorTab.h"
+#include "TickGraph/BertaTickGraphTab.h"
 
 #include "MessageLogModule.h"
 #include "Misc/CoreDelegates.h"
@@ -18,6 +19,7 @@ void FBertaDevKitEditorModule::StartupModule()
 	ContentBrowserMenu = MakeUnique<FBertaContentBrowserMenu>();
 	ObjectGraphTab = MakeUnique<BertaObjectGraph::FTabOwner>();
 	DelegateInspectorTab = MakeUnique<BertaDelegateInspector::FTabOwner>();
+	TickGraphTab = MakeUnique<BertaTickGraph::FTabOwner>();
 
 	// Bind to OnPostEngineInit using a named member callback — avoids a raw lambda
 	// and makes the call traceable in the debugger.
@@ -57,6 +59,11 @@ void FBertaDevKitEditorModule::ShutdownModule()
 		DelegateInspectorTab->Unregister();
 		DelegateInspectorTab.Reset();
 	}
+	if (TickGraphTab)
+	{
+		TickGraphTab->Unregister();
+		TickGraphTab.Reset();
+	}
 	UnregisterBlueprintAuditMessageLog();
 	UnregisterAssetInsightsMessageLog();
 	UnregisterAssetNamingMessageLog();
@@ -89,6 +96,10 @@ void FBertaDevKitEditorModule::OnPostEngineInit()
 	if (DelegateInspectorTab)
 	{
 		DelegateInspectorTab->Register();
+	}
+	if (TickGraphTab)
+	{
+		TickGraphTab->Register();
 	}
 }
 

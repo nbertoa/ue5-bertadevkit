@@ -61,4 +61,5 @@ private:
 	void OnApplyProjectDefaultsClicked();
 	void OnObjectGraphClicked();
 	void OnDelegateInspectorClicked();
+	void OnTickGraphClicked();
 };
