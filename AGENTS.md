@@ -19,7 +19,7 @@ Never invent Unreal APIs or behavior.
 
 ### Repository Structure
 
-The repository contains a host project around seven independent sibling base plugins and two optional integration plugins:
+The repository contains a host project around seven independent sibling base plugins and three optional integration plugins:
 
 ```text
 ue5-bertadevkit/
@@ -55,8 +55,11 @@ ue5-bertadevkit/
         ├── BertaGASCompanionExt/
         │   ├── BertaGASCompanionExt.uplugin
         │   └── Source/
-        └── BertaComboGraphExt/
-            ├── BertaComboGraphExt.uplugin
+        ├── BertaComboGraphExt/
+        │   ├── BertaComboGraphExt.uplugin
+        │   └── Source/
+        └── BertaUltimateGameplayCameraExt/
+            ├── BertaUltimateGameplayCameraExt.uplugin
             └── Source/
 ```
 
@@ -77,11 +80,14 @@ The optional integration plugin roots are:
 ```text
 BertaDevKitHost/Plugins/BertaGASCompanionExt/
 BertaDevKitHost/Plugins/BertaComboGraphExt/
+BertaDevKitHost/Plugins/BertaUltimateGameplayCameraExt/
 ```
 
 `BertaGASCompanionExt` is disabled by default and depends on the locally installed, Git-ignored GAS Companion plugin
 plus BertaDevKit. `BertaComboGraphExt` is disabled by default and depends on the locally installed, Git-ignored Combo
 Graph plugin; it must not force Combo Graph onto the base plugins and must preserve its Runtime/Editor separation.
+`BertaUltimateGameplayCameraExt` is disabled by default and depends on a locally installed, Git-ignored Ultimate
+Gameplay Camera plugin. It is Runtime-only and must not force UGC onto the base plugins.
 
 The host project exists for development and verification.
 

@@ -44,7 +44,11 @@ An optional Runtime/Editor extension for projects already using GAS Companion. I
 
 An optional Runtime/Editor extension for projects already using Combo Graph `1.6.3+5.8`. It adds deterministic contract validation, bounded per-execution tracing and snapshots, EffectContext compatibility inspection, an opt-in multi-target UE Targeting System task, and conservative `Triggered` pre-input buffering. It is disabled by default and depends on a legitimate local Combo Graph installation that is never committed.
 
-The seven base plugins are independent siblings. BertaGASCompanionExt and BertaComboGraphExt are explicit optional integration plugins.
+### BertaUltimateGameplayCameraExt
+
+An optional Runtime component for cycling an ordered list of Ultimate Gameplay Camera data assets on a `PlayerController`. It leaves input binding, camera evaluation, and blending to the consuming project and UGC. It is disabled by default and requires a licensed local UGC installation that is never committed.
+
+The seven base plugins are independent siblings. BertaGASCompanionExt, BertaComboGraphExt, and BertaUltimateGameplayCameraExt are explicit optional integration plugins.
 
 ## Requirements
 
@@ -55,6 +59,7 @@ The seven base plugins are independent siblings. BertaGASCompanionExt and BertaC
 - Win64 and a Windows COM-port device/driver for BertaSerial
 - A licensed local GAS Companion installation for BertaGASCompanionExt
 - A licensed local Combo Graph `1.6.3+5.8` installation for BertaComboGraphExt
+- A licensed local Ultimate Gameplay Camera installation for BertaUltimateGameplayCameraExt
 - Git LFS for the repository host
 
 ## Install in another project
@@ -72,10 +77,11 @@ Copy any plugin independently into the matching project plugin directory:
 | BertaSerial | `BertaDevKitHost/Plugins/BertaSerial/` | `<YourProject>/Plugins/BertaSerial/` |
 | BertaGASCompanionExt | `BertaDevKitHost/Plugins/BertaGASCompanionExt/` | `<YourProject>/Plugins/BertaGASCompanionExt/` |
 | BertaComboGraphExt | `BertaDevKitHost/Plugins/BertaComboGraphExt/` | `<YourProject>/Plugins/BertaComboGraphExt/` |
+| BertaUltimateGameplayCameraExt | `BertaDevKitHost/Plugins/BertaUltimateGameplayCameraExt/` | `<YourProject>/Plugins/BertaUltimateGameplayCameraExt/` |
 
-Target UE 5.8, regenerate project files if needed, build, and enable the copied plugin in Unreal's Plugins window. BertaDualSense, BertaSystemInfo, BertaProcessBridge, BertaWindowTools, BertaDesktopCapture, BertaSerial, BertaGASCompanionExt, and BertaComboGraphExt are disabled by default. The optional integration plugins additionally require their licensed third-party plugin. BertaDualSense stages SDL3 from its own directory; BertaSystemInfo enables UE's built-in Audio Capture plugin for microphone-device enumeration. BertaDesktopCapture and BertaSerial are Win64-only.
+Target UE 5.8, regenerate project files if needed, build, and enable the copied plugin in Unreal's Plugins window. BertaDualSense, BertaSystemInfo, BertaProcessBridge, BertaWindowTools, BertaDesktopCapture, BertaSerial, BertaGASCompanionExt, BertaComboGraphExt, and BertaUltimateGameplayCameraExt are disabled by default. The optional integration plugins additionally require their licensed third-party plugin. BertaDualSense stages SDL3 from its own directory; BertaSystemInfo enables UE's built-in Audio Capture plugin for microphone-device enumeration. BertaDesktopCapture and BertaSerial are Win64-only.
 
-Copied-plugin guidance remains available in each plugin README, including [BertaGASCompanionExt](BertaDevKitHost/Plugins/BertaGASCompanionExt/README.md) and [BertaComboGraphExt](BertaDevKitHost/Plugins/BertaComboGraphExt/README.md).
+Copied-plugin guidance remains available in each plugin README, including [BertaGASCompanionExt](BertaDevKitHost/Plugins/BertaGASCompanionExt/README.md), [BertaComboGraphExt](BertaDevKitHost/Plugins/BertaComboGraphExt/README.md), and [BertaUltimateGameplayCameraExt](BertaDevKitHost/Plugins/BertaUltimateGameplayCameraExt/README.md).
 
 ## Development host
 
@@ -95,7 +101,8 @@ ue5-bertadevkit/
         ├── BertaDesktopCapture/
         ├── BertaSerial/
         ├── BertaGASCompanionExt/
-        └── BertaComboGraphExt/
+        ├── BertaComboGraphExt/
+        └── BertaUltimateGameplayCameraExt/
 ```
 
 `BertaDevKitHost` is the development and verification harness. The primary Editor target is:
@@ -127,6 +134,7 @@ See the [documentation site](https://nbertoa.github.io/ue5-bertadevkit/) for fea
 | `LogBertaSerial` | BertaSerial open, configuration, worker, and cleanup failures |
 | `LogBertaGASCompanionExt` | GAS Companion extension tracing, bridge, and targeting diagnostics |
 | `LogBertaComboGraphExt` | Combo Graph extension tracing, buffering, targeting, and compatibility diagnostics |
+| `LogBertaUltimateGameplayCameraExt` | UGC preset configuration and selection failures |
 
 ## About
 

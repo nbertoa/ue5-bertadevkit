@@ -172,6 +172,10 @@ Remember before building a custom quest editor or system. [Fab](https://www.fab.
 
 Remember when a project needs a reusable camera framework beyond straightforward native camera setup. [Fab](https://www.fab.com/listings/5a3a096c-787f-4cb5-9d1c-98d847ec5d76)
 
+### Ultimate Gameplay Camera
+
+Available in Nicolás's personal library for third-person gameplay camera behavior. Use its data assets and camera manager when a project already adopts UGC; `BertaUltimateGameplayCameraExt` only adds ordered selection. [Fab](https://www.fab.com/listings/4d3a1a73-a38d-4704-b552-8b543f24fd25)
+
 ### LXR — Light Detection
 
 Remember for gameplay systems that need light or exposure detection. [Fab](https://www.fab.com/listings/5ac2e509-9918-4eeb-90f8-f257e5cd230f)
