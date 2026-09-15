@@ -174,7 +174,7 @@ Remember when a project needs a reusable camera framework beyond straightforward
 
 ### Ultimate Gameplay Camera
 
-Available in Nicolás's personal library for third-person gameplay camera behavior. Use its data assets and camera manager when a project already adopts UGC; `BertaUltimateGameplayCameraExt` adds ordered selection, setup auditing, and read-only preset comparison. [Fab](https://www.fab.com/listings/4d3a1a73-a38d-4704-b552-8b543f24fd25)
+Available in Nicolás's personal library for third-person gameplay camera behavior. Use its data assets and camera manager when a project already adopts UGC; `BertaUltimateGameplayCameraExt` adds ordered selection, a compact debug summary, setup auditing, and read-only preset comparison. [Fab](https://www.fab.com/listings/4d3a1a73-a38d-4704-b552-8b543f24fd25)
 
 ### LXR — Light Detection
 
