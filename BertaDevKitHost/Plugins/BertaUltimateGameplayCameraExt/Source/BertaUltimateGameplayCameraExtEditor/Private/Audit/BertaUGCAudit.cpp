@@ -138,8 +138,10 @@ namespace
 		const FString Path = Asset.GetPathName();
 		const auto Range = [&Path](float Min, float Max, const TCHAR* Symbol)
 		{
-			if (!FMath::IsFinite(Min) || !FMath::IsFinite(Max) || Min > Max)
-				Report(ESeverity::Error, Path, Symbol, TEXT("Range must be finite with Min <= Max; UGC maps pitch into this range."));
+			if (!FMath::IsFinite(Min) || !FMath::IsFinite(Max))
+				Report(ESeverity::Error, Path, Symbol, TEXT("Range contains a non-finite value; UGC maps camera settings through these values."));
+			else if (Min > Max)
+				Report(ESeverity::Warning, Path, Symbol, TEXT("Min exceeds Max and reverses the mapped range; verify this is intentional."));
 		};
 		const auto Duration = [&Path](float Time, const TCHAR* Symbol)
 		{
