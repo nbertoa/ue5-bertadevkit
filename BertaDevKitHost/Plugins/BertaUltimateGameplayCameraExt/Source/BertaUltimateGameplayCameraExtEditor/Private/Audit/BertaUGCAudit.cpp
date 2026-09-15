@@ -115,6 +115,7 @@ namespace
 		}
 		else Report(ESeverity::Info, ControllerClass->GetPathName(), TEXT("PlayerCameraManagerClass"), TEXT("UGC camera manager class configured."));
 		AuditCycle(ControllerClass);
+		if (!bGlobalUsesUGCManager) return;
 
 		UClass* PawnClass = GameMode->DefaultPawnClass.Get();
 		if (!PawnClass)
@@ -125,10 +126,7 @@ namespace
 		USpringArmComponent* Arm = FindDeclaredComponent<USpringArmComponent>(PawnClass);
 		if (!Arm)
 		{
-			if (bGlobalUsesUGCManager)
-				Report(ESeverity::Error, PawnClass->GetPathName(), TEXT("SpringArmComponent"), TEXT("No declared SpringArm; UGC possession preparation requires one."));
-			else
-				Report(ESeverity::Info, PawnClass->GetPathName(), TEXT("SpringArmComponent"), TEXT("No declared SpringArm on the Global Default Pawn; map-specific GameMode overrides are not inspected."));
+			Report(ESeverity::Error, PawnClass->GetPathName(), TEXT("SpringArmComponent"), TEXT("No declared SpringArm; UGC possession preparation requires one."));
 		}
 		else
 		{
