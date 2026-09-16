@@ -50,7 +50,7 @@ An optional Runtime component for cycling UGC camera data assets, a compact live
 
 ### BertaBlackEyeCameraExt
 
-An optional Runtime/Editor extension for Black Eye Camera 2.0. It adds reusable timed/manual camera reveals, overlap zones, presets, participant callbacks, prototype camera cycling, on-demand diagnostics, and undoable Editor setup plus read-only auditing. Black Eye owns procedural camera behavior and Shot Lists. The extension is disabled by default and requires a legitimate local Black Eye installation that is never committed.
+An optional Runtime/Editor extension for Black Eye Camera 2.0. It adds reusable timed/manual camera reveals, overlap zones, presets, return/external-camera policies, participant callbacks, prototype camera cycling, development trace/replay, and undoable Editor setup, audit, and relationship visualization. Black Eye owns procedural camera behavior and Shot Lists. The extension is disabled by default and requires a legitimate local Black Eye installation that is never committed. See the [plugin README](BertaDevKitHost/Plugins/BertaBlackEyeCameraExt/README.md) and [MkDocs page](docs/bertablackeyecameraext/index.md).
 
 The seven base plugins are independent siblings. BertaGASCompanionExt, BertaComboGraphExt, BertaUltimateGameplayCameraExt, and BertaBlackEyeCameraExt are explicit optional integration plugins.
 

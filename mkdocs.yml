@@ -24,4 +24,5 @@ nav:
   - BertaSerial: bertaserial/index.md
   - BertaGASCompanionExt: bertagascompanionext/index.md
   - BertaComboGraphExt: bertacombographext/index.md
+  - BertaBlackEyeCameraExt: bertablackeyecameraext/index.md
   - Development: development/index.md

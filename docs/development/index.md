@@ -2,7 +2,7 @@
 
 ## Repository architecture
 
-`BertaDevKitHost` is the development and verification harness. It contains seven independent base plugins and two optional integration plugins:
+`BertaDevKitHost` is the development and verification harness. It contains seven independent base plugins and four optional integration plugins:
 
 ```text
 BertaDevKitHost/
@@ -16,10 +16,12 @@ BertaDevKitHost/
     ├── BertaDesktopCapture/
     ├── BertaSerial/
     ├── BertaGASCompanionExt/
-    └── BertaComboGraphExt/
+    ├── BertaComboGraphExt/
+    ├── BertaUltimateGameplayCameraExt/
+    └── BertaBlackEyeCameraExt/
 ```
 
-All nine plugins target Unreal Engine 5.8. The seven base plugins remain independent siblings. `BertaGASCompanionExt` and `BertaComboGraphExt` are disabled by default and require legitimate local installations of GAS Companion and Combo Graph respectively; both third-party directories are Git-ignored. The GAS Companion integration also depends on BertaDevKit, while the Combo Graph integration does not force Combo Graph onto any base plugin. BertaDualSense, BertaDesktopCapture, and BertaSerial are Win64-only. BertaSystemInfo, BertaProcessBridge, and BertaWindowTools compile without a platform allowlist; their runtime behavior outside Win64 has not been verified.
+All eleven tracked plugins target Unreal Engine 5.8. The seven base plugins remain independent siblings. The four optional integrations are disabled by default and require legitimate local installations of GAS Companion, Combo Graph, Ultimate Gameplay Camera, and Black Eye Camera respectively; those third-party directories are Git-ignored. The GAS Companion integration also depends on BertaDevKit. `BertaBlackEyeCameraExt` preserves Runtime/Editor separation and works through standard local ViewTarget transitions; see its [plugin page](../bertablackeyecameraext/index.md). BertaDualSense, BertaDesktopCapture, and BertaSerial are Win64-only. BertaSystemInfo, BertaProcessBridge, and BertaWindowTools compile without a platform allowlist; their runtime behavior outside Win64 has not been verified.
 
 ## Build the host
 

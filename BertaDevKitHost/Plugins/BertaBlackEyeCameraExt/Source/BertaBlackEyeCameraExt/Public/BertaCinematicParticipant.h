@@ -15,10 +15,12 @@ class BERTABLACKEYECAMERAEXT_API IBertaCinematicParticipant
     GENERATED_BODY()
 
 public:
+    /** Source is the reveal component that owns this pause request; projects decide how pauses combine. */
     UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Berta Black Eye Camera|Participants")
     void OnCinematicPause(UObject* Source);
     virtual void OnCinematicPause_Implementation(UObject* Source) {}
 
+    /** Called only after this Source actually notified the participant and while it is still valid. */
     UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Berta Black Eye Camera|Participants")
     void OnCinematicResume(UObject* Source);
     virtual void OnCinematicResume_Implementation(UObject* Source) {}

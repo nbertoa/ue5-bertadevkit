@@ -12,6 +12,7 @@ class BERTABLACKEYECAMERAEXT_API UBertaBlackEyeCameraDebugLibrary : public UBlue
     GENERATED_BODY()
 
 public:
+    /** False with explanatory OutSummary for invalid local controllers or Shipping; never changes camera state. */
     UFUNCTION(BlueprintCallable, Category = "Berta Black Eye Camera|Debug")
     static bool GetBlackEyeCameraDebugSummary(APlayerController* PlayerController, FString& OutSummary);
 };

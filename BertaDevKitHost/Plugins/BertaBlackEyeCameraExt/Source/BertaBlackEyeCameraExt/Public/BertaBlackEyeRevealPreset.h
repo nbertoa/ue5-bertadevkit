@@ -11,6 +11,7 @@ class BERTABLACKEYECAMERAEXT_API UBertaBlackEyeRevealPreset : public UDataAsset
     GENERATED_BODY()
 
 public:
+    /** Copied by each accepted reveal session; changing this asset affects future sessions only. */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Berta Black Eye Camera|Reveal")
     FBertaBlackEyeRevealSettings Settings;
 };
