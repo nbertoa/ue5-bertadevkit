@@ -93,6 +93,7 @@ void UBertaFadeWidget::NativeTick(const FGeometry& MyGeometry, const float InDel
 
 void UBertaFadeWidget::PlayFade()
 {
+	++FadeGeneration;
 	StartOpacity = FadeType == EBertaFadeType::FadeOut ? 0.0f : 1.0f;
 	EndOpacity = FadeType == EBertaFadeType::FadeOut ? 1.0f : 0.0f;
 	ActiveDuration = FMath::Max(0.0f, Duration);
@@ -126,9 +127,11 @@ void UBertaFadeWidget::FinishFade()
 		BlackVisual->SetRenderOpacity(EndOpacity);
 	}
 
+	const uint32 FinishedGeneration = FadeGeneration;
 	const bool bShouldRemove = bRemoveWhenFinished;
 	OnFadeFinished.Broadcast(this);
-	if (bShouldRemove)
+	// A listener may start another fade, including one that completes immediately.
+	if (bShouldRemove && FadeGeneration == FinishedGeneration && !bIsFading)
 	{
 		RemoveFromParent();
 	}

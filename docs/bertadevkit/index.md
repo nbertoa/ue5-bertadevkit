@@ -4,6 +4,8 @@ BertaDevKit is a general-purpose Unreal Engine 5.8 toolbox. Its Runtime module p
 
 ## Runtime utilities
 
+`UBertaWorldUtils::SetDelayedAction` returns `Success` and a new timer handle. Failure leaves `OutHandle` invalid. Reusing an output variable does not cancel a previously scheduled timer; retain its handle separately to cancel it with `CancelDelayedAction`.
+
 | System | Purpose |
 | --- | --- |
 | `UBertaDebugUtils` | Blueprint-friendly screen and Output Log messages with context, verbosity, categories, and per-call gating. |
@@ -87,7 +89,7 @@ Create Widget (BertaFadeWidget)
 
 Adding the widget starts a fresh fade automatically. **Fade Out** is transparent to black (`0 → 1` opacity), while **Fade In** is black to transparent (`1 → 0`). `PlayFade` always restarts from the canonical initial opacity using the current properties, including after a completed fade that remained attached. Calling it during playback cancels the previous progression without emitting completion and starts again.
 
-Duration is clamped to at least zero and measured with a monotonic real-time clock from Slate-driven `NativeTick`, so gameplay pause and world time dilation do not control progress. A zero-duration fade sets its final opacity and completes immediately. Natural completion first reaches the exact final opacity, then broadcasts `OnFadeFinished` once, and finally removes the widget when configured. External removal cancels playback without broadcasting; adding that widget instance again starts a new fade.
+Duration is clamped to at least zero and measured with a monotonic real-time clock from Slate-driven `NativeTick`, so gameplay pause and world time dilation do not control progress. A zero-duration fade sets its final opacity and completes immediately. Natural completion first reaches the exact final opacity, then broadcasts `OnFadeFinished` once, and finally removes the widget when configured. If a listener calls `PlayFade()` during completion, the previous fade does not remove the restarted widget, even when the new fade completes immediately. External removal cancels playback without broadcasting; adding that widget instance again starts a new fade.
 
 The black layer is `HitTestInvisible`, fills the root overlay, and is placed above any existing Widget Blueprint content. A convenient optional asset can therefore be created at `/BertaDevKit/UI/WBP_BertaFade` as an empty Widget Blueprint subclass of `UBertaFadeWidget`; it needs no graph logic or animation. The C++ class remains directly usable. Color, curves, reverse/pause controls, queues, materials, and composition with video playback are intentionally outside this focused API.
 

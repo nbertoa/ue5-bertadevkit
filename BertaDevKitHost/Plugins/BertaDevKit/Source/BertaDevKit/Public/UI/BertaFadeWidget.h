@@ -36,7 +36,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Fade", meta = (ExposeOnSpawn = true))
 	bool bRemoveOnFinished = true;
 
-	/** Broadcast once after a fade reaches its final opacity and before optional removal. */
+	/**
+	 * Broadcast once after a fade reaches its final opacity and before optional removal.
+	 * A fade restarted by a listener is not removed by the previous completion.
+	 */
 	UPROPERTY(BlueprintAssignable, Category = "BertaDevKit|UI|Fade")
 	FBertaFadeFinishedEvent OnFadeFinished;
 
@@ -56,6 +59,7 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UBorder> BlackVisual;
 
+	uint32 FadeGeneration = 0;
 	double FadeStartTime = 0.0;
 	float ActiveDuration = 0.0f;
 	float StartOpacity = 0.0f;

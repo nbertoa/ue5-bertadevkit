@@ -4,6 +4,7 @@
 #include "CoreMinimal.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "Engine/EngineTypes.h"
+#include "Engine/TimerHandle.h"
 #include "BertaWorldUtils.generated.h"
 
 /**
@@ -227,8 +228,9 @@ public:
 	// ------------------------------------------------------------------
 
 	/**
-	 * Executes a callback after the given delay. Returns a handle that can be
-	 * passed to CancelDelayedAction to cancel before it fires.
+	 * Schedules a new one-shot callback after the given delay. Returns true on success.
+	 * OutHandle identifies the new timer on success and is invalid on failure.
+	 * Reusing an output variable does not cancel the timer its old handle identified.
 	 *
 	 * @param WorldContextObject  Any valid UObject in the current world.
 	 * @param Callback            The delegate to execute after the delay.
@@ -239,8 +241,8 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable,
 		Category = "BertaDevKit|World|Timers",
-		meta = (WorldContext = "WorldContextObject"))
-	static void SetDelayedAction(const UObject* WorldContextObject,
+		meta = (WorldContext = "WorldContextObject", ReturnDisplayName = "Success"))
+	static bool SetDelayedAction(const UObject* WorldContextObject,
 	                             FTimerDynamicDelegate Callback,
 	                             float Delay,
 	                             FTimerHandle& OutHandle);

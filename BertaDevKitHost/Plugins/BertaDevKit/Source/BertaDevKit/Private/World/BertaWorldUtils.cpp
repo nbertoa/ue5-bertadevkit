@@ -14,6 +14,7 @@
 #include "Camera/PlayerCameraManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "CollisionQueryParams.h"
+#include "TimerManager.h"
 #include "UObject/Package.h"
 
 namespace BertaWorldUtilsPrivate
@@ -491,15 +492,17 @@ FVector UBertaWorldUtils::GetPlayerCameraDirection(const UObject* WorldContextOb
 // Timers
 // --------------------------------------------------------------------
 
-void UBertaWorldUtils::SetDelayedAction(const UObject* WorldContextObject,
+bool UBertaWorldUtils::SetDelayedAction(const UObject* WorldContextObject,
                                         const FTimerDynamicDelegate Callback,
                                         const float Delay,
                                         FTimerHandle& OutHandle)
 {
+	OutHandle.Invalidate();
+
 	UWorld* World = GetWorldChecked(WorldContextObject);
 	if (!World)
 	{
-		return;
+		return false;
 	}
 
 	if (!Callback.IsBound())
@@ -507,7 +510,7 @@ void UBertaWorldUtils::SetDelayedAction(const UObject* WorldContextObject,
 		UE_LOG(LogBertaDevKit,
 		       Warning,
 		       TEXT("[BertaWorldUtils::SetDelayedAction] Callback delegate is not bound — timer not set."));
-		return;
+		return false;
 	}
 
 	if (Delay <= 0.0f)
@@ -516,7 +519,7 @@ void UBertaWorldUtils::SetDelayedAction(const UObject* WorldContextObject,
 		       Warning,
 		       TEXT("[BertaWorldUtils::SetDelayedAction] Delay is %.2f — must be > 0. Timer not set."),
 		       Delay);
-		return;
+		return false;
 	}
 
 	// bLoop = false — this is a one-shot timer.
@@ -524,6 +527,7 @@ void UBertaWorldUtils::SetDelayedAction(const UObject* WorldContextObject,
 	                                  Callback,
 	                                  Delay,
 	                                  false);
+	return OutHandle.IsValid();
 }
 
 void UBertaWorldUtils::CancelDelayedAction(const UObject* WorldContextObject,

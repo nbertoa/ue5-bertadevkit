@@ -112,7 +112,7 @@ ue5-bertadevkit/
         └── BertaBlackEyeCameraExt/
 ```
 
-`BertaDevKitHost` is the development and verification harness. The primary Editor target is:
+`BertaDevKitHost` is the development and verification harness. The base host does not require Blueprint Assist or Electronic Nodes; Project Setup can configure those optional tools when installed and explicitly applied. The primary Editor target is:
 
 ```text
 BertaDevKitHostEditor Win64 Development
