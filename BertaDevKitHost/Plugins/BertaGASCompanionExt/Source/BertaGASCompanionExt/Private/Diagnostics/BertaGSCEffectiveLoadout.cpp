@@ -8,6 +8,7 @@
 #include "GameFramework/Actor.h"
 #include "GameplayAbilitySpec.h"
 #include "GameplayEffect.h"
+#include "InputAction.h"
 
 namespace
 {

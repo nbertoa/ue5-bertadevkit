@@ -7,6 +7,7 @@
 #include "Abilities/GameplayAbility.h"
 #include "GameFramework/Actor.h"
 #include "GameplayAbilitySpec.h"
+#include "InputAction.h"
 
 namespace
 {
