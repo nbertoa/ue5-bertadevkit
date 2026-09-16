@@ -5,6 +5,9 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
+#if !UE_BUILD_SHIPPING
+#include "HAL/PlatformTime.h"
+#endif
 
 bool UBertaBlackEyeCameraDebugLibrary::GetBlackEyeCameraDebugSummary(APlayerController* PlayerController,
     FString& OutSummary)
@@ -38,6 +41,8 @@ bool UBertaBlackEyeCameraDebugLibrary::GetBlackEyeCameraDebugSummary(APlayerCont
     }
 
     int32 RevealCount = 0;
+    UBertaBlackEyeCameraRevealComponent* LastReplayableReveal = nullptr;
+    double LastStart = 0.0;
     UWorld* World = PlayerController->GetWorld();
     for (TActorIterator<AActor> It(World); It; ++It)
     {
@@ -45,6 +50,14 @@ bool UBertaBlackEyeCameraDebugLibrary::GetBlackEyeCameraDebugSummary(APlayerCont
         It->GetComponents(Components);
         for (UBertaBlackEyeCameraRevealComponent* Reveal : Components)
         {
+#if !UE_BUILD_SHIPPING
+            if (IsValid(Reveal) && Reveal->GetLastRevealController() == PlayerController &&
+                Reveal->GetLastSuccessfulRevealStartRealTime() > LastStart)
+            {
+                LastReplayableReveal = Reveal;
+                LastStart = Reveal->GetLastSuccessfulRevealStartRealTime();
+            }
+#endif
             if (!IsValid(Reveal) || !Reveal->IsRevealActive() ||
                 Reveal->GetActivePlayerController() != PlayerController) continue;
 
@@ -52,12 +65,20 @@ bool UBertaBlackEyeCameraDebugLibrary::GetBlackEyeCameraDebugSummary(APlayerCont
             const FBertaBlackEyeRevealSettings& Settings = Reveal->GetActiveSettings();
             OutSummary += FString::Printf(
                 TEXT("Reveal %d: Owner=%s State=%s Target=%s SavedViewTarget=%s SavedControlRotation=%s\n")
+                TEXT("  Return=%s ExplicitReturn=%s ExternalChange=%s StillControlsViewTarget=%s\n")
                 TEXT("  BlendIn=%.2f Hold=%.2f BlendOut=%.2f PhaseRemaining=%.2f")
                 TEXT(" MoveLocked=%s LookLocked=%s FullInputLocked=%s\n"),
                 RevealCount, *GetNameSafe(Reveal->GetOwner()),
                 *StaticEnum<EBertaBlackEyeRevealState>()->GetNameStringByValue(static_cast<int64>(Reveal->GetRevealState())),
                 *GetNameSafe(Reveal->GetActiveTargetCamera()), *GetNameSafe(Reveal->GetSavedViewTarget()),
-                *Reveal->GetSavedControlRotation().ToCompactString(), Settings.BlendInTime,
+                *Reveal->GetSavedControlRotation().ToCompactString(),
+                *StaticEnum<EBertaBlackEyeReturnTargetPolicy>()->GetNameStringByValue(static_cast<int64>(Reveal->GetActiveReturnTargetPolicy())),
+                Reveal->GetActiveReturnTargetPolicy() == EBertaBlackEyeReturnTargetPolicy::ExplicitTarget
+                    ? *GetNameSafe(Reveal->GetActiveExplicitReturnTarget()) : TEXT("n/a"),
+                *StaticEnum<EBertaBlackEyeExternalCameraChangePolicy>()->GetNameStringByValue(static_cast<int64>(Reveal->GetActiveExternalCameraChangePolicy())),
+                Reveal->GetRevealState() == EBertaBlackEyeRevealState::BlendingOut ? TEXT("n/a (own return requested)")
+                    : (Reveal->IsRevealStillControllingViewTarget() ? TEXT("true") : TEXT("false")),
+                Settings.BlendInTime,
                 Settings.HoldTime, Settings.BlendOutTime, Reveal->GetPhaseTimeRemaining(),
                 Settings.bDisableMoveInput ? TEXT("true") : TEXT("false"),
                 Settings.bDisableLookInput ? TEXT("true") : TEXT("false"),
@@ -66,6 +87,13 @@ bool UBertaBlackEyeCameraDebugLibrary::GetBlackEyeCameraDebugSummary(APlayerCont
     }
     if (RevealCount == 0) OutSummary += TEXT("Reveal: None\n");
     if (RevealCount > 1) OutSummary += TEXT("Reveal conflict: multiple active reveals for this controller.\n");
+    if (LastReplayableReveal)
+    {
+        OutSummary += FString::Printf(TEXT("LastReplayableReveal: Component=%s Mode=%s LastStartedAgo=%.1fs\n"),
+            *GetNameSafe(LastReplayableReveal),
+            LastReplayableReveal->GetLastRevealStartMode() == EBertaBlackEyeRevealDurationMode::Manual
+                ? TEXT("Manual") : TEXT("Timed"), FPlatformTime::Seconds() - LastStart);
+    }
     return true;
 #endif
 }

@@ -1,12 +1,16 @@
 #if !UE_BUILD_SHIPPING
 
+#include "Actors/BlackEyeCineCameraActorBase.h"
 #include "BertaBlackEyeCameraDebugLibrary.h"
+#include "BertaBlackEyeCameraRevealComponent.h"
 #include "BertaBlackEyeCameraSwitcherComponent.h"
 #include "Engine/GameInstance.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
+#include "HAL/PlatformTime.h"
 #include "String/LexFromString.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogBertaBlackEyeConsole, Log, All);
@@ -130,6 +134,73 @@ void Dump(const TArray<FString>& Args, UWorld* World)
     }
 }
 
+void ReplayLastReveal(const TArray<FString>& Args, UWorld* World)
+{
+    if (Args.Num() > 1)
+    {
+        UE_LOG(LogBertaBlackEyeConsole, Warning,
+            TEXT("Usage: Berta.BlackEye.ReplayLastReveal [LocalPlayerIndex]"));
+        return;
+    }
+    APlayerController* Controller = ResolveController(World, Args, 0);
+    if (!Controller) return;
+
+    UBertaBlackEyeCameraRevealComponent* Latest = nullptr;
+    double LatestStart = 0.0;
+    for (TActorIterator<AActor> It(World); It; ++It)
+    {
+        TArray<UBertaBlackEyeCameraRevealComponent*> Components;
+        It->GetComponents(Components);
+        for (UBertaBlackEyeCameraRevealComponent* Reveal : Components)
+        {
+            if (IsValid(Reveal) && Reveal->GetLastRevealController() == Controller &&
+                Reveal->GetLastSuccessfulRevealStartRealTime() > LatestStart)
+            {
+                Latest = Reveal;
+                LatestStart = Reveal->GetLastSuccessfulRevealStartRealTime();
+            }
+        }
+    }
+    if (!Latest)
+    {
+        UE_LOG(LogBertaBlackEyeConsole, Warning,
+            TEXT("No replayable reveal component found for local controller %s (destroyed components and previous worlds are not retained)."),
+            *GetNameSafe(Controller));
+        return;
+    }
+    if (Latest->IsRevealActive())
+    {
+        UE_LOG(LogBertaBlackEyeConsole, Warning,
+            TEXT("Last reveal component %s is already active; replay rejected without interrupting it."),
+            *GetNameSafe(Latest));
+        return;
+    }
+    if (!IsValid(Latest->TargetCamera))
+    {
+        UE_LOG(LogBertaBlackEyeConsole, Warning,
+            TEXT("Last reveal component %s has no valid TargetCamera; replay rejected."), *GetNameSafe(Latest));
+        return;
+    }
+
+    const EBertaBlackEyeRevealDurationMode Mode = Latest->GetLastRevealStartMode();
+    UE_LOG(LogBertaBlackEyeConsole, Display,
+        TEXT("Replaying component %s (owner=%s, last start %.1fs ago, mode=%s) with its current configuration."),
+        *GetNameSafe(Latest), *GetNameSafe(Latest->GetOwner()), FPlatformTime::Seconds() - LatestStart,
+        Mode == EBertaBlackEyeRevealDurationMode::Manual ? TEXT("Manual") : TEXT("Timed"));
+    if (!Latest->StartCameraRevealForController(Controller, Mode))
+    {
+        UE_LOG(LogBertaBlackEyeConsole, Warning,
+            TEXT("Replay start was rejected by component %s; inspect its TargetCamera, timing, controller, and lifecycle state."),
+            *GetNameSafe(Latest));
+        return;
+    }
+    if (Mode == EBertaBlackEyeRevealDurationMode::Manual)
+    {
+        UE_LOG(LogBertaBlackEyeConsole, Display,
+            TEXT("Manual replay started; call StopCameraReveal on component %s to finish it."), *GetNameSafe(Latest));
+    }
+}
+
 FAutoConsoleCommandWithWorldAndArgs NextCommand(TEXT("Berta.BlackEye.Next"),
     TEXT("Select next camera on the local controller switcher; optional LocalPlayerIndex."),
     FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&Next));
@@ -142,6 +213,9 @@ FAutoConsoleCommandWithWorldAndArgs SelectCommand(TEXT("Berta.BlackEye.Select"),
 FAutoConsoleCommandWithWorldAndArgs DumpCommand(TEXT("Berta.BlackEye.Dump"),
     TEXT("Print local Black Eye view target and reveal state; optional LocalPlayerIndex."),
     FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&Dump));
+FAutoConsoleCommandWithWorldAndArgs ReplayCommand(TEXT("Berta.BlackEye.ReplayLastReveal"),
+    TEXT("Re-run the last successful reveal component for the local player using its current configuration."),
+    FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&ReplayLastReveal));
 }
 
 #endif

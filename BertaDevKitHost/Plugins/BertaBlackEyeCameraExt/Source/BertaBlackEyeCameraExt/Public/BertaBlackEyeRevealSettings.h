@@ -28,6 +28,21 @@ enum class EBertaBlackEyeRevealState : uint8
     BlendingOut
 };
 
+UENUM(BlueprintType)
+enum class EBertaBlackEyeExternalCameraChangePolicy : uint8
+{
+    RestoreConfiguredTarget,
+    RespectExternalChange
+};
+
+UENUM(BlueprintType)
+enum class EBertaBlackEyeReturnTargetPolicy : uint8
+{
+    CapturedViewTarget,
+    CurrentPawn,
+    ExplicitTarget
+};
+
 /** Camera transition and input behavior shared by triggers and scripted reveals. */
 USTRUCT(BlueprintType)
 struct BERTABLACKEYECAMERAEXT_API FBertaBlackEyeRevealSettings

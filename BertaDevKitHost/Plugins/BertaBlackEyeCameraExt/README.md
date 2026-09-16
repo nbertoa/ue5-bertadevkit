@@ -18,7 +18,15 @@ The trigger retains its Blueprint methods, hooks, and four delegates as a façad
 
 `FBertaBlackEyeRevealSettings` groups transition feel and input policy. `UBertaBlackEyeRevealPreset` stores only those settings, never a camera. If `RevealPreset` is set, a copy of its settings wins; otherwise `InlineSettings` is used. The copy is taken at session start, so editing a preset during an active reveal changes only future sessions.
 
-The component captures the previous `ViewTarget` as a weak reference and captures `ControlRotation` before blending in. It restores ControlRotation before the return blend and after its duration, before releasing its Look lock. Move and Look locks use matching `SetIgnoreMoveInput` and `SetIgnoreLookInput` calls. Full input uses a temporary high-priority, binding-free `UInputComponent` blocker and removes its own component on cleanup. These locks do not reset input state contributed by other systems. A destroyed previous target falls back to the captured controller's pawn or controller. Another camera system can change the ViewTarget concurrently; this utility does not arbitrate global camera ownership.
+The component captures the previous `ViewTarget` as a weak reference and captures `ControlRotation` before blending in. On a normal return it restores ControlRotation before the return blend and after its duration, before releasing its Look lock. Move and Look locks use matching `SetIgnoreMoveInput` and `SetIgnoreLookInput` calls. Full input uses a temporary high-priority, binding-free `UInputComponent` blocker and removes its own component on cleanup. These locks do not reset input state contributed by other systems.
+
+### Return target policy
+
+Configure `ReturnTargetPolicy` on each reveal component. `CapturedViewTarget` (default) returns to the target captured at start; if it was destroyed, it uses the captured pawn or controller. `CurrentPawn` resolves the controller's pawn when the reveal exits, then falls back to the captured ViewTarget or controller. `ExplicitTarget` accepts any valid Actor as `ExplicitReturnTarget`; if it is missing or destroyed at exit, the captured ViewTarget, current pawn, then controller provide the fallback. The policy and explicit actor reference are snapshotted at session start, so changes during a reveal apply to the next session. The session snapshot uses a weak actor reference.
+
+### External camera changes
+
+`ExternalCameraChangePolicy` defaults to `RestoreConfiguredTarget`: Berta completes the configured return even if another system changed the ViewTarget during the reveal. `RespectExternalChange` checks the current or pending ViewTarget immediately before Berta's return request. If another valid target has taken over, Berta finishes its own cleanup immediately, without changing ViewTarget or restoring captured ControlRotation. A destroyed reveal camera follows the normal loss cleanup rather than being classified as an external takeover. This check runs at reveal exit or safe `EndPlay` cleanup boundaries; it is not continuous camera arbitration, so a manual reveal may remain logically active until stopped.
 
 ## Participants
 
@@ -35,9 +43,12 @@ Berta.BlackEye.Dump [LocalPlayerIndex]
 Berta.BlackEye.Next [LocalPlayerIndex]
 Berta.BlackEye.Previous [LocalPlayerIndex]
 Berta.BlackEye.Select <CameraIndex> [LocalPlayerIndex]
+Berta.BlackEye.ReplayLastReveal [LocalPlayerIndex]
 ```
 
-Next, Previous, and Select require a switcher on the selected `PlayerController`. Commands reject invalid arguments or ambiguous players. Diagnostics scan the world only when requested.
+Next, Previous, and Select require a switcher on the selected `PlayerController`. Commands reject invalid arguments or ambiguous players. Diagnostics scan the world only when requested. `ReplayLastReveal` finds the last component that successfully started for that local controller in the current world and starts it directly with its **current** camera, preset, timing, and participant configuration. It does not replay recorded settings or pass through a trigger's `bTriggerOnce`/`bEnabled` overlap path. An active last component is rejected without interruption. A replay of a manual session stays active until `StopCameraReveal` is called on the component.
+
+Enable lifecycle tracing temporarily in non-Shipping builds with `Berta.BlackEye.Trace 1`, then disable it with `Berta.BlackEye.Trace 0`. It is off by default. The Output Log lines carry a component owner, session ID, and elapsed monotonic real time, including start decisions, camera transitions, return fallback, external takeover, input/participant/gameplay cleanup, and `EndPlay`. Shipping builds omit trace and replay.
 
 ## Editor tools
 
@@ -46,6 +57,7 @@ With this plugin enabled in the Editor, the Level Editor Tools menu offers:
 - **Create Berta Reveal Trigger:** select exactly one Black Eye camera. The new trigger is placed at its location, assigned that camera, and selected. Undo/Redo uses an Editor transaction.
 - **Create Berta Reveal Trigger Around Actor:** select exactly one Black Eye camera and one other actor. The trigger box uses that actor's bounds plus simple padding.
 - **Audit Black Eye Camera Setup:** read-only Output Log checks for missing configured targets, invalid timing, Orbit input caveats, and null/duplicate switcher entries. It reports normal ControlRotation and auto-activation settings as information.
+- **Reveal relationships:** selecting an actor with a reveal component shows a primary viewport line to `TargetCamera`, secondary lines to valid participants, and a short status HUD. Triggers also show their mode, enabled state, and one-shot setting. Deselecting the actor removes the visualization.
 
 These actions do not save levels or change source control.
 

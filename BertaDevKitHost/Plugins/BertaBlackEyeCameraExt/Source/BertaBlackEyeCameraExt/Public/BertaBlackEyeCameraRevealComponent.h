@@ -34,6 +34,17 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Berta Black Eye Camera|Reveal")
     EBertaBlackEyeRevealDurationMode DurationMode = EBertaBlackEyeRevealDurationMode::Timed;
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Berta Black Eye Camera|Return")
+    EBertaBlackEyeReturnTargetPolicy ReturnTargetPolicy = EBertaBlackEyeReturnTargetPolicy::CapturedViewTarget;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Berta Black Eye Camera|Return",
+        meta = (EditCondition = "ReturnTargetPolicy == EBertaBlackEyeReturnTargetPolicy::ExplicitTarget", EditConditionHides))
+    TObjectPtr<AActor> ExplicitReturnTarget;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Berta Black Eye Camera|Return")
+    EBertaBlackEyeExternalCameraChangePolicy ExternalCameraChangePolicy =
+        EBertaBlackEyeExternalCameraChangePolicy::RestoreConfiguredTarget;
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Berta Black Eye Camera|Participants")
     bool bNotifyParticipants = false;
 
@@ -78,7 +89,16 @@ public:
     AActor* GetSavedViewTarget() const { return SavedViewTarget.Get(); }
     FRotator GetSavedControlRotation() const { return SavedControlRotation; }
     const FBertaBlackEyeRevealSettings& GetActiveSettings() const { return ActiveSettings; }
+    EBertaBlackEyeReturnTargetPolicy GetActiveReturnTargetPolicy() const { return ActiveReturnTargetPolicy; }
+    EBertaBlackEyeExternalCameraChangePolicy GetActiveExternalCameraChangePolicy() const { return ActiveExternalCameraChangePolicy; }
+    AActor* GetActiveExplicitReturnTarget() const { return ActiveExplicitReturnTarget.Get(); }
+    bool IsRevealStillControllingViewTarget() const;
     float GetPhaseTimeRemaining() const;
+#if !UE_BUILD_SHIPPING
+    double GetLastSuccessfulRevealStartRealTime() const { return LastSuccessfulRevealStartRealTime; }
+    APlayerController* GetLastRevealController() const { return LastRevealController.Get(); }
+    EBertaBlackEyeRevealDurationMode GetLastRevealStartMode() const { return LastRevealStartMode; }
+#endif
 
 protected:
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -115,7 +135,7 @@ private:
     bool ApplyConfiguredInputLocks(APlayerController* PlayerController);
     void RemoveConfiguredInputLocks();
     void NotifyParticipantsPaused();
-    void ResumeNotifiedParticipants();
+    int32 ResumeNotifiedParticipants();
     void UnbindSessionActors();
     void BeginBlendIn();
     void HandleBlendInFinished(uint32 ExpectedSerial);
@@ -123,16 +143,30 @@ private:
     void HandleHoldFinished(uint32 ExpectedSerial);
     void BeginBlendOut();
     void HandleBlendOutFinished(uint32 ExpectedSerial);
-    AActor* ResolveRestoreViewTarget(APlayerController* PlayerController) const;
+    AActor* ResolveReturnViewTarget(APlayerController* PlayerController, bool& bUsedFallback) const;
     void RestoreControlRotation();
     void FinishReveal();
     void ClearPhaseTimer();
+#if !UE_BUILD_SHIPPING
+    void TraceRevealEvent(const FString& Event) const;
+#endif
 
     EBertaBlackEyeRevealState RevealState = EBertaBlackEyeRevealState::Idle;
     EBertaBlackEyeRevealDurationMode ActiveDurationMode = EBertaBlackEyeRevealDurationMode::Timed;
+    EBertaBlackEyeReturnTargetPolicy ActiveReturnTargetPolicy = EBertaBlackEyeReturnTargetPolicy::CapturedViewTarget;
+    EBertaBlackEyeExternalCameraChangePolicy ActiveExternalCameraChangePolicy =
+        EBertaBlackEyeExternalCameraChangePolicy::RestoreConfiguredTarget;
+    TWeakObjectPtr<AActor> ActiveExplicitReturnTarget;
     FBertaBlackEyeRevealSettings ActiveSettings;
     FTimerHandle PhaseTimer;
     uint32 SessionSerial = 0;
+#if !UE_BUILD_SHIPPING
+    uint32 RevealSessionId = 0;
+    double SessionStartRealTime = 0.0;
+    double LastSuccessfulRevealStartRealTime = 0.0;
+    TWeakObjectPtr<APlayerController> LastRevealController;
+    EBertaBlackEyeRevealDurationMode LastRevealStartMode = EBertaBlackEyeRevealDurationMode::Timed;
+#endif
     bool bMoveLockAdded = false;
     bool bLookLockAdded = false;
     bool bBlockerPushed = false;

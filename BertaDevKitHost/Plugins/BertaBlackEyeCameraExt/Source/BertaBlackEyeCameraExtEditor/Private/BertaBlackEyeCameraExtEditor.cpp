@@ -6,8 +6,10 @@
 #include "BertaBlackEyeCameraSwitcherComponent.h"
 #include "BertaBlackEyeCameraTrigger.h"
 #include "BertaBlackEyeRevealPreset.h"
+#include "BertaBlackEyeRevealComponentVisualizer.h"
 #include "Components/BoxComponent.h"
 #include "Editor.h"
+#include "Editor/UnrealEdEngine.h"
 #include "Engine/Selection.h"
 #include "Engine/Level.h"
 #include "Engine/World.h"
@@ -16,6 +18,7 @@
 #include "ScopedTransaction.h"
 #include "Textures/SlateIcon.h"
 #include "ToolMenus.h"
+#include "UnrealEdGlobals.h"
 
 #define LOCTEXT_NAMESPACE "BertaBlackEyeCameraExtEditor"
 
@@ -61,8 +64,20 @@ void AuditReveal(const UBertaBlackEyeCameraRevealComponent* Reveal, bool bRequir
     if (!IsValid(Reveal)) return;
     const AActor* Owner = Reveal->GetOwner();
     const bool bConfigured = bRequiredTarget || IsValid(Reveal->TargetCamera) || IsValid(Reveal->RevealPreset) ||
-        Reveal->bNotifyParticipants || !Reveal->Participants.IsEmpty();
+        Reveal->bNotifyParticipants || !Reveal->Participants.IsEmpty() ||
+        Reveal->ReturnTargetPolicy == EBertaBlackEyeReturnTargetPolicy::ExplicitTarget;
     if (!bConfigured) return;
+
+    UE_LOG(LogBertaBlackEyeEditor, Display, TEXT("%s: Return=%s ExternalChange=%s."),
+        *GetNameSafe(Owner),
+        *StaticEnum<EBertaBlackEyeReturnTargetPolicy>()->GetNameStringByValue(static_cast<int64>(Reveal->ReturnTargetPolicy)),
+        *StaticEnum<EBertaBlackEyeExternalCameraChangePolicy>()->GetNameStringByValue(static_cast<int64>(Reveal->ExternalCameraChangePolicy)));
+    if (Reveal->ReturnTargetPolicy == EBertaBlackEyeReturnTargetPolicy::ExplicitTarget &&
+        !IsValid(Reveal->ExplicitReturnTarget))
+    {
+        UE_LOG(LogBertaBlackEyeEditor, Error,
+            TEXT("%s: ExplicitTarget return policy requires a valid ExplicitReturnTarget."), *GetNameSafe(Owner));
+    }
 
     if (!IsValid(Reveal->TargetCamera))
     {
@@ -119,19 +134,35 @@ class FBertaBlackEyeCameraExtEditorModule : public IModuleInterface
 public:
     virtual void StartupModule() override
     {
+        RegisterVisualizer();
         UToolMenus::RegisterStartupCallback(
             FSimpleMulticastDelegate::FDelegate::CreateRaw(this, &FBertaBlackEyeCameraExtEditorModule::RegisterMenus));
     }
 
     virtual void ShutdownModule() override
     {
+        if (bVisualizerRegistered && GUnrealEd)
+        {
+            GUnrealEd->UnregisterComponentVisualizer(UBertaBlackEyeCameraRevealComponent::StaticClass()->GetFName());
+        }
         UToolMenus::UnRegisterStartupCallback(this);
         UToolMenus::UnregisterOwner(this);
     }
 
 private:
+    void RegisterVisualizer()
+    {
+        if (!bVisualizerRegistered && GUnrealEd)
+        {
+            GUnrealEd->RegisterComponentVisualizer(UBertaBlackEyeCameraRevealComponent::StaticClass()->GetFName(),
+                MakeShared<FBertaBlackEyeRevealComponentVisualizer>());
+            bVisualizerRegistered = true;
+        }
+    }
+
     void RegisterMenus()
     {
+        RegisterVisualizer();
         UToolMenu* ToolsMenu = UToolMenus::Get()->ExtendMenu(TEXT("LevelEditor.MainMenu.Tools"));
         if (!ToolsMenu) return;
 
@@ -286,6 +317,8 @@ private:
             TEXT("Black Eye setup audit complete: triggers=%d reveal components=%d switchers=%d. No changes made."),
             TriggerCount, RevealCount, SwitcherCount);
     }
+
+    bool bVisualizerRegistered = false;
 };
 
 IMPLEMENT_MODULE(FBertaBlackEyeCameraExtEditorModule, BertaBlackEyeCameraExtEditor)
