@@ -3,11 +3,8 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "GameplayTags/BertaGameplayTagUsageFinderInternal.h"
+#include "GameplayTagsManager.h"
 #include "Misc/AutomationTest.h"
-#include "NativeGameplayTags.h"
-
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_BertaUsageFinderTestParent, "BertaDevKit.Tests.UsageFinder");
-UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_BertaUsageFinderTestChild, "BertaDevKit.Tests.UsageFinder.Child");
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FBertaGameplayTagUsageFinderInvalidInputTest,
@@ -39,10 +36,24 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 bool FBertaGameplayTagUsageFinderMatchingTest::RunTest(const FString& Parameters)
 {
 	using namespace BertaGameplayTagUsagePrivate;
-	TestTrue(TEXT("Exact tags match in Exact mode"), Matches(TAG_BertaUsageFinderTestParent, TAG_BertaUsageFinderTestParent, EBertaGameplayTagMatchMode::Exact));
-	TestFalse(TEXT("Child does not match parent in Exact mode"), Matches(TAG_BertaUsageFinderTestChild, TAG_BertaUsageFinderTestParent, EBertaGameplayTagMatchMode::Exact));
-	TestTrue(TEXT("Child matches parent in ParentOrChild mode"), Matches(TAG_BertaUsageFinderTestChild, TAG_BertaUsageFinderTestParent, EBertaGameplayTagMatchMode::ParentOrChild));
-	TestTrue(TEXT("Parent matches child in ParentOrChild mode"), Matches(TAG_BertaUsageFinderTestParent, TAG_BertaUsageFinderTestChild, EBertaGameplayTagMatchMode::ParentOrChild));
+	UGameplayTagsManager& TagsManager = UGameplayTagsManager::Get();
+	const auto GetOrAddTestTag = [&TagsManager](const FName TagName)
+	{
+		const FGameplayTag Existing = TagsManager.RequestGameplayTag(TagName, false);
+		return Existing.IsValid() ? Existing : TagsManager.AddNativeGameplayTag(TagName, TEXT("Usage finder Matching automation test"));
+	};
+
+	// Test-only native tags remain in this Editor session; repeated runs reuse the same names.
+	const FGameplayTag Parent = GetOrAddTestTag(TEXT("BertaDevKit.Tests.UsageFinder"));
+	const FGameplayTag Child = GetOrAddTestTag(TEXT("BertaDevKit.Tests.UsageFinder.Child"));
+	if (!TestTrue(TEXT("Matching test tags are registered"), Parent.IsValid() && Child.IsValid()))
+	{
+		return false;
+	}
+	TestTrue(TEXT("Exact tags match in Exact mode"), Matches(Parent, Parent, EBertaGameplayTagMatchMode::Exact));
+	TestFalse(TEXT("Child does not match parent in Exact mode"), Matches(Child, Parent, EBertaGameplayTagMatchMode::Exact));
+	TestTrue(TEXT("Child matches parent in ParentOrChild mode"), Matches(Child, Parent, EBertaGameplayTagMatchMode::ParentOrChild));
+	TestTrue(TEXT("Parent matches child in ParentOrChild mode"), Matches(Parent, Child, EBertaGameplayTagMatchMode::ParentOrChild));
 	return true;
 }
 
