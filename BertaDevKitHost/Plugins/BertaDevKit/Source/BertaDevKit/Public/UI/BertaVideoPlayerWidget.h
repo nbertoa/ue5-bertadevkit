@@ -5,11 +5,13 @@
 #include "BertaVideoPlayerWidget.generated.h"
 
 class AGameModeBase;
+class UAudioComponent;
 class UImage;
 class UMediaPlayer;
 class UMediaSoundComponent;
 class UMediaSource;
 class UMediaTexture;
+class USoundBase;
 class UBertaVideoPlayerWidget;
 
 USTRUCT(BlueprintType)
@@ -28,6 +30,14 @@ struct BERTADEVKIT_API FBertaVideoPlaybackOptions
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Video")
 	bool bPlayAudio = true;
+
+	/** Repeat the video without terminal completion or releasing the owned pause. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Video")
+	bool bLoop = false;
+
+	/** Only affects external audio: restart each video loop, otherwise let it finish naturally. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Video", meta = (EditCondition = "bLoop && bPlayAudio"))
+	bool bRestartExternalAudioOnLoop = true;
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
@@ -50,6 +60,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Video", meta = (ExposeOnSpawn = true))
 	TObjectPtr<UMediaSource> MediaSource;
 
+	/** Replaces embedded audio when audio is enabled. Asset-authored looping is preserved. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Video", meta = (ExposeOnSpawn = true))
+	TObjectPtr<USoundBase> ExternalAudio;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Video", meta = (ExposeOnSpawn = true))
 	FBertaVideoPlaybackOptions Options;
 
@@ -57,7 +71,7 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "BertaDevKit|UI|Video")
 	FBertaVideoPlaybackEvent OnPlaybackStarted;
 
-	/** Broadcast once when playback reaches the natural end of the source. */
+	/** Broadcast once on terminal natural completion; not emitted for individual loops. */
 	UPROPERTY(BlueprintAssignable, Category = "BertaDevKit|UI|Video")
 	FBertaVideoPlaybackEvent OnPlaybackCompleted;
 
@@ -110,6 +124,9 @@ private:
 	UFUNCTION()
 	void HandleEndReached();
 
+	UFUNCTION()
+	void HandleSeekCompleted();
+
 	UPROPERTY(Transient)
 	TObjectPtr<UImage> VideoImage;
 
@@ -122,9 +139,14 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UMediaSoundComponent> InternalMediaSound;
 
+	UPROPERTY(Transient)
+	TObjectPtr<UAudioComponent> InternalExternalAudio;
+
 	TWeakObjectPtr<AGameModeBase> PauseGameMode;
 	EPlaybackState PlaybackState = EPlaybackState::Inactive;
 	bool bPlayRequested = false;
+	bool bRestartingLoop = false;
+	bool bLoopSeekPending = false;
 	bool bTerminal = false;
 	bool bOwnsPause = false;
 	bool bPauseReleaseRequested = false;

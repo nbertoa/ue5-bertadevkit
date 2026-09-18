@@ -1,6 +1,7 @@
 #include "UI/BertaVideoPlayerWidget.h"
 
 #include "Blueprint/WidgetTree.h"
+#include "Components/AudioComponent.h"
 #include "Components/Image.h"
 #include "Components/Overlay.h"
 #include "Components/OverlaySlot.h"
@@ -12,6 +13,8 @@
 #include "MediaSoundComponent.h"
 #include "MediaSource.h"
 #include "MediaTexture.h"
+#include "Misc/Timespan.h"
+#include "Sound/SoundBase.h"
 
 namespace BertaVideoPlayerWidgetPrivate
 {
@@ -170,11 +173,14 @@ bool UBertaVideoPlayerWidget::CreateMediaResources(FString& OutErrorMessage)
 
 	InternalMediaPlayer->PlayOnOpen = false;
 	InternalMediaPlayer->NativeAudioOut = false;
+	// Backends do not all emit OnEndReached for native loops. Seek/replay each lap
+	// so external audio restart and terminal completion use the same boundary.
 	InternalMediaPlayer->SetLooping(false);
 	InternalMediaPlayer->OnMediaOpened.AddDynamic(this, &ThisClass::HandleMediaOpened);
 	InternalMediaPlayer->OnMediaOpenFailed.AddDynamic(this, &ThisClass::HandleMediaOpenFailed);
 	InternalMediaPlayer->OnPlaybackResumed.AddDynamic(this, &ThisClass::HandlePlaybackResumed);
 	InternalMediaPlayer->OnEndReached.AddDynamic(this, &ThisClass::HandleEndReached);
+	InternalMediaPlayer->OnSeekCompleted.AddDynamic(this, &ThisClass::HandleSeekCompleted);
 
 	InternalMediaTexture->AutoClear = true;
 	InternalMediaTexture->ClearColor = FLinearColor::Black;
@@ -182,7 +188,23 @@ bool UBertaVideoPlayerWidget::CreateMediaResources(FString& OutErrorMessage)
 	InternalMediaTexture->UpdateResource();
 	VideoImage->SetBrushResourceObject(InternalMediaTexture);
 
-	if (Options.bPlayAudio)
+	if (Options.bPlayAudio && IsValid(ExternalAudio))
+	{
+		InternalExternalAudio = NewObject<UAudioComponent>(this, NAME_None, RF_Transient);
+		InternalExternalAudio->SetAutoActivate(false);
+		InternalExternalAudio->bAutoDestroy = false;
+		InternalExternalAudio->bCanPlayMultipleInstances = false;
+		InternalExternalAudio->bAllowSpatialization = false;
+		InternalExternalAudio->SetUISound(true);
+		InternalExternalAudio->SetSound(ExternalAudio);
+		InternalExternalAudio->RegisterComponentWithWorld(GetWorld());
+		if (!InternalExternalAudio->IsRegistered())
+		{
+			OutErrorMessage = TEXT("Failed to register the external audio component.");
+			return false;
+		}
+	}
+	else if (Options.bPlayAudio)
 	{
 		InternalMediaSound = NewObject<UMediaSoundComponent>(this, NAME_None, RF_Transient);
 		if (!InternalMediaSound)
@@ -295,6 +317,8 @@ void UBertaVideoPlayerWidget::CleanupMediaResources()
 {
 	ReleaseOwnedPause();
 	bPlayRequested = false;
+	bRestartingLoop = false;
+	bLoopSeekPending = false;
 
 	if (InternalMediaPlayer)
 	{
@@ -302,7 +326,20 @@ void UBertaVideoPlayerWidget::CleanupMediaResources()
 		InternalMediaPlayer->OnMediaOpenFailed.RemoveDynamic(this, &ThisClass::HandleMediaOpenFailed);
 		InternalMediaPlayer->OnPlaybackResumed.RemoveDynamic(this, &ThisClass::HandlePlaybackResumed);
 		InternalMediaPlayer->OnEndReached.RemoveDynamic(this, &ThisClass::HandleEndReached);
+		InternalMediaPlayer->OnSeekCompleted.RemoveDynamic(this, &ThisClass::HandleSeekCompleted);
 		InternalMediaPlayer->Close();
+	}
+
+	if (InternalExternalAudio)
+	{
+		InternalExternalAudio->Stop();
+		InternalExternalAudio->SetSound(nullptr);
+		if (InternalExternalAudio->IsRegistered())
+		{
+			InternalExternalAudio->UnregisterComponent();
+		}
+		InternalExternalAudio->DestroyComponent();
+		InternalExternalAudio = nullptr;
 	}
 
 	if (InternalMediaSound)
@@ -386,19 +423,42 @@ void UBertaVideoPlayerWidget::HandleMediaOpenFailed(FString FailedUrl)
 
 void UBertaVideoPlayerWidget::HandlePlaybackResumed()
 {
-	if (bTerminal || PlaybackState != EPlaybackState::Starting)
+	if (bTerminal || bLoopSeekPending || PlaybackState != EPlaybackState::Starting)
 	{
 		return;
 	}
 
 	PlaybackState = EPlaybackState::Playing;
-	OnPlaybackStarted.Broadcast(this);
+	const bool bWasRestartingLoop = bRestartingLoop;
+	bRestartingLoop = false;
+	if (InternalExternalAudio && (!bWasRestartingLoop || Options.bRestartExternalAudioOnLoop))
+	{
+		InternalExternalAudio->Stop();
+		InternalExternalAudio->Play(0.0f);
+	}
+
+	if (!bWasRestartingLoop)
+	{
+		OnPlaybackStarted.Broadcast(this);
+	}
 }
 
 void UBertaVideoPlayerWidget::HandleEndReached()
 {
-	if (bTerminal || (PlaybackState != EPlaybackState::Starting && PlaybackState != EPlaybackState::Playing))
+	if (bTerminal || bLoopSeekPending || (PlaybackState != EPlaybackState::Starting && PlaybackState != EPlaybackState::Playing))
 	{
+		return;
+	}
+
+	if (Options.bLoop)
+	{
+		bRestartingLoop = true;
+		bLoopSeekPending = true;
+		PlaybackState = EPlaybackState::Starting;
+		if (!InternalMediaPlayer || !InternalMediaPlayer->Seek(FTimespan::Zero()))
+		{
+			FailPlayback(TEXT("Failed to seek to the beginning for video looping."));
+		}
 		return;
 	}
 
@@ -409,5 +469,26 @@ void UBertaVideoPlayerWidget::HandleEndReached()
 	if (Options.bRemoveOnCompletion)
 	{
 		RemoveFromParent();
+	}
+}
+
+void UBertaVideoPlayerWidget::HandleSeekCompleted()
+{
+	if (bTerminal || !bLoopSeekPending || PlaybackState != EPlaybackState::Starting || !InternalMediaPlayer)
+	{
+		return;
+	}
+
+	bLoopSeekPending = false;
+	// WMF may resume as part of seeking and emit PlaybackResumed before SeekCompleted.
+	// Confirm that resumed state here rather than waiting for another resume event.
+	if (InternalMediaPlayer->IsPlaying())
+	{
+		HandlePlaybackResumed();
+	}
+	else
+	{
+		PlaybackState = EPlaybackState::Ready;
+		StartReadyMedia();
 	}
 }
