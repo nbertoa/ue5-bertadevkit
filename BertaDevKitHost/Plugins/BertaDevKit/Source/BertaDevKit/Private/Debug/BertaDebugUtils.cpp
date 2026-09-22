@@ -31,12 +31,14 @@ void UBertaDebugUtils::PrintLog(const FString& Message,
 		              Key);
 	}
 
+#if !NO_LOGGING
 	if (Output == EBertaLogOutput::PrintAndLog || Output == EBertaLogOutput::LogOnly)
 	{
 		LogToOutput(LogBertaDebug.GetCategoryName(),
 		            Message,
 		            Verbosity);
 	}
+#endif
 }
 
 void UBertaDebugUtils::PrintLogWithContext(const UObject* WorldContext,
@@ -99,12 +101,14 @@ void UBertaDebugUtils::PrintLogToNamedCategory(const FString& CategoryName,
 		              Key);
 	}
 
+#if !NO_LOGGING
 	if (Output == EBertaLogOutput::PrintAndLog || Output == EBertaLogOutput::LogOnly)
 	{
 		LogToOutput(FName(*CategoryName),
 		            Message,
 		            Verbosity);
 	}
+#endif
 }
 
 void UBertaDebugUtils::PrintLogToNamedCategoryWithContext(const UObject* WorldContext,
