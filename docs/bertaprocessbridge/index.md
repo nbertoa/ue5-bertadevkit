@@ -38,8 +38,8 @@ One `UBertaProcess` represents exactly one successful launch.
 | `GetState` | Returns `Running`, `Completed`, or `Canceled`. |
 | `GetDurationSeconds` | Returns live elapsed time while active and the cached final duration afterward. |
 | `TryGetResult` | Resets its output and returns `false` while running; returns the cached terminal result afterward. |
-| `SendString` | Queues exactly the supplied text as UTF-8 bytes and adds no newline. Empty input is an accepted no-op while input is available. |
-| `SendLine` | Appends exactly one UE platform line terminator, then uses the same input path. Existing terminators are not normalized. |
+| `SendString` | Accepts the complete supplied text for queued UTF-8 delivery and adds no newline. `true` means accepted, not delivered to the child. Pending input is finite, so a message is rejected atomically with `false` when capacity is unavailable. Empty input is an accepted no-op while input is available. |
+| `SendLine` | Appends exactly one UE platform line terminator, then uses the same acceptance and capacity rules. Existing terminators are not normalized. |
 | `Cancel` | Accepts one active cancellation request and maps `bKillTree` to UE's native process-tree termination option. |
 
 `FBertaProcessResult::Reason` is `Completed` when the process ended without an accepted cancellation, even when its exit code is non-zero. `Canceled` identifies explicit user or ownership teardown cancellation. `bHasExitCode` determines whether `ExitCode` is valid; canceled processes may expose a platform termination code. Duration is cached when the worker reaches its terminal path.
@@ -50,11 +50,13 @@ The implementation uses UE 5.8's `FProcessStartInfo` with RAII `FProcess`, `FInp
 
 Input is queued from the Game Thread and written by the process worker. BertaProcessBridge uses UE's byte pipe write after converting `FString` text to UTF-8 so `SendString` does not inherit the newline that UE 5.8's Win64 `WritePipe(FString)` adds. `SendLine` deliberately appends `LINE_TERMINATOR` itself.
 
+Pending output is bounded. When its Game Thread delivery falls behind, the worker applies backpressure instead of silently dropping stdout/stderr; output already accepted remains ordered before `OnFinished`. Each Game Thread drain has a finite budget and continues on later ticks when needed.
+
 ## Ownership, ordering, and shutdown
 
 `UBertaProcessSubsystem` is a `UGameInstanceSubsystem`. It strongly owns active process UObjects, so they cannot be garbage-collected while a process is running and separate PIE instances do not share process ownership.
 
-Native work happens on a private worker thread. Worker callbacks never touch reflected UObject state or Blueprint delegates. They append output and terminal records to one ordered queue; one Game Thread drain preserves output-before-finish ordering and rejects late events after the terminal transition. `OnFinished` is broadcast at most once.
+Native work happens on a private worker thread. Worker callbacks never touch reflected UObject state or Blueprint delegates. They append output and terminal records to one ordered queue; Game Thread drains preserve output-before-finish ordering and reject late events after the terminal transition. `OnFinished` is broadcast at most once.
 
 During `GameInstance` teardown the subsystem stops accepting launches, suppresses queued/user callbacks, requests kill-tree cancellation for every remaining process, waits for each worker, and releases the RAII process and pipe resources. Detached processes are not supported and children are not intended to outlive their owner.
 

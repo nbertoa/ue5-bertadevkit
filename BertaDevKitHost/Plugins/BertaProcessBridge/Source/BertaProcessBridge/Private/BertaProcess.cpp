@@ -5,7 +5,9 @@
 #include "BertaProcessSubsystem.h"
 #include "Containers/Queue.h"
 #include "Containers/StringConv.h"
+#include "Containers/Ticker.h"
 #include "HAL/CriticalSection.h"
+#include "HAL/Event.h"
 #include "HAL/PlatformProcess.h"
 #include "HAL/PlatformTime.h"
 #include "HAL/Runnable.h"
@@ -14,6 +16,13 @@
 
 namespace
 {
+	constexpr int32 MaxPendingOutputBytes = 512 * 1024;
+	constexpr int32 MaxPendingOutputEvents = 64;
+	constexpr int32 MaxOutputChunkChars = 16 * 1024;
+	constexpr int32 MaxOutputEventsPerDrain = 16;
+	constexpr int32 MaxOutputBytesPerDrain = 128 * 1024;
+	constexpr int32 MaxPendingInputBytes = 1024 * 1024;
+
 	enum class EBertaQueuedProcessEventType : uint8
 	{
 		Output,
@@ -32,7 +41,7 @@ namespace
 }
 
 /**
- * Serializes native worker events through one Game Thread drain. This preserves the
+ * Serializes native worker events through budgeted Game Thread drains. This preserves the
  * worker's output-before-terminal ordering without touching UObjects off-thread.
  */
 class FBertaProcessCallbackDispatcher final
@@ -46,15 +55,16 @@ public:
 
 	void EnqueueOutput(FString Output)
 	{
-		if (Output.IsEmpty())
+		for (int32 Offset = 0; Offset < Output.Len(); Offset += MaxOutputChunkChars)
 		{
-			return;
+			FBertaQueuedProcessEvent Event;
+			Event.Type = EBertaQueuedProcessEventType::Output;
+			Event.Output = Output.Mid(Offset, MaxOutputChunkChars);
+			if (!Enqueue(MoveTemp(Event)))
+			{
+				return;
+			}
 		}
-
-		FBertaQueuedProcessEvent Event;
-		Event.Type = EBertaQueuedProcessEventType::Output;
-		Event.Output = MoveTemp(Output);
-		Enqueue(MoveTemp(Event));
 	}
 
 	void EnqueueFinished(
@@ -77,26 +87,38 @@ public:
 		FScopeLock Lock(&Mutex);
 		bSuppressed = true;
 		QueuedEvents.Reset();
+		PendingOutputBytes = 0;
 		Process.Reset();
+		SpaceAvailable->Trigger();
 	}
 
 private:
-	void Enqueue(FBertaQueuedProcessEvent Event)
+	bool Enqueue(FBertaQueuedProcessEvent Event)
 	{
 		bool bScheduleDrain = false;
+		const int32 EventBytes = Event.Output.Len() * sizeof(TCHAR);
+		for (;;)
 		{
 			FScopeLock Lock(&Mutex);
 			if (bSuppressed)
 			{
-				return;
+				return false;
 			}
 
-			QueuedEvents.Add(MoveTemp(Event));
-			if (!bDrainScheduled)
+			if (QueuedEvents.Num() < MaxPendingOutputEvents
+				&& PendingOutputBytes <= MaxPendingOutputBytes - EventBytes)
 			{
-				bDrainScheduled = true;
-				bScheduleDrain = true;
+				PendingOutputBytes += EventBytes;
+				QueuedEvents.Add(MoveTemp(Event));
+				if (!bDrainScheduled)
+				{
+					bDrainScheduled = true;
+					bScheduleDrain = true;
+				}
+				break;
 			}
+			Lock.Unlock();
+			SpaceAvailable->Wait();
 		}
 
 		if (bScheduleDrain)
@@ -104,59 +126,77 @@ private:
 			TSharedRef<FBertaProcessCallbackDispatcher, ESPMode::ThreadSafe> Self = AsShared();
 			AsyncTask(ENamedThreads::GameThread, [Self]()
 			{
-				Self->DrainOnGameThread();
+				if (Self->DrainOnGameThread())
+				{
+					FTSTicker::GetCoreTicker().AddTicker(TEXT("BertaProcessBridgeOutputDrain"), 0.0f,
+						[Self](float) { return Self->DrainOnGameThread(); });
+				}
 			});
 		}
+		return true;
 	}
 
-	void DrainOnGameThread()
+	bool DrainOnGameThread()
 	{
 		check(IsInGameThread());
 
-		for (;;)
+		int32 DrainedEvents = 0;
+		int32 DrainedBytes = 0;
+		while (DrainedEvents < MaxOutputEventsPerDrain && DrainedBytes < MaxOutputBytesPerDrain)
 		{
-			TArray<FBertaQueuedProcessEvent> Events;
+			FBertaQueuedProcessEvent Event;
 			TWeakObjectPtr<UBertaProcess> ProcessToNotify;
 			{
 				FScopeLock Lock(&Mutex);
 				if (bSuppressed || QueuedEvents.IsEmpty())
 				{
 					bDrainScheduled = false;
-					return;
+					return false;
 				}
 
-				Events = MoveTemp(QueuedEvents);
-				QueuedEvents.Reset();
+				Event = MoveTemp(QueuedEvents[0]);
+				QueuedEvents.RemoveAt(0, 1, EAllowShrinking::No);
+				const int32 EventBytes = Event.Output.Len() * sizeof(TCHAR);
+				PendingOutputBytes -= EventBytes;
+				DrainedBytes += EventBytes;
+				++DrainedEvents;
 				ProcessToNotify = Process;
+				SpaceAvailable->Trigger();
 			}
 
 			UBertaProcess* ProcessObject = ProcessToNotify.Get();
 			if (ProcessObject == nullptr)
 			{
 				Suppress();
-				return;
+				return false;
 			}
 
-			for (FBertaQueuedProcessEvent& Event : Events)
+			if (Event.Type == EBertaQueuedProcessEventType::Output)
 			{
-				if (Event.Type == EBertaQueuedProcessEventType::Output)
-				{
-					ProcessObject->HandleNativeOutput(MoveTemp(Event.Output));
-				}
-				else
-				{
-					ProcessObject->HandleNativeFinished(
-						Event.Reason,
-						Event.bHasExitCode,
-						Event.ExitCode,
-						Event.DurationSeconds);
-				}
+				ProcessObject->HandleNativeOutput(MoveTemp(Event.Output));
+			}
+			else
+			{
+				ProcessObject->HandleNativeFinished(
+					Event.Reason,
+					Event.bHasExitCode,
+					Event.ExitCode,
+					Event.DurationSeconds);
 			}
 		}
+		FScopeLock Lock(&Mutex);
+		if (bSuppressed || QueuedEvents.IsEmpty())
+		{
+			bDrainScheduled = false;
+			return false;
+		}
+		return true;
 	}
 
 	FCriticalSection Mutex;
+	FEventRef SpaceAvailable;
 	TArray<FBertaQueuedProcessEvent> QueuedEvents;
+	int32 PendingOutputBytes = 0;
 	TWeakObjectPtr<UBertaProcess> Process;
 	bool bDrainScheduled = false;
 	bool bSuppressed = false;
@@ -254,15 +294,21 @@ public:
 
 	bool EnqueueInput(const FString& Text)
 	{
+		FTCHARToUTF8 Utf8Message(*Text);
+		const int32 PayloadBytes = Utf8Message.Length();
 		FScopeLock Lock(&StateMutex);
-		if (State != EWorkerState::Active)
+		if (State != EWorkerState::Active
+			|| PayloadBytes > MaxPendingInputBytes - PendingInputBytes)
 		{
 			return false;
 		}
 
-		if (!Text.IsEmpty())
+		if (PayloadBytes > 0)
 		{
-			InputMessages.Enqueue(Text);
+			TArray<uint8> Payload;
+			Payload.Append(reinterpret_cast<const uint8*>(Utf8Message.Get()), PayloadBytes);
+			InputMessages.Enqueue(MoveTemp(Payload));
+			PendingInputBytes += PayloadBytes;
 		}
 		return true;
 	}
@@ -383,25 +429,47 @@ private:
 
 	void WritePendingInput()
 	{
-		FString Message;
-		while (InputMessages.Dequeue(Message))
+		for (;;)
 		{
-			FTCHARToUTF8 Utf8Message(*Message);
-			int32 Offset = 0;
-			while (Offset < Utf8Message.Length())
+			TArray<uint8> Message;
 			{
+				FScopeLock Lock(&StateMutex);
+				if (State != EWorkerState::Active || !InputMessages.Dequeue(Message))
+				{
+					return;
+				}
+			}
+			int32 Offset = 0;
+			while (Offset < Message.Num())
+			{
+				{
+					FScopeLock Lock(&StateMutex);
+					if (State != EWorkerState::Active)
+					{
+						PendingInputBytes -= Message.Num() - Offset;
+						return;
+					}
+				}
 				int32 BytesWritten = 0;
 				const bool bWriteSucceeded = FPlatformProcess::WritePipe(
 					ProcessInputPipe.NativeHandle(),
-					reinterpret_cast<const uint8*>(Utf8Message.Get()) + Offset,
-					Utf8Message.Length() - Offset,
+					Message.GetData() + Offset,
+					Message.Num() - Offset,
 					&BytesWritten);
 				if (!bWriteSucceeded || BytesWritten <= 0)
 				{
+					{
+						FScopeLock Lock(&StateMutex);
+						PendingInputBytes -= Message.Num() - Offset;
+					}
 					UE_LOG(LogBertaProcessBridge, Verbose, TEXT("The child process stopped accepting stdin."));
 					return;
 				}
 				Offset += BytesWritten;
+			{
+				FScopeLock Lock(&StateMutex);
+				PendingInputBytes -= BytesWritten;
+			}
 			}
 		}
 	}
@@ -412,6 +480,12 @@ private:
 		double DurationSeconds = 0.0;
 		{
 			FScopeLock Lock(&StateMutex);
+			TArray<uint8> DiscardedInput;
+			while (InputMessages.Dequeue(DiscardedInput))
+			{
+				PendingInputBytes -= DiscardedInput.Num();
+			}
+			check(PendingInputBytes == 0);
 			TerminalDurationSeconds = FPlatformTime::Seconds() - StartTimeSeconds;
 			DurationSeconds = TerminalDurationSeconds;
 			State = EWorkerState::Terminal;
@@ -433,8 +507,9 @@ private:
 	UE::HAL::FOutputPipe ProcessInputPipe;
 	UE::HAL::FProcess Process;
 	FRunnableThread* Thread = nullptr;
-	TQueue<FString, EQueueMode::Mpsc> InputMessages;
+	TQueue<TArray<uint8>, EQueueMode::Mpsc> InputMessages;
 	mutable FCriticalSection StateMutex;
+	int32 PendingInputBytes = 0;
 	EWorkerState State = EWorkerState::NotStarted;
 	bool bShouldKillTree = false;
 	double StartTimeSeconds = 0.0;

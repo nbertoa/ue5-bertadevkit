@@ -53,11 +53,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "BertaProcessBridge|Process", meta = (ReturnDisplayName = "Has Result"))
 	bool TryGetResult(FBertaProcessResult& OutResult) const;
 
-	/** Queues exactly Text for stdin. No line terminator is added. */
+	/** Accepts Text for queued stdin delivery if capacity permits; true does not mean delivered. No terminator is added. */
 	UFUNCTION(BlueprintCallable, Category = "BertaProcessBridge|Process|Input")
 	bool SendString(const FString& Text);
 
-	/** Queues Line followed by exactly one platform line terminator for stdin. */
+	/** Accepts Line and one platform line terminator for queued stdin delivery if capacity permits. */
 	UFUNCTION(BlueprintCallable, Category = "BertaProcessBridge|Process|Input")
 	bool SendLine(const FString& Line);
 
