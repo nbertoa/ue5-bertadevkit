@@ -627,9 +627,9 @@ void UBertaVideoPlayerWidget::HandleEndReached()
 
 	bTerminal = true;
 	PlaybackState = EPlaybackState::Closed;
-	OnPlaybackCompleted.Broadcast(this);
 	CleanupMediaResources();
 	ResetVisuals();
+	OnPlaybackCompleted.Broadcast(this);
 	if (Options.bRemoveOnCompletion)
 	{
 		RemoveFromParent();

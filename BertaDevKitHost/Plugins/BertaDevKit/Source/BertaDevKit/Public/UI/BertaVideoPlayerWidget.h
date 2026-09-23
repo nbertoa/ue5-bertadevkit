@@ -88,7 +88,7 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "BertaDevKit|UI|Video")
 	FBertaVideoPlaybackEvent OnPlaybackStarted;
 
-	/** Broadcast once on terminal natural completion; not emitted for individual loops. */
+	/** Broadcast once on terminal natural completion, after owned media, audio, and pause are released; not emitted for loops. */
 	UPROPERTY(BlueprintAssignable, Category = "BertaDevKit|UI|Video")
 	FBertaVideoPlaybackEvent OnPlaybackCompleted;
 
