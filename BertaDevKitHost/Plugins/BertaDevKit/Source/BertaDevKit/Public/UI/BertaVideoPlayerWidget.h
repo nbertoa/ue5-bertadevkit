@@ -37,7 +37,7 @@ struct BERTADEVKIT_API FBertaVideoPlaybackOptions
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Video|Transitions", meta = (ClampMin = "0.0", EditCondition = "bUseStartFade"))
 	float StartFadeDuration = 0.5f;
 
-	/** Hide the completed video, fade the level to black, then reveal it again. */
+	/** Fade the final portion of the video to black before natural completion, then reveal the level. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Video|Transitions")
 	bool bUseEndFade = false;
 
@@ -121,7 +121,8 @@ private:
 		StartingBehindBlack,
 		FadingInVideo,
 		Playing,
-		FadingOutLevelAtEnd,
+		FadingOutVideoAtEnd,
+		WaitingForEndBehindBlack,
 		FadingInLevel,
 		Closed
 	};
@@ -131,6 +132,7 @@ private:
 	bool AcquireRequestedPause(FString& OutErrorMessage);
 	bool StartRequestedPlayback();
 	bool StartReadyMedia(EPlaybackState StartingState = EPlaybackState::Starting);
+	void TryStartEndFade();
 	void BeginFade(EPlaybackState FadeState, float Duration);
 	void FinishFade();
 	void ResetVisuals();

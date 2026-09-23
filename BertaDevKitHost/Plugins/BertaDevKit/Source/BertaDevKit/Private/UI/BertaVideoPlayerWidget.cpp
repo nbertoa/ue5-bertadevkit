@@ -108,7 +108,9 @@ void UBertaVideoPlayerWidget::NativeTick(const FGeometry& MyGeometry, const floa
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
 
-	const bool bFadingOut = PlaybackState == EPlaybackState::FadingOutLevel || PlaybackState == EPlaybackState::FadingOutLevelAtEnd;
+	TryStartEndFade();
+
+	const bool bFadingOut = PlaybackState == EPlaybackState::FadingOutLevel || PlaybackState == EPlaybackState::FadingOutVideoAtEnd;
 	const bool bFadingIn = PlaybackState == EPlaybackState::FadingInVideo || PlaybackState == EPlaybackState::FadingInLevel;
 	if ((!bFadingOut && !bFadingIn) || !BlackVisual)
 	{
@@ -358,12 +360,37 @@ bool UBertaVideoPlayerWidget::StartRequestedPlayback()
 	return StartReadyMedia();
 }
 
+void UBertaVideoPlayerWidget::TryStartEndFade()
+{
+	if (!Options.bUseEndFade || Options.bLoop || Options.EndFadeDuration <= 0.0f || bTerminal
+		|| (PlaybackState != EPlaybackState::Playing && PlaybackState != EPlaybackState::FadingInVideo)
+		|| !InternalMediaPlayer || !InternalMediaPlayer->IsPlaying())
+	{
+		return;
+	}
+
+	const FTimespan Duration = InternalMediaPlayer->GetDuration();
+	const FTimespan CurrentTime = InternalMediaPlayer->GetTime();
+	if (Duration <= FTimespan::Zero() || CurrentTime < FTimespan::Zero() || CurrentTime > Duration)
+	{
+		return;
+	}
+
+	const double RemainingSeconds = (Duration - CurrentTime).GetTotalSeconds();
+	if (RemainingSeconds <= Options.EndFadeDuration)
+	{
+		TransitionHalfDuration = FMath::Max(0.0f, Options.EndFadeDuration);
+		// A late UI tick uses the remaining media time so black is reached near the natural end.
+		BeginFade(EPlaybackState::FadingOutVideoAtEnd, static_cast<float>(FMath::Max(0.0, RemainingSeconds)));
+	}
+}
+
 void UBertaVideoPlayerWidget::BeginFade(const EPlaybackState FadeState, const float Duration)
 {
 	PlaybackState = FadeState;
 	ActiveFadeDuration = FMath::Max(0.0f, Duration);
-	const bool bFadingOut = FadeState == EPlaybackState::FadingOutLevel || FadeState == EPlaybackState::FadingOutLevelAtEnd;
-	FadeStartOpacity = FadeState == EPlaybackState::FadingOutLevelAtEnd ? BlackVisual->GetRenderOpacity() : (bFadingOut ? 0.0f : 1.0f);
+	const bool bFadingOut = FadeState == EPlaybackState::FadingOutLevel || FadeState == EPlaybackState::FadingOutVideoAtEnd;
+	FadeStartOpacity = FadeState == EPlaybackState::FadingOutVideoAtEnd ? BlackVisual->GetRenderOpacity() : (bFadingOut ? 0.0f : 1.0f);
 	FadeEndOpacity = bFadingOut ? 1.0f : 0.0f;
 	BlackVisual->SetRenderOpacity(FadeStartOpacity);
 	if (ActiveFadeDuration <= 0.0f)
@@ -392,15 +419,9 @@ void UBertaVideoPlayerWidget::FinishFade()
 		PlaybackState = EPlaybackState::Playing;
 		break;
 
-	case EPlaybackState::FadingOutLevelAtEnd:
-		bTerminal = true;
-		PlaybackState = EPlaybackState::FadingInLevel;
-		CleanupMediaResources();
-		OnPlaybackCompleted.Broadcast(this);
-		if (PlaybackState == EPlaybackState::FadingInLevel)
-		{
-			BeginFade(EPlaybackState::FadingInLevel, TransitionHalfDuration);
-		}
+	case EPlaybackState::FadingOutVideoAtEnd:
+		PlaybackState = EPlaybackState::WaitingForEndBehindBlack;
+		VideoImage->SetVisibility(ESlateVisibility::Hidden);
 		break;
 
 	case EPlaybackState::FadingInLevel:
@@ -588,7 +609,7 @@ void UBertaVideoPlayerWidget::HandlePlaybackResumed()
 
 void UBertaVideoPlayerWidget::HandleEndReached()
 {
-	if (bTerminal || bLoopSeekPending || (PlaybackState != EPlaybackState::Starting && PlaybackState != EPlaybackState::StartingBehindBlack && PlaybackState != EPlaybackState::FadingInVideo && PlaybackState != EPlaybackState::Playing))
+	if (bTerminal || bLoopSeekPending || (PlaybackState != EPlaybackState::Starting && PlaybackState != EPlaybackState::StartingBehindBlack && PlaybackState != EPlaybackState::FadingInVideo && PlaybackState != EPlaybackState::Playing && PlaybackState != EPlaybackState::FadingOutVideoAtEnd && PlaybackState != EPlaybackState::WaitingForEndBehindBlack))
 	{
 		return;
 	}
@@ -612,17 +633,17 @@ void UBertaVideoPlayerWidget::HandleEndReached()
 	if (Options.bUseEndFade)
 	{
 		TransitionHalfDuration = FMath::Max(0.0f, Options.EndFadeDuration);
-		if (InternalExternalAudio)
-		{
-			InternalExternalAudio->Stop();
-		}
-		if (InternalMediaSound)
-		{
-			InternalMediaSound->Stop();
-		}
-		// The backend may have cleared its final sample; fade the level instead.
+		// Cover any final sample or backend clear before hiding the video.
+		BlackVisual->SetRenderOpacity(1.0f);
 		VideoImage->SetVisibility(ESlateVisibility::Hidden);
-		BeginFade(EPlaybackState::FadingOutLevelAtEnd, TransitionHalfDuration);
+		bTerminal = true;
+		PlaybackState = EPlaybackState::FadingInLevel;
+		CleanupMediaResources();
+		OnPlaybackCompleted.Broadcast(this);
+		if (PlaybackState == EPlaybackState::FadingInLevel)
+		{
+			BeginFade(EPlaybackState::FadingInLevel, TransitionHalfDuration);
+		}
 		return;
 	}
 
