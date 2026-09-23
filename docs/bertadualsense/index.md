@@ -85,6 +85,8 @@ BertaDualSense uses SDL3's PS5 effect path for trigger output, not trigger rumbl
 
 BertaDualSense polls SDL gamepads explicitly and does not use SDL's event queue. On connection it registers and maps a UE input device. An SDL serial, when available, is the persistent signal used to reuse its `FInputDeviceId` on reconnect during the plugin's lifetime. Without a serial, a reconnect receives a new UE device ID to avoid falsely identifying another controller.
 
+If opening a supported controller fails transiently, BertaDualSense retries after a cooldown while it remains present; recovery does not require unplugging it.
+
 Disconnect and shutdown release held buttons, clear analog/touch state, clear active trigger output, stop rumble, disable enabled sensors, unmap the UE device, and close the SDL gamepad. A reconnect starts with neutral cached input and output state.
 
 ## Windows coexistence and duplicate input

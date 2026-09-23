@@ -14,6 +14,10 @@
 #include "Misc/Paths.h"
 #include "SDL3/SDL.h"
 
+#if WITH_DEV_AUTOMATION_TESTS
+#include "Misc/AutomationTest.h"
+#endif
+
 DEFINE_LOG_CATEGORY_STATIC(LogBertaDualSense, Log, All);
 
 namespace
@@ -29,6 +33,7 @@ namespace
 	constexpr int32 RightStickDeadZone = 8689;
 	constexpr float TriggerThreshold = 30.0f / 255.0f;
 	constexpr Uint32 RumbleDurationMilliseconds = 1000;
+	constexpr double OpenRetryCooldownSeconds = 1.5;
 	constexpr int32 NumEdgeButtons = 4;
 	constexpr int32 TriggerEffectSize = 11;
 	constexpr Uint8 EnableRightTrigger = 0x04;
@@ -96,6 +101,47 @@ namespace
 	{
 		return VendorId == SonyVendorId && (ProductId == DualSenseProductId || ProductId == DualSenseEdgeProductId);
 	}
+
+	struct FOpenRetryState
+	{
+		double NextAttemptSeconds = 0.0;
+		bool bInitialFailureLogged = false;
+	};
+
+	struct FOpenRetryPolicy
+	{
+		bool CanAttempt(const SDL_JoystickID InstanceId, const double NowSeconds) const
+		{
+			const FOpenRetryState* State = Retries.Find(InstanceId);
+			return State == nullptr || NowSeconds >= State->NextAttemptSeconds;
+		}
+
+		bool RecordFailure(const SDL_JoystickID InstanceId, const double NowSeconds)
+		{
+			FOpenRetryState& State = Retries.FindOrAdd(InstanceId);
+			const bool bLogInitialFailure = !State.bInitialFailureLogged;
+			State.bInitialFailureLogged = true;
+			State.NextAttemptSeconds = NowSeconds + OpenRetryCooldownSeconds;
+			return bLogInitialFailure;
+		}
+
+		void Forget(const SDL_JoystickID InstanceId) { Retries.Remove(InstanceId); }
+		void Reset() { Retries.Reset(); }
+
+		void RemoveNoLongerPresent(const TSet<SDL_JoystickID>& PresentGamepads)
+		{
+			for (auto It = Retries.CreateIterator(); It; ++It)
+			{
+				if (!PresentGamepads.Contains(It.Key()))
+				{
+					It.RemoveCurrent();
+				}
+			}
+		}
+
+	private:
+		TMap<SDL_JoystickID, FOpenRetryState> Retries;
+	};
 
 	FName GetHardwareDeviceIdentifier(const Uint16 ProductId)
 	{
@@ -172,7 +218,7 @@ class FBertaDualSenseInputDevice final : public IInputDevice
 
 			bShutdown = true;
 			DisconnectAllDevices();
-			OpenFailures.Empty();
+			OpenRetries.Reset();
 			UnavailableIdentityLogged.Empty();
 			bGamepadEnumerationFailureLogged = false;
 		}
@@ -234,7 +280,8 @@ class FBertaDualSenseInputDevice final : public IInputDevice
 					continue;
 				}
 
-				if (IsSupportedDualSense(VendorId, ProductId) && !OpenFailures.Contains(InstanceId))
+			if (IsSupportedDualSense(VendorId, ProductId)
+				&& OpenRetries.CanAttempt(InstanceId, FPlatformTime::Seconds()))
 				{
 					ConnectDevice(InstanceId, VendorId, ProductId);
 				}
@@ -242,7 +289,7 @@ class FBertaDualSenseInputDevice final : public IInputDevice
 
 			SDL_free(GamepadIds);
 
-			RemoveNoLongerPresent(OpenFailures, PresentGamepads);
+			OpenRetries.RemoveNoLongerPresent(PresentGamepads);
 			RemoveNoLongerPresent(UnavailableIdentityLogged, PresentGamepads);
 		}
 		virtual void SendControllerEvents() override
@@ -601,17 +648,21 @@ class FBertaDualSenseInputDevice final : public IInputDevice
 			const double OpenDurationMilliseconds = (FPlatformTime::Seconds() - OpenStartTime) * 1000.0;
 			if (!Gamepad)
 			{
-				OpenFailures.Add(InstanceId);
-				UE_LOG(LogBertaDualSense, Error, TEXT("Failed to open DualSense SDL instance %u after %.3f ms: %s"), InstanceId, OpenDurationMilliseconds, UTF8_TO_TCHAR(SDL_GetError()));
+				if (OpenRetries.RecordFailure(InstanceId, FPlatformTime::Seconds()))
+				{
+					UE_LOG(LogBertaDualSense, Warning, TEXT("Failed to open DualSense SDL instance %u after %.3f ms; retrying while present: %s"), InstanceId, OpenDurationMilliseconds, UTF8_TO_TCHAR(SDL_GetError()));
+				}
 				return;
 			}
 
 			const SDL_JoystickID OpenedInstanceId = SDL_GetGamepadID(Gamepad);
 			if (OpenedInstanceId != InstanceId)
 			{
-				OpenFailures.Add(InstanceId);
 				SDL_CloseGamepad(Gamepad);
-				UE_LOG(LogBertaDualSense, Error, TEXT("SDL opened DualSense instance %u as instance %u; ignoring the inconsistent handle."), InstanceId, OpenedInstanceId);
+				if (OpenRetries.RecordFailure(InstanceId, FPlatformTime::Seconds()))
+				{
+					UE_LOG(LogBertaDualSense, Warning, TEXT("SDL opened DualSense instance %u as instance %u; retrying while present."), InstanceId, OpenedInstanceId);
+				}
 				return;
 			}
 
@@ -631,9 +682,14 @@ class FBertaDualSenseInputDevice final : public IInputDevice
 			if (!ensure(DeviceMapper.Internal_MapInputDeviceToUser(InputDeviceId, PlatformUserId, EInputDeviceConnectionState::Connected)))
 			{
 				SDL_CloseGamepad(Gamepad);
+				if (OpenRetries.RecordFailure(InstanceId, FPlatformTime::Seconds()))
+				{
+					UE_LOG(LogBertaDualSense, Warning, TEXT("Failed to map DualSense SDL instance %u to InputDeviceId %d; retrying while present."), InstanceId, InputDeviceId.GetId());
+				}
 				return;
 			}
 
+			OpenRetries.Forget(InstanceId);
 			FConnectedDualSense& ConnectedDevice = ConnectedDevices.Add(InstanceId);
 			ConnectedDevice.Gamepad = Gamepad;
 			ConnectedDevice.InputDeviceId = InputDeviceId;
@@ -768,7 +824,7 @@ class FBertaDualSenseInputDevice final : public IInputDevice
 		TSharedRef<FGenericApplicationMessageHandler> MessageHandler;
 		TInputDeviceMap<FString> PersistentDeviceIds;
 		TMap<SDL_JoystickID, FConnectedDualSense> ConnectedDevices;
-		TSet<SDL_JoystickID> OpenFailures;
+		FOpenRetryPolicy OpenRetries;
 		TSet<SDL_JoystickID> UnavailableIdentityLogged;
 		float InitialButtonRepeatDelay = 0.2f;
 		float ButtonRepeatDelay = 0.1f;
@@ -902,3 +958,39 @@ bool FBertaDualSenseModule::SetLightColorForDevice(const FBertaDualSenseDeviceHa
 bool FBertaDualSenseModule::ResetLightColorForDevice(const FBertaDualSenseDeviceHandle& Device) { return SetLightColorForDevice(Device,FColor::Black); }
 bool FBertaDualSenseModule::SetMicrophoneLedForDevice(const FBertaDualSenseDeviceHandle& Device,bool bEnabled) { for(const TWeakPtr<FBertaDualSenseInputDevice>& Weak:CreatedInputDevices)if(const TSharedPtr<FBertaDualSenseInputDevice> Input=Weak.Pin())if(Input->IsDeviceConnected(Device))return Input->SetMicrophoneLedForDevice(Device,bEnabled);return false; }
 IMPLEMENT_MODULE(FBertaDualSenseModule, BertaDualSense)
+
+#if WITH_DEV_AUTOMATION_TESTS
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FBertaDualSenseOpenRetryTest,
+	"BertaDualSense.Connection.OpenRetryPolicy",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FBertaDualSenseOpenRetryTest::RunTest(const FString& Parameters)
+{
+	FOpenRetryPolicy Retries;
+	constexpr SDL_JoystickID FirstId = 10;
+	constexpr SDL_JoystickID SecondId = 11;
+	constexpr double StartSeconds = 100.0;
+
+	TestTrue(TEXT("First attempt is immediate"), Retries.CanAttempt(FirstId, StartSeconds));
+	TestTrue(TEXT("First failure is logged"), Retries.RecordFailure(FirstId, StartSeconds));
+	TestFalse(TEXT("Retry is blocked before deadline"), Retries.CanAttempt(FirstId, StartSeconds + OpenRetryCooldownSeconds - 0.001));
+	TestTrue(TEXT("Other IDs remain eligible"), Retries.CanAttempt(SecondId, StartSeconds));
+	TestTrue(TEXT("Retry is allowed at deadline"), Retries.CanAttempt(FirstId, StartSeconds + OpenRetryCooldownSeconds));
+	TestFalse(TEXT("Repeated failure does not log again"), Retries.RecordFailure(FirstId, StartSeconds + OpenRetryCooldownSeconds));
+	TestFalse(TEXT("Second failure starts another cooldown"), Retries.CanAttempt(FirstId, StartSeconds + 2.0 * OpenRetryCooldownSeconds - 0.001));
+	TestTrue(TEXT("Second cooldown expires"), Retries.CanAttempt(FirstId, StartSeconds + 2.0 * OpenRetryCooldownSeconds));
+
+	Retries.Forget(FirstId);
+	TestTrue(TEXT("Success clears retry state"), Retries.CanAttempt(FirstId, StartSeconds));
+	Retries.RecordFailure(FirstId, StartSeconds);
+	Retries.RecordFailure(SecondId, StartSeconds);
+	TSet<SDL_JoystickID> PresentGamepads;
+	PresentGamepads.Add(SecondId);
+	Retries.RemoveNoLongerPresent(PresentGamepads);
+	TestTrue(TEXT("Removal clears retry state"), Retries.CanAttempt(FirstId, StartSeconds));
+	TestFalse(TEXT("Present ID retains its cooldown"), Retries.CanAttempt(SecondId, StartSeconds));
+	Retries.Reset();
+	TestTrue(TEXT("Shutdown clears retry state"), Retries.CanAttempt(SecondId, StartSeconds));
+	return true;
+}
+#endif
