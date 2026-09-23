@@ -108,7 +108,7 @@ void UBertaVideoPlayerWidget::NativeTick(const FGeometry& MyGeometry, const floa
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
 
-	const bool bFadingOut = PlaybackState == EPlaybackState::FadingOutLevel || PlaybackState == EPlaybackState::FadingOutVideo;
+	const bool bFadingOut = PlaybackState == EPlaybackState::FadingOutLevel || PlaybackState == EPlaybackState::FadingOutLevelAtEnd;
 	const bool bFadingIn = PlaybackState == EPlaybackState::FadingInVideo || PlaybackState == EPlaybackState::FadingInLevel;
 	if ((!bFadingOut && !bFadingIn) || !BlackVisual)
 	{
@@ -237,8 +237,7 @@ bool UBertaVideoPlayerWidget::CreateMediaResources(FString& OutErrorMessage)
 	InternalMediaPlayer->OnEndReached.AddDynamic(this, &ThisClass::HandleEndReached);
 	InternalMediaPlayer->OnSeekCompleted.AddDynamic(this, &ThisClass::HandleSeekCompleted);
 
-	// Retain the last rendered sample until the end fade has covered it.
-	InternalMediaTexture->AutoClear = !Options.bUseEndFade;
+	InternalMediaTexture->AutoClear = true;
 	InternalMediaTexture->ClearColor = FLinearColor::Black;
 	InternalMediaTexture->SetMediaPlayer(InternalMediaPlayer);
 	InternalMediaTexture->UpdateResource();
@@ -363,8 +362,8 @@ void UBertaVideoPlayerWidget::BeginFade(const EPlaybackState FadeState, const fl
 {
 	PlaybackState = FadeState;
 	ActiveFadeDuration = FMath::Max(0.0f, Duration);
-	const bool bFadingOut = FadeState == EPlaybackState::FadingOutLevel || FadeState == EPlaybackState::FadingOutVideo;
-	FadeStartOpacity = FadeState == EPlaybackState::FadingOutVideo ? BlackVisual->GetRenderOpacity() : (bFadingOut ? 0.0f : 1.0f);
+	const bool bFadingOut = FadeState == EPlaybackState::FadingOutLevel || FadeState == EPlaybackState::FadingOutLevelAtEnd;
+	FadeStartOpacity = FadeState == EPlaybackState::FadingOutLevelAtEnd ? BlackVisual->GetRenderOpacity() : (bFadingOut ? 0.0f : 1.0f);
 	FadeEndOpacity = bFadingOut ? 1.0f : 0.0f;
 	BlackVisual->SetRenderOpacity(FadeStartOpacity);
 	if (ActiveFadeDuration <= 0.0f)
@@ -393,7 +392,7 @@ void UBertaVideoPlayerWidget::FinishFade()
 		PlaybackState = EPlaybackState::Playing;
 		break;
 
-	case EPlaybackState::FadingOutVideo:
+	case EPlaybackState::FadingOutLevelAtEnd:
 		bTerminal = true;
 		PlaybackState = EPlaybackState::FadingInLevel;
 		CleanupMediaResources();
@@ -621,7 +620,9 @@ void UBertaVideoPlayerWidget::HandleEndReached()
 		{
 			InternalMediaSound->Stop();
 		}
-		BeginFade(EPlaybackState::FadingOutVideo, TransitionHalfDuration);
+		// The backend may have cleared its final sample; fade the level instead.
+		VideoImage->SetVisibility(ESlateVisibility::Hidden);
+		BeginFade(EPlaybackState::FadingOutLevelAtEnd, TransitionHalfDuration);
 		return;
 	}
 
