@@ -83,12 +83,15 @@ private:
 	};
 
 	TArray<FExecutionRecord> Executions;
+	uint32 ExecutionsGeneration = 0;
+	TArray<FBertaComboGraphInputBufferEvent> PendingDiagnostics;
 	TWeakObjectPtr<UEnhancedInputComponent> BoundInputComponent;
 	TArray<uint32> InputBindingHandles;
 	FDelegateHandle StartedHandle;
 	FDelegateHandle EndedHandle;
 	FTimerHandle SamplingTimer;
 	bool bBuffering = false;
+	bool bDispatchingDiagnostics = false;
 
 	void HandleGraphStarted(const UComboGraphAbilityTask_StartGraph& Task, const UComboGraph& Graph);
 	void HandleGraphEnded(const UComboGraphAbilityTask_StartGraph& Task, const UComboGraph& Graph);
@@ -96,9 +99,11 @@ private:
 	void SampleExecutions();
 	void RebuildBindings();
 	void RemoveBindings();
-	void ConsumeBufferedInput(FExecutionRecord& Record, float Now);
+	bool ConsumeBufferedInput(FExecutionRecord& Record, float Now);
 	void ClearRecord(FExecutionRecord& Record, const TCHAR* Reason);
-	void BroadcastDiagnostic(EBertaComboGraphInputBufferEventType Type, const FExecutionRecord* Record, const UInputAction* Action, const TCHAR* Reason);
+	FBertaComboGraphInputBufferEvent MakeDiagnostic(EBertaComboGraphInputBufferEventType Type, const FExecutionRecord* Record, const UInputAction* Action, const TCHAR* Reason) const;
+	void QueueDiagnostic(EBertaComboGraphInputBufferEventType Type, const FExecutionRecord* Record, const UInputAction* Action, const TCHAR* Reason);
+	void DispatchDiagnostics();
 	bool IsTaskForOwner(const UComboGraphAbilityTask_StartGraph& Task) const;
 	static bool NodeAcceptsTriggeredAction(const UComboGraphNodeAnimBase* Node, const UInputAction* Action);
 	static FString ExecutionId(const FExecutionRecord* Record);

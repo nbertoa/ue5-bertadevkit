@@ -36,18 +36,21 @@ bool UBertaComboGraphInputBufferComponent::StartBuffering()
 void UBertaComboGraphInputBufferComponent::StopBuffering()
 {
 	if (!bBuffering) return;
+	bBuffering = false;
 	FComboGraphDelegates::OnComboGraphStarted.Remove(StartedHandle);
 	FComboGraphDelegates::OnComboGraphEnded.Remove(EndedHandle);
 	RemoveBindings();
 	for (FExecutionRecord& Record : Executions) ClearRecord(Record, TEXT("Buffering stopped"));
 	Executions.Reset();
+	++ExecutionsGeneration;
 	if (UWorld* World = GetWorld()) World->GetTimerManager().ClearTimer(SamplingTimer);
-	bBuffering = false;
+	DispatchDiagnostics();
 }
 
 void UBertaComboGraphInputBufferComponent::ClearBufferedInputs()
 {
 	for (FExecutionRecord& Record : Executions) ClearRecord(Record, TEXT("Explicit clear"));
+	DispatchDiagnostics();
 }
 
 void UBertaComboGraphInputBufferComponent::EndPlay(const EEndPlayReason::Type Reason) { StopBuffering(); Super::EndPlay(Reason); }
@@ -73,7 +76,7 @@ FString UBertaComboGraphInputBufferComponent::ExecutionId(const FExecutionRecord
 	return Record ? FString::Printf(TEXT("%s|%s"), *GetPathNameSafe(Record->Task.Get()), *GetPathNameSafe(Record->Graph.Get())) : TEXT("None");
 }
 
-void UBertaComboGraphInputBufferComponent::BroadcastDiagnostic(const EBertaComboGraphInputBufferEventType Type, const FExecutionRecord* Record, const UInputAction* Action, const TCHAR* Reason)
+FBertaComboGraphInputBufferEvent UBertaComboGraphInputBufferComponent::MakeDiagnostic(const EBertaComboGraphInputBufferEventType Type, const FExecutionRecord* Record, const UInputAction* Action, const TCHAR* Reason) const
 {
 	FBertaComboGraphInputBufferEvent Event;
 	Event.Type = Type;
@@ -82,13 +85,33 @@ void UBertaComboGraphInputBufferComponent::BroadcastDiagnostic(const EBertaCombo
 	Event.NodePath = Record ? GetPathNameSafe(Record->Node.Get()) : TEXT("None");
 	Event.TimestampSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
 	Event.Reason = Reason;
-	OnInputBufferDiagnostic.Broadcast(Event);
+	return Event;
+}
+
+void UBertaComboGraphInputBufferComponent::QueueDiagnostic(const EBertaComboGraphInputBufferEventType Type, const FExecutionRecord* Record, const UInputAction* Action, const TCHAR* Reason)
+{
+	PendingDiagnostics.Add(MakeDiagnostic(Type, Record, Action, Reason));
+}
+
+void UBertaComboGraphInputBufferComponent::DispatchDiagnostics()
+{
+	if (bDispatchingDiagnostics) return;
+	bDispatchingDiagnostics = true;
+	while (!PendingDiagnostics.IsEmpty())
+	{
+		// Reentrant diagnostics append behind the snapshots already waiting in the queue.
+		FBertaComboGraphInputBufferEvent Event = MoveTemp(PendingDiagnostics[0]);
+		PendingDiagnostics.RemoveAt(0, 1, EAllowShrinking::No);
+		OnInputBufferDiagnostic.Broadcast(Event);
+	}
+	bDispatchingDiagnostics = false;
 }
 
 void UBertaComboGraphInputBufferComponent::HandleGraphStarted(const UComboGraphAbilityTask_StartGraph& Task, const UComboGraph& Graph)
 {
 	if (!bBuffering || !IsTaskForOwner(Task)) return;
 	FExecutionRecord& Record = Executions.AddDefaulted_GetRef();
+	++ExecutionsGeneration;
 	Record.Task = const_cast<UComboGraphAbilityTask_StartGraph*>(&Task);
 	Record.Graph = const_cast<UComboGraph*>(&Graph);
 	Record.Node = Task.GetCurrentNode();
@@ -108,10 +131,12 @@ void UBertaComboGraphInputBufferComponent::HandleGraphEnded(const UComboGraphAbi
 		{
 			ClearRecord(Executions[Index], TEXT("Graph ended"));
 			Executions.RemoveAt(Index);
+			++ExecutionsGeneration;
 		}
 	}
 	RebuildBindings();
 	if (Executions.IsEmpty()) if (UWorld* World = GetWorld()) World->GetTimerManager().ClearTimer(SamplingTimer);
+	DispatchDiagnostics();
 }
 
 bool UBertaComboGraphInputBufferComponent::NodeAcceptsTriggeredAction(const UComboGraphNodeAnimBase* Node, const UInputAction* Action)
@@ -137,7 +162,8 @@ void UBertaComboGraphInputBufferComponent::HandleTriggeredInput(const FInputActi
 	}
 	if (Candidates.Num() != 1)
 	{
-		BroadcastDiagnostic(EBertaComboGraphInputBufferEventType::Rejected, nullptr, Action, Candidates.IsEmpty() ? TEXT("No closed-window execution accepts this Triggered action") : TEXT("Action is ambiguous across active executions"));
+		QueueDiagnostic(EBertaComboGraphInputBufferEventType::Rejected, nullptr, Action, Candidates.IsEmpty() ? TEXT("No closed-window execution accepts this Triggered action") : TEXT("Action is ambiguous across active executions"));
+		DispatchDiagnostics();
 		return;
 	}
 	FExecutionRecord& Record = Executions[Candidates[0]];
@@ -152,11 +178,12 @@ void UBertaComboGraphInputBufferComponent::HandleTriggeredInput(const FInputActi
 		const int32 RemoveCount = Record.Inputs.Num() - Limit;
 		for (int32 Index = 0; Index < RemoveCount; ++Index)
 		{
-			BroadcastDiagnostic(EBertaComboGraphInputBufferEventType::Cleared, &Record, Record.Inputs[Index].Action.Get(), TEXT("Buffer capacity evicted oldest input"));
+			QueueDiagnostic(EBertaComboGraphInputBufferEventType::Cleared, &Record, Record.Inputs[Index].Action.Get(), TEXT("Buffer capacity evicted oldest input"));
 		}
 		Record.Inputs.RemoveAt(0, RemoveCount, EAllowShrinking::No);
 	}
-	BroadcastDiagnostic(EBertaComboGraphInputBufferEventType::Buffered, &Record, Action, TEXT("Triggered input captured while Combo Window was closed"));
+	QueueDiagnostic(EBertaComboGraphInputBufferEventType::Buffered, &Record, Action, TEXT("Triggered input captured while Combo Window was closed"));
+	DispatchDiagnostics();
 }
 
 void UBertaComboGraphInputBufferComponent::SampleExecutions()
@@ -171,6 +198,7 @@ void UBertaComboGraphInputBufferComponent::SampleExecutions()
 		{
 			ClearRecord(Record, TEXT("Task became invalid"));
 			Executions.RemoveAt(Index);
+			++ExecutionsGeneration;
 			bBindingsDirty = true;
 			continue;
 		}
@@ -178,7 +206,7 @@ void UBertaComboGraphInputBufferComponent::SampleExecutions()
 		{
 			if (IsExpired(Record.Inputs[InputIndex].Timestamp, Now, BufferDurationSeconds))
 			{
-				BroadcastDiagnostic(EBertaComboGraphInputBufferEventType::Expired, &Record, Record.Inputs[InputIndex].Action.Get(), TEXT("Buffer duration elapsed"));
+				QueueDiagnostic(EBertaComboGraphInputBufferEventType::Expired, &Record, Record.Inputs[InputIndex].Action.Get(), TEXT("Buffer duration elapsed"));
 				Record.Inputs.RemoveAt(InputIndex);
 			}
 		}
@@ -198,15 +226,28 @@ void UBertaComboGraphInputBufferComponent::SampleExecutions()
 		}
 		else if (bNowOpen && Record.bConsumePending)
 		{
+			Record.bConsumePending = false;
+			Record.bWindowOpen = bNowOpen;
 			if (Task->GetQueuedNode())
 			{
 				ClearRecord(Record, TEXT("Combo Graph accepted direct input before buffered replay"));
 			}
 			else
 			{
-				ConsumeBufferedInput(Record, Now);
+				const uint32 GenerationBeforeDelivery = ExecutionsGeneration;
+				if (ConsumeBufferedInput(Record, Now))
+				{
+					// Delivery can synchronously change Executions. Resume this pass only if its indices remain valid.
+					if (!bBuffering || ExecutionsGeneration != GenerationBeforeDelivery)
+					{
+						if (bBindingsDirty && bBuffering) RebuildBindings();
+						if (Executions.IsEmpty()) if (UWorld* World = GetWorld()) World->GetTimerManager().ClearTimer(SamplingTimer);
+						DispatchDiagnostics();
+						return;
+					}
+				}
 			}
-			Record.bConsumePending = false;
+			continue;
 		}
 		else if (!bNowOpen)
 		{
@@ -216,37 +257,41 @@ void UBertaComboGraphInputBufferComponent::SampleExecutions()
 	}
 	if (bBindingsDirty) RebuildBindings();
 	if (Executions.IsEmpty()) if (UWorld* World = GetWorld()) World->GetTimerManager().ClearTimer(SamplingTimer);
+	DispatchDiagnostics();
 }
 
-void UBertaComboGraphInputBufferComponent::ConsumeBufferedInput(FExecutionRecord& Record, const float Now)
+bool UBertaComboGraphInputBufferComponent::ConsumeBufferedInput(FExecutionRecord& Record, const float Now)
 {
 	TArray<float> CaptureTimes;
 	CaptureTimes.Reserve(Record.Inputs.Num());
 	for (const FBufferedInput& Input : Record.Inputs) CaptureTimes.Add(Input.Timestamp);
 	const int32 SelectedIndex = BertaComboGraphInputBufferRules::SelectOldestUnexpired(CaptureTimes, Now, BufferDurationSeconds);
-	if (SelectedIndex == INDEX_NONE) return;
+	if (SelectedIndex == INDEX_NONE) return false;
 	const UInputAction* Action = Record.Inputs[SelectedIndex].Action.Get();
-	if (!Action || Record.Inputs[SelectedIndex].Node.Get() != Record.Node.Get()) { ClearRecord(Record, TEXT("Buffered input no longer belongs to current node")); return; }
+	if (!Action || Record.Inputs[SelectedIndex].Node.Get() != Record.Node.Get()) { ClearRecord(Record, TEXT("Buffered input no longer belongs to current node")); return false; }
 	UComboGraphGameplayTasksComponent* TasksComponent = GetOwner() ? GetOwner()->FindComponentByClass<UComboGraphGameplayTasksComponent>() : nullptr;
 	if (!TasksComponent)
 	{
-		BroadcastDiagnostic(EBertaComboGraphInputBufferEventType::Rejected, &Record, Action, TEXT("Combo Graph replicated gameplay-event component is unavailable"));
+		QueueDiagnostic(EBertaComboGraphInputBufferEventType::Rejected, &Record, Action, TEXT("Combo Graph replicated gameplay-event component is unavailable"));
 		Record.Inputs.Reset();
-		return;
+		return false;
 	}
 	FGameplayEventData Payload;
 	Payload.EventTag = FComboGraphNativeTags::Get().Input;
 	Payload.Instigator = GetOwner();
 	Payload.Target = GetOwner();
 	Payload.OptionalObject = Action;
-	TasksComponent->SendGameplayEventReplicated(Payload.EventTag, Payload);
-	BroadcastDiagnostic(EBertaComboGraphInputBufferEventType::Consumed, &Record, Action, TEXT("Delivered once through Combo Graph replicated gameplay-event path as Triggered"));
+	FBertaComboGraphInputBufferEvent ConsumedEvent = MakeDiagnostic(EBertaComboGraphInputBufferEventType::Consumed, &Record, Action, TEXT("Delivered once through Combo Graph replicated gameplay-event path as Triggered"));
 	Record.Inputs.Reset();
+	// Combo Graph may synchronously end this execution; only value snapshots remain live after delivery.
+	TasksComponent->SendGameplayEventReplicated(Payload.EventTag, Payload);
+	PendingDiagnostics.Add(MoveTemp(ConsumedEvent));
+	return true;
 }
 
 void UBertaComboGraphInputBufferComponent::ClearRecord(FExecutionRecord& Record, const TCHAR* Reason)
 {
-	if (!Record.Inputs.IsEmpty()) BroadcastDiagnostic(EBertaComboGraphInputBufferEventType::Cleared, &Record, Record.Inputs[0].Action.Get(), Reason);
+	if (!Record.Inputs.IsEmpty()) QueueDiagnostic(EBertaComboGraphInputBufferEventType::Cleared, &Record, Record.Inputs[0].Action.Get(), Reason);
 	Record.Inputs.Reset();
 }
 
