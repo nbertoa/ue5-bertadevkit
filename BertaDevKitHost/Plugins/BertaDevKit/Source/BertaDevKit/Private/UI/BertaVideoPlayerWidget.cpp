@@ -2,10 +2,12 @@
 
 #include "Blueprint/WidgetTree.h"
 #include "Components/AudioComponent.h"
+#include "Components/Border.h"
 #include "Components/Image.h"
 #include "Components/Overlay.h"
 #include "Components/OverlaySlot.h"
 #include "Engine/World.h"
+#include "HAL/PlatformTime.h"
 #include "GameFramework/GameModeBase.h"
 #include "GameFramework/PlayerController.h"
 #include "Log/BertaDevKitLog.h"
@@ -20,6 +22,7 @@ namespace BertaVideoPlayerWidgetPrivate
 {
 const FName RootWidgetName(TEXT("BertaVideoRoot"));
 const FName ImageWidgetName(TEXT("BertaVideoImage"));
+const FName BlackVisualName(TEXT("BertaVideoBlackVisual"));
 }
 
 TSharedRef<SWidget> UBertaVideoPlayerWidget::RebuildWidget()
@@ -30,6 +33,7 @@ TSharedRef<SWidget> UBertaVideoPlayerWidget::RebuildWidget()
 	}
 
 	VideoImage = Cast<UImage>(WidgetTree->FindWidget(BertaVideoPlayerWidgetPrivate::ImageWidgetName));
+	BlackVisual = Cast<UBorder>(WidgetTree->FindWidget(BertaVideoPlayerWidgetPrivate::BlackVisualName));
 	if (!VideoImage)
 	{
 		UWidget* ExistingRoot = WidgetTree->RootWidget;
@@ -59,6 +63,26 @@ TSharedRef<SWidget> UBertaVideoPlayerWidget::RebuildWidget()
 		WidgetTree->RootWidget = RootOverlay;
 	}
 
+	if (!BlackVisual)
+	{
+		UOverlay* RootOverlay = Cast<UOverlay>(WidgetTree->RootWidget);
+		if (RootOverlay)
+		{
+			BlackVisual = WidgetTree->ConstructWidget<UBorder>(
+				UBorder::StaticClass(),
+				BertaVideoPlayerWidgetPrivate::BlackVisualName);
+			BlackVisual->SetBrushColor(FLinearColor::Black);
+			BlackVisual->SetPadding(FMargin(0.0f));
+			BlackVisual->SetVisibility(ESlateVisibility::HitTestInvisible);
+			BlackVisual->SetRenderOpacity(0.0f);
+			if (UOverlaySlot* FadeSlot = RootOverlay->AddChildToOverlay(BlackVisual))
+			{
+				FadeSlot->SetHorizontalAlignment(HAlign_Fill);
+				FadeSlot->SetVerticalAlignment(VAlign_Fill);
+			}
+		}
+	}
+
 	return Super::RebuildWidget();
 }
 
@@ -75,7 +99,29 @@ void UBertaVideoPlayerWidget::NativeConstruct()
 void UBertaVideoPlayerWidget::NativeDestruct()
 {
 	CleanupMediaResources();
+	PlaybackState = bTerminal ? EPlaybackState::Closed : EPlaybackState::Inactive;
+	ResetVisuals();
 	Super::NativeDestruct();
+}
+
+void UBertaVideoPlayerWidget::NativeTick(const FGeometry& MyGeometry, const float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
+
+	const bool bFadingOut = PlaybackState == EPlaybackState::FadingOutLevel || PlaybackState == EPlaybackState::FadingOutVideo;
+	const bool bFadingIn = PlaybackState == EPlaybackState::FadingInVideo || PlaybackState == EPlaybackState::FadingInLevel;
+	if ((!bFadingOut && !bFadingIn) || !BlackVisual)
+	{
+		return;
+	}
+
+	const double ElapsedSeconds = FMath::Max(0.0, FPlatformTime::Seconds() - FadeStartTime);
+	const float Alpha = FMath::Clamp(static_cast<float>(ElapsedSeconds / ActiveFadeDuration), 0.0f, 1.0f);
+	BlackVisual->SetRenderOpacity(FMath::Lerp(FadeStartOpacity, FadeEndOpacity, Alpha));
+	if (Alpha >= 1.0f)
+	{
+		FinishFade();
+	}
 }
 
 bool UBertaVideoPlayerWidget::Play()
@@ -93,9 +139,12 @@ bool UBertaVideoPlayerWidget::Play()
 
 	case EPlaybackState::Ready:
 		bPlayRequested = true;
-		return StartReadyMedia();
+		return StartRequestedPlayback();
 
+	case EPlaybackState::FadingOutLevel:
 	case EPlaybackState::Starting:
+	case EPlaybackState::StartingBehindBlack:
+	case EPlaybackState::FadingInVideo:
 	case EPlaybackState::Playing:
 		return true;
 
@@ -109,6 +158,7 @@ void UBertaVideoPlayerWidget::Close()
 	bTerminal = true;
 	PlaybackState = EPlaybackState::Closed;
 	CleanupMediaResources();
+	ResetVisuals();
 	RemoveFromParent();
 }
 
@@ -124,6 +174,11 @@ bool UBertaVideoPlayerWidget::ActivatePlayback()
 	{
 		FailPlayback(TEXT("The video widget has no valid World context."));
 		return false;
+	}
+
+	if (Options.bUseStartFade && VideoImage)
+	{
+		VideoImage->SetVisibility(ESlateVisibility::Hidden);
 	}
 
 	FString ErrorMessage;
@@ -157,9 +212,9 @@ bool UBertaVideoPlayerWidget::ActivatePlayback()
 bool UBertaVideoPlayerWidget::CreateMediaResources(FString& OutErrorMessage)
 {
 	OutErrorMessage.Reset();
-	if (!VideoImage)
+	if (!VideoImage || ((Options.bUseStartFade || Options.bUseEndFade) && !BlackVisual))
 	{
-		OutErrorMessage = TEXT("Failed to create the native video image.");
+		OutErrorMessage = TEXT("Failed to create the native video visuals.");
 		return false;
 	}
 
@@ -182,7 +237,8 @@ bool UBertaVideoPlayerWidget::CreateMediaResources(FString& OutErrorMessage)
 	InternalMediaPlayer->OnEndReached.AddDynamic(this, &ThisClass::HandleEndReached);
 	InternalMediaPlayer->OnSeekCompleted.AddDynamic(this, &ThisClass::HandleSeekCompleted);
 
-	InternalMediaTexture->AutoClear = true;
+	// Retain the last rendered sample until the end fade has covered it.
+	InternalMediaTexture->AutoClear = !Options.bUseEndFade;
 	InternalMediaTexture->ClearColor = FLinearColor::Black;
 	InternalMediaTexture->SetMediaPlayer(InternalMediaPlayer);
 	InternalMediaTexture->UpdateResource();
@@ -272,14 +328,14 @@ bool UBertaVideoPlayerWidget::AcquireRequestedPause(FString& OutErrorMessage)
 	return true;
 }
 
-bool UBertaVideoPlayerWidget::StartReadyMedia()
+bool UBertaVideoPlayerWidget::StartReadyMedia(const EPlaybackState StartingState)
 {
 	if (bTerminal || PlaybackState != EPlaybackState::Ready || !InternalMediaPlayer)
 	{
 		return false;
 	}
 
-	PlaybackState = EPlaybackState::Starting;
+	PlaybackState = StartingState;
 	if (!InternalMediaPlayer->Play())
 	{
 		FailPlayback(FString::Printf(
@@ -289,6 +345,88 @@ bool UBertaVideoPlayerWidget::StartReadyMedia()
 	}
 
 	return !bTerminal;
+}
+
+bool UBertaVideoPlayerWidget::StartRequestedPlayback()
+{
+	if (Options.bUseStartFade && !bRestartingLoop)
+	{
+		TransitionHalfDuration = FMath::Max(0.0f, Options.StartFadeDuration);
+		BeginFade(EPlaybackState::FadingOutLevel, TransitionHalfDuration);
+		return !bTerminal;
+	}
+
+	return StartReadyMedia();
+}
+
+void UBertaVideoPlayerWidget::BeginFade(const EPlaybackState FadeState, const float Duration)
+{
+	PlaybackState = FadeState;
+	ActiveFadeDuration = FMath::Max(0.0f, Duration);
+	const bool bFadingOut = FadeState == EPlaybackState::FadingOutLevel || FadeState == EPlaybackState::FadingOutVideo;
+	FadeStartOpacity = FadeState == EPlaybackState::FadingOutVideo ? BlackVisual->GetRenderOpacity() : (bFadingOut ? 0.0f : 1.0f);
+	FadeEndOpacity = bFadingOut ? 1.0f : 0.0f;
+	BlackVisual->SetRenderOpacity(FadeStartOpacity);
+	if (ActiveFadeDuration <= 0.0f)
+	{
+		FinishFade();
+		return;
+	}
+
+	FadeStartTime = FPlatformTime::Seconds();
+}
+
+void UBertaVideoPlayerWidget::FinishFade()
+{
+	const EPlaybackState FinishedState = PlaybackState;
+	BlackVisual->SetRenderOpacity(FadeEndOpacity);
+
+	switch (FinishedState)
+	{
+	case EPlaybackState::FadingOutLevel:
+		VideoImage->SetVisibility(ESlateVisibility::HitTestInvisible);
+		PlaybackState = EPlaybackState::Ready;
+		StartReadyMedia(EPlaybackState::StartingBehindBlack);
+		break;
+
+	case EPlaybackState::FadingInVideo:
+		PlaybackState = EPlaybackState::Playing;
+		break;
+
+	case EPlaybackState::FadingOutVideo:
+		bTerminal = true;
+		PlaybackState = EPlaybackState::FadingInLevel;
+		CleanupMediaResources();
+		OnPlaybackCompleted.Broadcast(this);
+		if (PlaybackState == EPlaybackState::FadingInLevel)
+		{
+			BeginFade(EPlaybackState::FadingInLevel, TransitionHalfDuration);
+		}
+		break;
+
+	case EPlaybackState::FadingInLevel:
+		PlaybackState = EPlaybackState::Closed;
+		if (Options.bRemoveOnCompletion)
+		{
+			RemoveFromParent();
+		}
+		break;
+
+	default:
+		break;
+	}
+}
+
+void UBertaVideoPlayerWidget::ResetVisuals()
+{
+	if (BlackVisual)
+	{
+		BlackVisual->SetRenderOpacity(0.0f);
+	}
+	if (VideoImage)
+	{
+		VideoImage->SetVisibility(ESlateVisibility::HitTestInvisible);
+	}
 }
 
 bool UBertaVideoPlayerWidget::CanReleaseOwnedPause() const
@@ -391,6 +529,7 @@ void UBertaVideoPlayerWidget::FailPlayback(const FString& ErrorMessage)
 		*ErrorMessage);
 	OnPlaybackFailed.Broadcast(this, ErrorMessage);
 	CleanupMediaResources();
+	ResetVisuals();
 	RemoveFromParent();
 }
 
@@ -406,7 +545,7 @@ void UBertaVideoPlayerWidget::HandleMediaOpened(FString OpenedUrl)
 	PlaybackState = EPlaybackState::Ready;
 	if (bPlayRequested)
 	{
-		StartReadyMedia();
+		StartRequestedPlayback();
 	}
 }
 
@@ -423,11 +562,12 @@ void UBertaVideoPlayerWidget::HandleMediaOpenFailed(FString FailedUrl)
 
 void UBertaVideoPlayerWidget::HandlePlaybackResumed()
 {
-	if (bTerminal || bLoopSeekPending || PlaybackState != EPlaybackState::Starting)
+	if (bTerminal || bLoopSeekPending || (PlaybackState != EPlaybackState::Starting && PlaybackState != EPlaybackState::StartingBehindBlack))
 	{
 		return;
 	}
 
+	const bool bRevealVideo = PlaybackState == EPlaybackState::StartingBehindBlack;
 	PlaybackState = EPlaybackState::Playing;
 	const bool bWasRestartingLoop = bRestartingLoop;
 	bRestartingLoop = false;
@@ -440,18 +580,26 @@ void UBertaVideoPlayerWidget::HandlePlaybackResumed()
 	if (!bWasRestartingLoop)
 	{
 		OnPlaybackStarted.Broadcast(this);
+		if (!bTerminal && PlaybackState == EPlaybackState::Playing && bRevealVideo)
+		{
+			BeginFade(EPlaybackState::FadingInVideo, TransitionHalfDuration);
+		}
 	}
 }
 
 void UBertaVideoPlayerWidget::HandleEndReached()
 {
-	if (bTerminal || bLoopSeekPending || (PlaybackState != EPlaybackState::Starting && PlaybackState != EPlaybackState::Playing))
+	if (bTerminal || bLoopSeekPending || (PlaybackState != EPlaybackState::Starting && PlaybackState != EPlaybackState::StartingBehindBlack && PlaybackState != EPlaybackState::FadingInVideo && PlaybackState != EPlaybackState::Playing))
 	{
 		return;
 	}
 
 	if (Options.bLoop)
 	{
+		if (BlackVisual)
+		{
+			BlackVisual->SetRenderOpacity(0.0f);
+		}
 		bRestartingLoop = true;
 		bLoopSeekPending = true;
 		PlaybackState = EPlaybackState::Starting;
@@ -462,10 +610,26 @@ void UBertaVideoPlayerWidget::HandleEndReached()
 		return;
 	}
 
+	if (Options.bUseEndFade)
+	{
+		TransitionHalfDuration = FMath::Max(0.0f, Options.EndFadeDuration);
+		if (InternalExternalAudio)
+		{
+			InternalExternalAudio->Stop();
+		}
+		if (InternalMediaSound)
+		{
+			InternalMediaSound->Stop();
+		}
+		BeginFade(EPlaybackState::FadingOutVideo, TransitionHalfDuration);
+		return;
+	}
+
 	bTerminal = true;
 	PlaybackState = EPlaybackState::Closed;
 	OnPlaybackCompleted.Broadcast(this);
 	CleanupMediaResources();
+	ResetVisuals();
 	if (Options.bRemoveOnCompletion)
 	{
 		RemoveFromParent();

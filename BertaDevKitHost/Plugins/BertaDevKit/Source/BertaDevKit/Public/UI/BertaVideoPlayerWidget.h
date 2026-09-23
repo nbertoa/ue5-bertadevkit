@@ -6,6 +6,7 @@
 
 class AGameModeBase;
 class UAudioComponent;
+class UBorder;
 class UImage;
 class UMediaPlayer;
 class UMediaSoundComponent;
@@ -27,6 +28,22 @@ struct BERTADEVKIT_API FBertaVideoPlaybackOptions
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Video")
 	bool bRemoveOnCompletion = true;
+
+	/** Fade the level to black before playback, then reveal the playing video. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Video|Transitions")
+	bool bUseStartFade = false;
+
+	/** Duration in real seconds of each half of the start transition. Zero is immediate. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Video|Transitions", meta = (ClampMin = "0.0", EditCondition = "bUseStartFade"))
+	float StartFadeDuration = 0.5f;
+
+	/** Fade the final video frame to black, then reveal the level. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Video|Transitions")
+	bool bUseEndFade = false;
+
+	/** Duration in real seconds of each half of the end transition. Zero is immediate. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Video|Transitions", meta = (ClampMin = "0.0", EditCondition = "bUseEndFade"))
+	float EndFadeDuration = 0.5f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Video")
 	bool bPlayAudio = true;
@@ -91,6 +108,7 @@ protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
 private:
 	enum class EPlaybackState : uint8
@@ -98,15 +116,24 @@ private:
 		Inactive,
 		Opening,
 		Ready,
+		FadingOutLevel,
 		Starting,
+		StartingBehindBlack,
+		FadingInVideo,
 		Playing,
+		FadingOutVideo,
+		FadingInLevel,
 		Closed
 	};
 
 	bool ActivatePlayback();
 	bool CreateMediaResources(FString& OutErrorMessage);
 	bool AcquireRequestedPause(FString& OutErrorMessage);
-	bool StartReadyMedia();
+	bool StartRequestedPlayback();
+	bool StartReadyMedia(EPlaybackState StartingState = EPlaybackState::Starting);
+	void BeginFade(EPlaybackState FadeState, float Duration);
+	void FinishFade();
+	void ResetVisuals();
 	bool CanReleaseOwnedPause() const;
 	void ReleaseOwnedPause();
 	void CleanupMediaResources();
@@ -131,6 +158,9 @@ private:
 	TObjectPtr<UImage> VideoImage;
 
 	UPROPERTY(Transient)
+	TObjectPtr<UBorder> BlackVisual;
+
+	UPROPERTY(Transient)
 	TObjectPtr<UMediaPlayer> InternalMediaPlayer;
 
 	UPROPERTY(Transient)
@@ -144,6 +174,11 @@ private:
 
 	TWeakObjectPtr<AGameModeBase> PauseGameMode;
 	EPlaybackState PlaybackState = EPlaybackState::Inactive;
+	double FadeStartTime = 0.0;
+	float ActiveFadeDuration = 0.0f;
+	float TransitionHalfDuration = 0.0f;
+	float FadeStartOpacity = 0.0f;
+	float FadeEndOpacity = 1.0f;
 	bool bPlayRequested = false;
 	bool bRestartingLoop = false;
 	bool bLoopSeekPending = false;
