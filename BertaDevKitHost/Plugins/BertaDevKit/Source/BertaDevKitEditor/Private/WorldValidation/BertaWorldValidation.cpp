@@ -146,18 +146,24 @@ void UBertaWorldValidation::RunValidation()
 
 	UE_LOG(LogBertaDevKitEditor,
 	       Log,
-	       TEXT("[BertaWorldValidation] Validation complete. Actors checked: %d | Actors with violations: %d"),
+	       TEXT("[BertaWorldValidation] Validation complete. Loaded actors checked: %d | Loaded actors with violations: %d"),
 	       ActorCount,
 	       ViolationCount);
+	if (World->IsPartitionedWorld())
+	{
+		UE_LOG(LogBertaDevKitEditor,
+		       Warning,
+		       TEXT("[BertaWorldValidation] World Partition is active. Validation covers loaded actors only; any unloaded actors were not checked."));
+	}
 
 	// ── Editor notification ───────────────────────────────────────────────────
 
 	const FText NotificationText = ViolationCount > 0 ? FText::Format(NSLOCTEXT("BertaWorldValidation",
 	                                                                            "ViolationsFound",
-	                                                                            "World Validation: {0} actor(s) with violations. See Output Log."),
+	                                                                            "World Validation: {0} loaded actor(s) with violations. See Output Log."),
 	                                                                  FText::AsNumber(ViolationCount)) : NSLOCTEXT("BertaWorldValidation",
 	                                                                                                               "AllPassed",
-	                                                                                                               "World Validation: All checks passed.");
+	                                                                                                               "World Validation: All loaded actors passed.");
 
 	FNotificationInfo Info(NotificationText);
 	Info.ExpireDuration = 5.0f;

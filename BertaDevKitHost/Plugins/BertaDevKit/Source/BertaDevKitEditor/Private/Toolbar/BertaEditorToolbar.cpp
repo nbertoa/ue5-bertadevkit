@@ -45,7 +45,7 @@ namespace
 	                                             "Run World Validation");
 	const FText WorldValidationTooltip = NSLOCTEXT("BertaDevKit",
 	                                               "RunWorldValidationTooltip",
-	                                               "Validate all actors in the open level and report violations to the Output Log.");
+	                                               "Validate loaded actors in the current Editor world and report violations to the Output Log.");
 }
 
 // ─── Register / Unregister ───────────────────────────────────────────────────
@@ -102,7 +102,7 @@ void FBertaEditorToolbar::Register()
 		Section.AddEntry(Entry);
 	}
 
-	// "Run World Validation" — iterates all actors in the open level and reports violations.
+	// "Run World Validation" — reports violations among loaded actors in the Editor world.
 	{
 		FToolMenuEntry Entry = FToolMenuEntry::InitMenuEntry("BertaRunWorldValidation",
 		                                                     WorldValidationLabel,

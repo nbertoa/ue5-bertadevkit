@@ -5,11 +5,11 @@
 #include "BertaWorldValidation.generated.h"
 
 /**
- * Static utility class responsible for validating actors in the currently open level.
+ * Static utility class responsible for validating currently loaded actors in the Editor World.
  * Never instantiated — all entry points are static.
  *
  * Entry point:
- *   - RunValidation() — iterates all actors in the open level, reports violations to the log,
+ *   - RunValidation() — iterates loaded actors in the Editor World, reports violations to the log,
  *     and displays a summary notification. Does not modify any actor.
  *
  * Individual checks are toggled via Project Settings → Plugins → BertaDevKit → World Validation.
@@ -21,7 +21,7 @@ class BERTADEVKITEDITOR_API UBertaWorldValidation : public UObject
 
 public:
 	/**
-	 * Iterates all actors in the currently open level and runs all enabled validation checks.
+	 * Iterates currently loaded actors in the Editor World and runs all enabled validation checks.
 	 * Violations are reported to LogBertaDevKitEditor.
 	 * A summary notification is displayed on completion with CS_Success or CS_Fail state.
 	 */
