@@ -27,15 +27,15 @@ Build the project and enable **BertaProcessBridge**. The plugin is disabled by d
 - `OnOutput`: non-empty text chunks from one combined stdout/stderr pipe. Chunks are not guaranteed to be complete lines, and their boundaries are implementation details.
 - `OnFinished`: one terminal `FBertaProcessResult` with `Completed` or `Canceled`, duration, and an optional exit code.
 - `IsRunning`, `GetState`, `GetDurationSeconds`, and `TryGetResult`.
-- `SendString`: queues exactly the supplied text, encoded as UTF-8 bytes, without adding a newline. Empty text is an accepted no-op while the process accepts input.
-- `SendLine`: calls the same input path after appending exactly one UE platform line terminator. It does not normalize a terminator already present in the supplied string.
+- `SendString`: accepts the complete supplied text for queued UTF-8 delivery without adding a newline. `true` means accepted for delivery, not delivered to the child. Pending input is finite, so a message is rejected atomically with `false` when capacity is unavailable. Empty text remains an accepted no-op while the process accepts input.
+- `SendLine`: appends exactly one UE platform line terminator and uses the same acceptance/capacity rules. It does not normalize a terminator already present in the supplied string.
 - `Cancel`: requests termination and optionally asks UE to kill the process tree. A duplicate or terminal cancellation request returns `false`.
 
 `Completed` means the process ended without an accepted BertaProcessBridge cancellation; it does not mean `ExitCode == 0`. `bHasExitCode` is the only indication that `ExitCode` is valid. A canceled process can still expose a platform termination code when UE can retrieve one.
 
 ## Ownership and threading
 
-Every successfully launched process is strongly owned by the `UBertaProcessSubsystem` for its `GameInstance` until it becomes terminal. Native output and terminal events are serialized through a small ordered queue and delivered on the Game Thread, so output observed before native termination is delivered before `OnFinished`. Ending the `GameInstance`, including ending PIE, suppresses user callbacks, requests kill-tree cancellation for remaining children, waits for their worker threads, and releases UE process and pipe resources.
+Every successfully launched process is strongly owned by the `UBertaProcessSubsystem` for its `GameInstance` until it becomes terminal. Native output and terminal events are serialized through a bounded ordered queue and delivered on the Game Thread. If delivery falls behind, the worker applies backpressure instead of silently dropping stdout/stderr; each Game Thread drain has a finite budget and remaining output continues on later ticks. Output accepted before native termination is delivered before `OnFinished`. Pending stdin is also bounded, so `SendString` / `SendLine` reject a complete message when capacity is unavailable. Ending the `GameInstance`, including ending PIE, suppresses user callbacks, requests kill-tree cancellation for remaining children, waits for their worker threads, and releases UE process and pipe resources.
 
 The implementation uses UE 5.8's RAII `FProcess`, `FProcessStartInfo`, `FInputPipe`, and `FOutputPipe` abstractions. Output decoding follows UE's platform `ReadPipe` behavior. On Win64, stdout and stderr are intentionally connected to the same pipe and cannot be distinguished. This is textual process I/O, not a binary stream, PTY, or terminal emulator.
 
