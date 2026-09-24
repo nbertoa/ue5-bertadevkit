@@ -12,6 +12,7 @@
 #include "HAL/PlatformTime.h"
 #include "HAL/Runnable.h"
 #include "HAL/RunnableThread.h"
+#include "Misc/Optional.h"
 #include "Misc/ScopeLock.h"
 
 namespace
@@ -202,6 +203,19 @@ private:
 	bool bSuppressed = false;
 };
 
+// The child owns an inherited stdin read handle after CreateProc. Keeping the
+// parent's copy open would prevent a blocked writer from waking when the child dies.
+struct FBertaChildInputPipe : UE::HAL::FOutputPipe
+{
+	using FOutputPipe::FOutputPipe;
+
+	void CloseParentReadHandle()
+	{
+		FPlatformProcess::ClosePipe(ReadHandle, nullptr);
+		ReadHandle = {};
+	}
+};
+
 /**
  * FInteractiveProcess cannot satisfy this plugin's exact-input and deterministic
  * cleanup contracts in UE 5.8. This focused runner uses UE's RAII process and pipe
@@ -250,6 +264,7 @@ public:
 		{
 			return false;
 		}
+		ProcessInputPipe.CloseParentReadHandle();
 
 		{
 			FScopeLock Lock(&StateMutex);
@@ -292,6 +307,12 @@ public:
 		return FPlatformTime::Seconds() - StartTimeSeconds;
 	}
 
+	TOptional<int32> GetTerminalExitCode() const
+	{
+		FScopeLock Lock(&StateMutex);
+		return TerminalExitCode;
+	}
+
 	bool EnqueueInput(const FString& Text)
 	{
 		FTCHARToUTF8 Utf8Message(*Text);
@@ -316,14 +337,22 @@ public:
 	bool RequestCancel(const bool bKillTree)
 	{
 		FScopeLock Lock(&StateMutex);
-		if (State != EWorkerState::Active)
+		if (State != EWorkerState::Active && State != EWorkerState::CancelRequested)
 		{
 			return false;
 		}
 
-		bShouldKillTree = bKillTree;
+		const bool bFirstRequest = State == EWorkerState::Active;
+		const bool bUpgradeToKillTree = bKillTree && !bShouldKillTree;
+		bShouldKillTree |= bKillTree;
 		State = EWorkerState::CancelRequested;
-		return true;
+		// Terminate from the caller, before it can wait for a worker blocked in WritePipe.
+		// A later owner teardown can upgrade an earlier single-process cancellation.
+		if (bFirstRequest || bUpgradeToKillTree)
+		{
+			Process.Kill(bShouldKillTree);
+		}
+		return bFirstRequest;
 	}
 
 	void StopAndWait(const bool bKillTree)
@@ -344,23 +373,17 @@ public:
 			ReadAvailableOutput();
 
 			bool bCancel = false;
-			bool bKillTree = false;
 			{
 				FScopeLock Lock(&StateMutex);
 				if (State == EWorkerState::CancelRequested)
 				{
 					State = EWorkerState::Finalizing;
 					bCancel = true;
-					bKillTree = bShouldKillTree;
 				}
 			}
 
 			if (bCancel)
 			{
-				if (Process.IsRunning())
-				{
-					Process.Kill(bKillTree);
-				}
 				Process.WaitForExit();
 				ReadRemainingOutput();
 				Finalize(EBertaProcessFinishReason::Canceled);
@@ -488,6 +511,7 @@ private:
 			check(PendingInputBytes == 0);
 			TerminalDurationSeconds = FPlatformTime::Seconds() - StartTimeSeconds;
 			DurationSeconds = TerminalDurationSeconds;
+			TerminalExitCode = ExitCode;
 			State = EWorkerState::Terminal;
 		}
 
@@ -504,7 +528,7 @@ private:
 	bool bHidden = true;
 	TSharedRef<FBertaProcessCallbackDispatcher, ESPMode::ThreadSafe> Dispatcher;
 	UE::HAL::FInputPipe ProcessOutputPipe;
-	UE::HAL::FOutputPipe ProcessInputPipe;
+	FBertaChildInputPipe ProcessInputPipe;
 	UE::HAL::FProcess Process;
 	FRunnableThread* Thread = nullptr;
 	TQueue<TArray<uint8>, EQueueMode::Mpsc> InputMessages;
@@ -514,6 +538,7 @@ private:
 	bool bShouldKillTree = false;
 	double StartTimeSeconds = 0.0;
 	double TerminalDurationSeconds = 0.0;
+	TOptional<int32> TerminalExitCode;
 };
 
 UBertaProcess::~UBertaProcess()
@@ -649,6 +674,7 @@ void UBertaProcess::ShutdownForOwner()
 	check(IsInGameThread());
 
 	double DurationSeconds = GetDurationSeconds();
+	TOptional<int32> ExitCode;
 	if (CallbackDispatcher)
 	{
 		CallbackDispatcher->Suppress();
@@ -657,6 +683,7 @@ void UBertaProcess::ShutdownForOwner()
 	{
 		NativeRunner->StopAndWait(true);
 		DurationSeconds = NativeRunner->GetDurationSeconds();
+		ExitCode = NativeRunner->GetTerminalExitCode();
 		NativeRunner.Reset();
 	}
 
@@ -665,6 +692,8 @@ void UBertaProcess::ShutdownForOwner()
 		State = EBertaProcessState::Canceled;
 		FinalResult = FBertaProcessResult{};
 		FinalResult.Reason = EBertaProcessFinishReason::Canceled;
+		FinalResult.bHasExitCode = ExitCode.IsSet();
+		FinalResult.ExitCode = ExitCode.Get(0);
 		FinalResult.DurationSeconds = DurationSeconds;
 		bHasFinalResult = true;
 	}

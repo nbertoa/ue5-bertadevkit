@@ -281,7 +281,7 @@ The tag assertion uses native query matching, the attribute assertion reuses `FB
 
 ## Editor tools
 
-- **Asset Naming** audits naming conventions and can apply a reviewed rename batch. It also participates in UE Data Validation.
+- **Asset Naming** audits naming conventions and can apply a reviewed rename batch. Both Content Browser actions and public C++ fix entry points restrict renames to valid `/Game` assets, check destination conflicts before execution, and verify final object paths afterward. It also participates in UE Data Validation.
 - **Asset Cleaner** identifies conservative unused/orphan asset candidates. Its audit is read-only; cleanup revalidates candidates and opens Unreal's native deletion workflow.
 - **Asset Insights** is a read-only Content Browser analysis with saved-package, dependency/referencer, Texture2D, StaticMesh, and conservative footprint information.
 - **Project Setup** is an opt-in audit/apply utility for a curated allowlist of preferred project and per-project Editor defaults. It previews changes and does not mutate projects at startup.

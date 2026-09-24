@@ -33,7 +33,9 @@ enum class EBertaLogOutput : uint8
  *
  * Every call prints to the on-screen debug display AND to the Output Log simultaneously
  * unless a specific EBertaLogOutput value is provided.
- * All functions are stripped from Shipping builds via the DevelopmentOnly meta specifier.
+ * DevelopmentOnly marks Blueprint call nodes for development-only compilation in UE 5.8.
+ * Cooked Blueprint behavior also depends on bCompileBlueprintsInDevelopmentMode.
+ * It does not remove these C++ functions or suppress direct C++ calls in Shipping.
  * Available from both C++ and Blueprint graphs.
  *
  * @see EBertaLogVerbosity

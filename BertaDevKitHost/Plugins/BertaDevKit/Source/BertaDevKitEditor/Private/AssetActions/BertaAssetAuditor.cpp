@@ -14,8 +14,6 @@
 #include "Logging/TokenizedMessage.h"
 #include "Misc/DateTime.h"
 #include "Misc/MessageDialog.h"
-#include "Misc/PackageName.h"
-#include "UObject/Package.h"
 #include "UObject/StrongObjectPtr.h"
 #include "Widgets/Notifications/SNotificationList.h"
 
@@ -23,11 +21,6 @@ namespace
 {
 	const FName AssetNamingLogName(TEXT("BertaDevKitAssetNaming"));
 
-	bool IsProjectAsset(const FAssetData& AssetData)
-	{
-		const FString Path = AssetData.PackagePath.ToString();
-		return Path == TEXT("/Game") || Path.StartsWith(TEXT("/Game/"));
-	}
 	void ShowNotification(const FText& Message, SNotificationItem::ECompletionState State)
 	{
 		FNotificationInfo Info(Message);
@@ -40,20 +33,6 @@ namespace
 		}
 	}
 
-	bool IsTargetOccupied(IAssetRegistry& AssetRegistry, const FBertaAssetNamingBatchCandidate& Candidate)
-	{
-		if (AssetRegistry.GetAssetByObjectPath(Candidate.TargetObjectPath).IsValid())
-		{
-			return true;
-		}
-
-		if (FindPackage(nullptr, *Candidate.TargetPackageName))
-		{
-			return true;
-		}
-
-		return FPackageName::DoesPackageExist(Candidate.TargetPackageName);
-	}
 
 	void OfferRedirectorCleanup(const TArray<FBertaAssetNamingBatchCandidate>& BatchCandidates, IAssetRegistry& AssetRegistry)
 	{
@@ -109,7 +88,7 @@ void UBertaAssetAuditor::ResolveAssetScope(TArray<FAssetData>& OutAssets)
 	{
 		for (const FAssetData& Asset : SelectedAssets)
 		{
-			if (IsProjectAsset(Asset))
+			if (BertaAssetNamingBatch::IsProjectAsset(Asset))
 			{
 				OutAssets.Add(Asset);
 			}
@@ -191,6 +170,11 @@ void UBertaAssetAuditor::FixAssetNaming(const TArray<FAssetData>& Assets)
 	int32 Unsupported = 0;
 	for (const FAssetData& Asset : Assets)
 	{
+		if (!BertaAssetNamingBatch::IsProjectAsset(Asset))
+		{
+			++Unsupported;
+			continue;
+		}
 		FBertaAssetNamingPlan Plan = UBertaAssetNamingUtils::BuildRenamePlan(Asset);
 		if (Plan.Status == EBertaAssetNamingStatus::NeedsRename)
 		{
@@ -242,10 +226,7 @@ void UBertaAssetAuditor::FixAssetNaming(const TArray<FAssetData>& Assets)
 	}
 
 	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
-	const FBertaAssetNamingBatchPreflightResult PreflightResult = BertaAssetNamingBatch::Preflight(BatchCandidates, [&AssetRegistry](const FBertaAssetNamingBatchCandidate& Candidate)
-	{
-		return IsTargetOccupied(AssetRegistry, Candidate);
-	});
+	const FBertaAssetNamingBatchPreflightResult PreflightResult = BertaAssetNamingBatch::PreflightInEditor(BatchCandidates);
 	if (!PreflightResult.IsSafe())
 	{
 		for (const FBertaAssetNamingBatchConflict& Conflict : PreflightResult.Conflicts)
@@ -292,7 +273,7 @@ void UBertaAssetAuditor::FixAssetNaming(const TArray<FAssetData>& Assets)
 		return;
 	}
 
-	const bool bRenameAssetsSucceeded = BertaAssetNamingBatch::Execute(BatchCandidates, LoadedAssets);
+	const bool bBatchSucceeded = BertaAssetNamingBatch::Execute(BatchCandidates, LoadedAssets);
 	int32 AtTarget = 0;
 	int32 AtSource = 0;
 	int32 Unexpected = 0;
@@ -316,7 +297,7 @@ void UBertaAssetAuditor::FixAssetNaming(const TArray<FAssetData>& Assets)
 	}
 
 	const bool bAllAtTarget = AtTarget == BatchCandidates.Num();
-	if (bRenameAssetsSucceeded && bAllAtTarget)
+	if (bBatchSucceeded && bAllAtTarget)
 	{
 		UE_LOG(LogBertaDevKitEditor, Log, TEXT("[AssetNaming] Fix complete: %d renamed, %d unsupported/skipped, 0 load failed, 0 unexpected."), AtTarget, Unsupported);
 		ShowNotification(FText::Format(NSLOCTEXT("BertaDevKit", "AssetFix", "Asset Fix: {0} renamed, {1} unsupported/skipped."), FText::AsNumber(AtTarget), FText::AsNumber(Unsupported)), SNotificationItem::CS_Success);
@@ -324,6 +305,6 @@ void UBertaAssetAuditor::FixAssetNaming(const TArray<FAssetData>& Assets)
 		return;
 	}
 
-	UE_LOG(LogBertaDevKitEditor, Error, TEXT("[AssetNaming] Batch rename incomplete: AssetTools returned %s; %d at target, %d at source, %d unexpected."), bRenameAssetsSucceeded ? TEXT("true") : TEXT("false"), AtTarget, AtSource, Unexpected);
+	UE_LOG(LogBertaDevKitEditor, Error, TEXT("[AssetNaming] Batch rename incomplete: checked execution returned %s; %d at target, %d at source, %d unexpected."), bBatchSucceeded ? TEXT("true") : TEXT("false"), AtTarget, AtSource, Unexpected);
 	ShowNotification(FText::Format(NSLOCTEXT("BertaDevKit", "AssetFixIncomplete", "Asset Fix incomplete: {0} renamed, {1} unchanged, {2} unexpected. See Output Log."), FText::AsNumber(AtTarget), FText::AsNumber(AtSource), FText::AsNumber(Unexpected)), SNotificationItem::CS_Fail);
 }

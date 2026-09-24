@@ -39,6 +39,8 @@ For example:
 
 Run verification appropriate to the change. A successful C++ build alone does not prove Editor, Blueprint, visual, runtime-device, or packaged behavior.
 
+The base build covers the seven enabled sibling plugins. Optional commercial integrations need their licensed third-party plugins and explicit enablement for separate compilation. GitHub Actions currently builds and publishes documentation only; hosted runners do not include UE 5.8 or those commercial plugins, so a green documentation workflow is not a C++ gate. Automation Tests require a separately authorized Unreal session to execute.
+
 ## Documentation site
 
 Install the pinned documentation dependency and build the site from the repository root:

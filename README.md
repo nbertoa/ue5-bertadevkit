@@ -124,6 +124,10 @@ For example:
 <UE_5.8>/Engine/Build/BatchFiles/Build.bat BertaDevKitHostEditor Win64 Development -Project="<repo>/BertaDevKitHost/BertaDevKitHost.uproject" -WaitMutex
 ```
 
+For C++ changes, the local baseline is a clean `main`, Git LFS content available, and a successful UE 5.8 `BertaDevKitHostEditor Win64 Development` build. Review compiler warnings and the final diff. The seven enabled base plugins are covered by that target. The four commercial integrations are disabled by default and require their licensed third-party plugins to be installed and explicitly enabled for separate compilation. Automation Tests may be compiled into the Editor target, but running them requires an explicitly authorized Unreal launch.
+
+GitHub Actions currently publishes documentation only. Hosted runners do not provide a licensed UE 5.8 installation or the optional commercial plugins, so that workflow is not a C++ compilation or runtime test gate. Do not treat a green documentation run as validation of plugin behavior.
+
 See the [documentation site](https://nbertoa.github.io/ue5-bertadevkit/) for feature details, configuration, device behavior, and local documentation commands.
 
 ## Log categories

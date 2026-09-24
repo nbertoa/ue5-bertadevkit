@@ -168,6 +168,9 @@ bool UBertaGSCAbilityQueueInputBridgeComponent::ReportInputDrivenFailure(
 
 void UBertaGSCAbilityQueueInputBridgeComponent::HandleAbilityEnded(UGameplayAbility* Ability)
 {
+	// GAS Companion's OnAbilityEnded consumes its single queued ability for any
+	// ended ability; the queue does not track which activation opened its window.
+	// Reconciliation follows that native contract only for our explicit submission.
 	const UGameplayAbility* QueuedAbility = IsBridgeActive() ? AbilityQueueComponent->GetCurrentQueuedAbility() : nullptr;
 	if (!ExplicitlySubmittedAbilityClass
 		|| !QueuedAbility
