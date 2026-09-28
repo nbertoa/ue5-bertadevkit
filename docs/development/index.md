@@ -37,7 +37,7 @@ For example:
 <UE_5.8>/Engine/Build/BatchFiles/Build.bat BertaDevKitHostEditor Win64 Development -Project="<repo>/BertaDevKitHost/BertaDevKitHost.uproject" -WaitMutex
 ```
 
-Run verification appropriate to the change. A successful C++ build alone does not prove Editor, Blueprint, visual, runtime-device, or packaged behavior.
+Run verification appropriate to the change. A successful C++ build alone does not prove Editor, Blueprint, visual, runtime-device, or packaged behavior. See the [2026-09-28 validation record](validation-2026-09-28.md) for exact commands, results, and limitations.
 
 ## Documentation site
 
