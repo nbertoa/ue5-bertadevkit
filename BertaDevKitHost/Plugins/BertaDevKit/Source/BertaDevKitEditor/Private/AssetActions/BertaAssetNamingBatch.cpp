@@ -1,7 +1,11 @@
 #include "AssetActions/BertaAssetNamingBatch.h"
 
+#include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetToolsModule.h"
+#include "Log/BertaDevKitEditorLog.h"
 #include "Misc/PackageName.h"
+#include "UObject/Package.h"
+#include "UObject/StrongObjectPtr.h"
 
 namespace
 {
@@ -17,6 +21,14 @@ namespace
 	}
 }
 
+bool BertaAssetNamingBatch::IsProjectAsset(const FAssetData& AssetData)
+{
+	const FString Path = AssetData.PackagePath.ToString();
+	return AssetData.IsValid()
+		&& (Path == TEXT("/Game") || Path.StartsWith(TEXT("/Game/")))
+		&& FPackageName::GetLongPackagePath(AssetData.PackageName.ToString()) == Path;
+}
+
 bool BertaAssetNamingBatch::BuildCandidate(const FAssetData& AssetData, const FBertaAssetNamingPlan& Plan, FBertaAssetNamingBatchCandidate& OutCandidate, FText& OutFailureReason)
 {
 	OutCandidate = {};
@@ -25,6 +37,11 @@ bool BertaAssetNamingBatch::BuildCandidate(const FAssetData& AssetData, const FB
 	if (Plan.Status != EBertaAssetNamingStatus::NeedsRename)
 	{
 		OutFailureReason = NSLOCTEXT("BertaDevKit", "AssetNamingBatchNotRenameCandidate", "Asset does not require a rename.");
+		return false;
+	}
+	if (!IsProjectAsset(AssetData))
+	{
+		OutFailureReason = NSLOCTEXT("BertaDevKit", "AssetNamingBatchOutsideProject", "Asset must be valid and located under /Game.");
 		return false;
 	}
 
@@ -108,10 +125,46 @@ FBertaAssetNamingBatchPreflightResult BertaAssetNamingBatch::Preflight(const TAr
 	return Result;
 }
 
+FBertaAssetNamingBatchPreflightResult BertaAssetNamingBatch::PreflightInEditor(const TArray<FBertaAssetNamingBatchCandidate>& Candidates)
+{
+	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+	return Preflight(Candidates, [&AssetRegistry](const FBertaAssetNamingBatchCandidate& Candidate)
+	{
+		return AssetRegistry.GetAssetByObjectPath(Candidate.TargetObjectPath).IsValid()
+			|| FindPackage(nullptr, *Candidate.TargetPackageName)
+			|| FPackageName::DoesPackageExist(Candidate.TargetPackageName);
+	});
+}
+
+bool BertaAssetNamingBatch::VerifyPostflight(const TArray<FBertaAssetNamingBatchCandidate>& Candidates, const TArray<FString>& CurrentObjectPaths, const bool bAssetToolsSucceeded)
+{
+	if (!bAssetToolsSucceeded || Candidates.Num() != CurrentObjectPaths.Num())
+	{
+		return false;
+	}
+	for (int32 Index = 0; Index < Candidates.Num(); ++Index)
+	{
+		if (CurrentObjectPaths[Index] != Candidates[Index].TargetObjectPath)
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
 bool BertaAssetNamingBatch::Execute(const TArray<FBertaAssetNamingBatchCandidate>& Candidates, const TArray<UObject*>& LoadedAssets)
 {
 	if (!ensureMsgf(Candidates.Num() == LoadedAssets.Num(), TEXT("Asset naming batch candidates and loaded assets must have matching counts.")))
 	{
+		return false;
+	}
+	const FBertaAssetNamingBatchPreflightResult PreflightResult = PreflightInEditor(Candidates);
+	if (!PreflightResult.IsSafe())
+	{
+		for (const FBertaAssetNamingBatchConflict& Conflict : PreflightResult.Conflicts)
+		{
+			UE_LOG(LogBertaDevKitEditor, Error, TEXT("[AssetNaming] Rename preflight changed before execution: %s -> %s (%s)"), *Conflict.SourceObjectPath, *Conflict.TargetObjectPath, *Conflict.Reason.ToString());
+		}
 		return false;
 	}
 
@@ -133,12 +186,22 @@ bool BertaAssetNamingBatch::Execute(const TArray<FBertaAssetNamingBatchCandidate
 
 	TArray<FAssetRenameData> RenameData;
 	RenameData.Reserve(Candidates.Num());
+	TArray<TStrongObjectPtr<UObject>> AssetReferences;
+	AssetReferences.Reserve(Candidates.Num());
 	for (int32 CandidateIndex = 0; CandidateIndex < Candidates.Num(); ++CandidateIndex)
 	{
 		UObject* Asset = LoadedAssets[CandidateIndex];
 		const FBertaAssetNamingBatchCandidate& Candidate = Candidates[CandidateIndex];
+		AssetReferences.Emplace(Asset);
 		RenameData.Emplace(Asset, Candidate.TargetPackagePath, Candidate.Plan.TargetName);
 	}
 
-	return FAssetToolsModule::GetModule().Get().RenameAssets(RenameData);
+	const bool bAssetToolsSucceeded = FAssetToolsModule::GetModule().Get().RenameAssets(RenameData);
+	TArray<FString> CurrentObjectPaths;
+	CurrentObjectPaths.Reserve(LoadedAssets.Num());
+	for (const UObject* Asset : LoadedAssets)
+	{
+		CurrentObjectPaths.Add(Asset->GetPathName());
+	}
+	return VerifyPostflight(Candidates, CurrentObjectPaths, bAssetToolsSucceeded);
 }

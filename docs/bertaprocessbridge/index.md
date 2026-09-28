@@ -58,7 +58,7 @@ Pending output is bounded. When its Game Thread delivery falls behind, the worke
 
 Native work happens on a private worker thread. Worker callbacks never touch reflected UObject state or Blueprint delegates. They append output and terminal records to one ordered queue; Game Thread drains preserve output-before-finish ordering and reject late events after the terminal transition. `OnFinished` is broadcast at most once.
 
-During `GameInstance` teardown the subsystem stops accepting launches, suppresses queued/user callbacks, requests kill-tree cancellation for every remaining process, waits for each worker, and releases the RAII process and pipe resources. Detached processes are not supported and children are not intended to outlive their owner.
+During `GameInstance` teardown the subsystem stops accepting launches, suppresses queued/user callbacks, terminates each remaining process tree from the teardown thread before waiting for its worker, and releases the RAII process and pipe resources. After launch, the parent's copy of the stdin read handle is closed; when the child terminates, a worker blocked in UE's synchronous pipe write can return. Detached processes are not supported and children are not intended to outlive their owner.
 
 ## Examples
 
@@ -84,4 +84,6 @@ The second example has shell behavior only because the caller explicitly chose `
 
 There is no synchronous Blueprint node, detached mode, process enumeration, existing-process attachment, elevation, environment override, timeout, priority control, resource monitoring, file redirection, separate stderr API, binary I/O API, PTY, terminal emulation, networking, or remote execution.
 
-The repository verifies `BertaDevKitHostEditor Win64 Development` compilation. Runtime behavior on Win64, packaged behavior, and all behavior on other platforms remain manual verification work; no all-platform runtime support is claimed.
+The repository verifies `BertaDevKitHostEditor Win64 Development` compilation. Selected Win64 contracts have Automation Test coverage; broader runtime and packaged behavior remain manual verification work. No all-platform runtime support is claimed.
+
+The Win64 `BertaProcessBridge.Lifecycle.BlockedInputOwnerShutdown` Automation Test covers owner teardown with a child that does not read stdin. It passed in the [2026-09-28 validation run](../development/validation-2026-09-28.md). A child that reads stdin still needs a separate normal-delivery check. Automation Tests are compiled but are not executed by the build.

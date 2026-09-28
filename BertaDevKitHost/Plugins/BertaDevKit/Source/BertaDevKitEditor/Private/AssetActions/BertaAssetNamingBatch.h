@@ -40,7 +40,10 @@ struct FBertaAssetNamingBatchPreflightResult
 
 namespace BertaAssetNamingBatch
 {
+	bool IsProjectAsset(const FAssetData& AssetData);
 	bool BuildCandidate(const FAssetData& AssetData, const FBertaAssetNamingPlan& Plan, FBertaAssetNamingBatchCandidate& OutCandidate, FText& OutFailureReason);
 	FBertaAssetNamingBatchPreflightResult Preflight(const TArray<FBertaAssetNamingBatchCandidate>& Candidates, TFunctionRef<bool(const FBertaAssetNamingBatchCandidate&)> IsTargetOccupied);
+	FBertaAssetNamingBatchPreflightResult PreflightInEditor(const TArray<FBertaAssetNamingBatchCandidate>& Candidates);
+	bool VerifyPostflight(const TArray<FBertaAssetNamingBatchCandidate>& Candidates, const TArray<FString>& CurrentObjectPaths, bool bAssetToolsSucceeded);
 	bool Execute(const TArray<FBertaAssetNamingBatchCandidate>& Candidates, const TArray<UObject*>& LoadedAssets);
 }

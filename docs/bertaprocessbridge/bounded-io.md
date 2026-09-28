@@ -29,22 +29,24 @@ Commit [`7cf0b9a`](https://github.com/nbertoa/ue5-bertadevkit/commit/7cf0b9a) ad
 - Delivery: one Game Thread drain handles at most **16 events** and starts no more events after reaching **128 KiB**. A later tick resumes the remaining queue. A single final event can take the drain slightly over the byte budget because the budget is checked before dequeue.
 - Pending stdin: at most **1 MiB of queued UTF-8 bytes**. `SendString`/`SendLine` reject an entire new message with `false` when it does not fit; `true` means queued, not delivered to the child.
 
+A later audit fix in [`e9c93be`](https://github.com/nbertoa/ue5-bertadevkit/commit/e9c93be) addressed a separate shutdown failure: a worker blocked in a synchronous stdin pipe write could prevent owner teardown from joining it. The parent now closes its copy of the child stdin read handle after launch, and owner cancellation terminates the process tree before waiting for the worker. A Win64 Automation Test exercises blocked-input owner shutdown.
+
 The output byte count is a queue-payload bound, not a strict whole-process RSS bound. `FString` capacity, event and array storage, a temporary `ReadPipe` result, conversion buffers, and native pipes consume additional Unreal-process memory; the child process has its own memory usage. A single `ReadPipe` result can be larger than one output chunk before it is split. The implementation prevents sustained growth of the pending callback queue; it does not promise a fixed peak for every transient allocation.
 
 ## Behavior under load and shutdown
 
 When callbacks are slow, the worker pauses at the output limit. It then stops draining the OS pipe, which can block the child producer. This is intentional backpressure. It also means a child that waits for stdin while continuously writing stdout may progress slowly until the Game Thread consumes output. The bridge depends on a ticking Game Thread for output delivery.
 
-The dispatcher wakes its waiting worker when a drain frees space. During `GameInstance` teardown it suppresses callbacks, clears queued events, wakes a blocked worker, and then cancellation and worker join can complete. `OnFinished` is delivered at most once during normal completion and is suppressed during owner teardown. No additional feature or architecture was added for this sprint.
+The dispatcher wakes its waiting worker when a drain frees space. During `GameInstance` teardown it suppresses callbacks, clears queued events, wakes a worker waiting for queue space, terminates the child process tree, and then joins the worker. Closing the parent's stdin read handle after launch lets a synchronous writer return when the child exits. `OnFinished` is delivered at most once during normal completion and is suppressed during owner teardown.
 
 ## How to verify
 
-1. Build `BertaDevKitHostEditor Win64 Development` and run `BertaProcessBridge.*` Automation Tests. These currently cover invalid launch context and shutdown contracts; they do **not** stress queue saturation.
+1. Build `BertaDevKitHostEditor Win64 Development` and run `BertaProcessBridge.*` Automation Tests. These cover invalid launch context and shutdown contracts, including a blocked stdin writer on Win64; they do **not** stress sustained output-queue saturation.
 2. In a disposable PIE session, launch a local child that writes substantially more than 512 KiB to stdout in 16 KiB-or-smaller writes and exits. Keep `OnOutput` deliberately slower than the producer for several seconds. Record Unreal process working set, callback byte total, callback order, and the time until `OnFinished`.
 3. Verify that pending output does not continue growing throughout the stalled interval, all produced text arrives in order once callbacks resume, and `OnFinished` follows the final output. Repeat while tearing down the `GameInstance` with the worker blocked; confirm prompt shutdown and no late callbacks.
 4. Separately send repeated stdin messages while the child does not read. Confirm `SendString` eventually returns `false` without accepting a partial message. Repeat after the child resumes reading.
 
-This load scenario remains a behavioral verification item until it has been run and recorded; compilation and the current contract tests alone do not prove it.
+Sustained output-queue saturation remains a behavioral verification item until it has been run and recorded; compilation and the current contract tests alone do not prove it.
 
 ## Reusable lesson
 

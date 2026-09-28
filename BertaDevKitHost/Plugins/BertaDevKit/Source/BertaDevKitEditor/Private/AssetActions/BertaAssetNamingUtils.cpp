@@ -248,6 +248,21 @@ FBertaAssetNamingPlan UBertaAssetNamingUtils::BuildRenamePlan(const FAssetData& 
 
 EBertaRenameResult UBertaAssetNamingUtils::ExecuteRename(UObject* Asset, const FBertaAssetNamingPlan& Plan)
 {
+	if (!IsValid(Asset))
+	{
+		return EBertaRenameResult::Failed;
+	}
+	const FAssetData AssetData(Asset);
+	if (!BertaAssetNamingBatch::IsProjectAsset(AssetData))
+	{
+		return EBertaRenameResult::Failed;
+	}
+	const FBertaAssetNamingPlan CurrentPlan = BuildRenamePlan(AssetData);
+	if (Plan.Status != CurrentPlan.Status || Plan.TargetName != CurrentPlan.TargetName)
+	{
+		UE_LOG(LogBertaDevKitEditor, Error, TEXT("Asset rename plan is stale or does not match %s."), *Asset->GetPathName());
+		return EBertaRenameResult::Failed;
+	}
 	if (Plan.Status == EBertaAssetNamingStatus::UnknownClass)
 	{
 		return EBertaRenameResult::UnknownClass;
@@ -258,13 +273,9 @@ EBertaRenameResult UBertaAssetNamingUtils::ExecuteRename(UObject* Asset, const F
 		return EBertaRenameResult::AlreadyCorrect;
 	}
 
-	if (!ensureMsgf(IsValid(Asset), TEXT("ExecuteRename requires a valid asset for a NeedsRename plan.")))
-	{
-		return EBertaRenameResult::Failed;
-	}
 	FBertaAssetNamingBatchCandidate Candidate;
 	FText FailureReason;
-	if (!BertaAssetNamingBatch::BuildCandidate(FAssetData(Asset), Plan, Candidate, FailureReason))
+	if (!BertaAssetNamingBatch::BuildCandidate(AssetData, Plan, Candidate, FailureReason))
 	{
 		UE_LOG(LogBertaDevKitEditor, Error, TEXT("Asset rename could not build a valid destination: %s (%s)"), *Asset->GetPathName(), *FailureReason.ToString());
 		return EBertaRenameResult::Failed;
@@ -286,7 +297,7 @@ EBertaRenameResult UBertaAssetNamingUtils::RenameAssetWithPrefix(UObject* Asset)
 {
 	if (!ensureMsgf(IsValid(Asset), TEXT("RenameAssetWithPrefix received an invalid asset.")))
 	{
-		return EBertaRenameResult::UnknownClass;
+		return EBertaRenameResult::Failed;
 	}
 	return ExecuteRename(Asset, BuildRenamePlan(FAssetData(Asset)));
 }

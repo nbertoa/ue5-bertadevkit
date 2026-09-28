@@ -260,6 +260,20 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FBertaAssetNamingBatchTest, "BertaDevKit.AssetN
 bool FBertaAssetNamingBatchTest::RunTest(const FString& Parameters)
 {
 	{
+		FBertaAssetNamingPlan Plan;
+		Plan.Status = EBertaAssetNamingStatus::NeedsRename;
+		Plan.TargetName = TEXT("SM_Rock");
+		FBertaAssetNamingBatchCandidate Candidate;
+		FText FailureReason;
+		TestTrue(TEXT("Valid /Game asset is in rename scope"), BertaAssetNamingBatch::IsProjectAsset(MakeAssetDataAtPackage(TEXT("/Game/AssetNamingBatch/Rock"), TEXT("Rock"))));
+		TestFalse(TEXT("/Engine asset is outside rename scope"), BertaAssetNamingBatch::BuildCandidate(MakeAssetDataAtPackage(TEXT("/Engine/AssetNamingBatch/Rock"), TEXT("Rock")), Plan, Candidate, FailureReason));
+		TestFalse(TEXT("Plugin asset is outside rename scope"), BertaAssetNamingBatch::BuildCandidate(MakeAssetDataAtPackage(TEXT("/MyPlugin/AssetNamingBatch/Rock"), TEXT("Rock")), Plan, Candidate, FailureReason));
+		TestFalse(TEXT("Invalid asset is outside rename scope"), BertaAssetNamingBatch::BuildCandidate(FAssetData(), Plan, Candidate, FailureReason));
+		const FAssetData MismatchedScope(FName(TEXT("/Engine/AssetNamingBatch/Rock")), FName(TEXT("/Game")), FName(TEXT("Rock")), UStaticMesh::StaticClass()->GetClassPathName());
+		TestFalse(TEXT("Source package cannot disagree with /Game package path"), BertaAssetNamingBatch::BuildCandidate(MismatchedScope, Plan, Candidate, FailureReason));
+	}
+
+	{
 		TArray<FBertaAssetNamingBatchCandidate> Candidates;
 		Candidates.Add(MakeBatchCandidate(*this, TEXT("/Game/AssetNamingBatch/Distinct/Foo"), TEXT("Foo"), TEXT("SM_Foo")));
 		Candidates.Add(MakeBatchCandidate(*this, TEXT("/Game/AssetNamingBatch/Distinct/Bar"), TEXT("Bar"), TEXT("SM_Bar")));
@@ -340,6 +354,17 @@ bool FBertaAssetNamingBatchTest::RunTest(const FString& Parameters)
 		{
 			TestEqual(TEXT("Chained rename conflict type"), Result.Conflicts[0].Type, EBertaAssetNamingBatchConflictType::OccupiedTarget);
 		}
+	}
+
+	{
+		TArray<FBertaAssetNamingBatchCandidate> Candidates;
+		Candidates.Add(MakeBatchCandidate(*this, TEXT("/Game/AssetNamingBatch/Postflight/One"), TEXT("One"), TEXT("SM_One")));
+		Candidates.Add(MakeBatchCandidate(*this, TEXT("/Game/AssetNamingBatch/Postflight/Two"), TEXT("Two"), TEXT("SM_Two")));
+		const TArray<FString> AtTarget = { Candidates[0].TargetObjectPath, Candidates[1].TargetObjectPath };
+		TestTrue(TEXT("Complete successful rename passes postflight"), BertaAssetNamingBatch::VerifyPostflight(Candidates, AtTarget, true));
+		TestFalse(TEXT("AssetTools failure fails postflight even if paths moved"), BertaAssetNamingBatch::VerifyPostflight(Candidates, AtTarget, false));
+		TestFalse(TEXT("Partial rename fails postflight"), BertaAssetNamingBatch::VerifyPostflight(Candidates, { Candidates[0].TargetObjectPath, Candidates[1].SourceObjectPath }, true));
+		TestFalse(TEXT("Unexpected rename path fails postflight"), BertaAssetNamingBatch::VerifyPostflight(Candidates, { Candidates[0].TargetObjectPath, TEXT("/Game/Unexpected.Unexpected") }, true));
 	}
 
 	return true;
