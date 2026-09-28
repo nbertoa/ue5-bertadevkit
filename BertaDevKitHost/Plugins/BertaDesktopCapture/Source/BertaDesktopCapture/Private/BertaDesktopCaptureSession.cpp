@@ -1,5 +1,6 @@
 #include "BertaDesktopCaptureSession.h"
 
+#include "ProfilingDebugging/CpuProfilerTrace.h"
 #include "Async/Async.h"
 #include "BertaDesktopCapture.h"
 #include "BertaDesktopCaptureDispatcher.h"
@@ -251,6 +252,7 @@ void UBertaDesktopCaptureSession::UploadFrame(
 	TSharedPtr<TArray<uint8>, ESPMode::ThreadSafe> Pixels)
 {
 	check(IsInGameThread());
+	TRACE_CPUPROFILER_EVENT_SCOPE(BertaDesktopCapture_UploadFrame);
 	if (Texture == nullptr || !Pixels.IsValid())
 	{
 		return;
@@ -300,6 +302,7 @@ void UBertaDesktopCaptureSession::UploadFrame(
 void UBertaDesktopCaptureSession::HandleUploadFinished()
 {
 	check(IsInGameThread());
+	TRACE_CPUPROFILER_EVENT_SCOPE(BertaDesktopCapture_UploadComplete);
 	bUploadInFlight = false;
 	if (Dispatcher)
 	{

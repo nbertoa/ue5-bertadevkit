@@ -1,5 +1,6 @@
 #include "BertaDesktopCaptureDispatcher.h"
 
+#include "ProfilingDebugging/CpuProfilerTrace.h"
 #include "Async/Async.h"
 #include "BertaDesktopCaptureSession.h"
 
@@ -18,6 +19,10 @@ void FBertaDesktopCaptureDispatcher::PublishFrame(const FIntPoint Size, TArray<u
 			return;
 		}
 
+		if (PendingPixels.IsValid())
+		{
+			TRACE_CPUPROFILER_EVENT_SCOPE(BertaDesktopCapture_MailboxOverwrite);
+		}
 		PendingPixels = MakeShared<TArray<uint8>, ESPMode::ThreadSafe>(MoveTemp(Pixels));
 		PendingFrameSize = Size;
 		bShouldSchedule = !bUploadBlocked && !bDrainScheduled;

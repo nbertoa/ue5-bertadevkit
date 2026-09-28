@@ -1,5 +1,6 @@
 #include "Windows/BertaWindowsCaptureBackend.h"
 
+#include "ProfilingDebugging/CpuProfilerTrace.h"
 #include "BertaDesktopCapture.h"
 #include "BertaDesktopCaptureDispatcher.h"
 #include "BertaDesktopCaptureFrameUtils.h"
@@ -265,6 +266,7 @@ namespace BertaDesktopCapture::Private
 
 		HRESULT OnFrameArrived()
 		{
+			TRACE_CPUPROFILER_EVENT_SCOPE(BertaDesktopCapture_FrameArrived);
 			FScopeLock Lock(&Mutex);
 			if (!bActive || bTerminalSignaled || !FramePool)
 			{
@@ -321,6 +323,7 @@ namespace BertaDesktopCapture::Private
 			const double Now = FPlatformTime::Seconds();
 			if (bHasAcceptedFrame && Now - LastAcceptedFrameTime < MinimumFrameInterval)
 			{
+				TRACE_CPUPROFILER_EVENT_SCOPE(BertaDesktopCapture_RateLimited);
 				CloseInspectable(Frame.Get());
 				return S_OK;
 			}
@@ -362,6 +365,7 @@ namespace BertaDesktopCapture::Private
 				return S_OK;
 			}
 
+			TRACE_CPUPROFILER_EVENT_SCOPE(BertaDesktopCapture_ReadbackAndPack);
 			Context->CopyResource(StagingTexture.Get(), FrameTexture.Get());
 			D3D11_MAPPED_SUBRESOURCE Mapped{};
 			Result = Context->Map(StagingTexture.Get(), 0, D3D11_MAP_READ, 0, &Mapped);
@@ -386,6 +390,7 @@ namespace BertaDesktopCapture::Private
 				return S_OK;
 			}
 
+			TRACE_CPUPROFILER_EVENT_SCOPE(BertaDesktopCapture_AcceptedFrame);
 			bHasAcceptedFrame = true;
 			LastAcceptedFrameTime = Now;
 			if (TSharedPtr<FBertaDesktopCaptureDispatcher, ESPMode::ThreadSafe> Target = Dispatcher.Pin())
