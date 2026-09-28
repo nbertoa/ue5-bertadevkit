@@ -50,7 +50,7 @@ The implementation uses UE 5.8's `FProcessStartInfo` with RAII `FProcess`, `FInp
 
 Input is queued from the Game Thread and written by the process worker. BertaProcessBridge uses UE's byte pipe write after converting `FString` text to UTF-8 so `SendString` does not inherit the newline that UE 5.8's Win64 `WritePipe(FString)` adds. `SendLine` deliberately appends `LINE_TERMINATOR` itself.
 
-Pending output is bounded. When its Game Thread delivery falls behind, the worker applies backpressure instead of silently dropping stdout/stderr; output already accepted remains ordered before `OnFinished`. Each Game Thread drain has a finite budget and continues on later ticks when needed.
+Pending output is bounded. When its Game Thread delivery falls behind, the worker applies backpressure instead of silently dropping stdout/stderr; output already accepted remains ordered before `OnFinished`. Each Game Thread drain has a finite budget and continues on later ticks when needed. The design and its limits are explained in the [bounded I/O technical note](bounded-io.md).
 
 ## Ownership, ordering, and shutdown
 
