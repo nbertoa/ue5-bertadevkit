@@ -52,12 +52,6 @@ namespace
 	template <typename QueryType>
 	bool RunAudioQuerySynchronously(QueryType&& Query)
 	{
-		if (IsInAudioThread())
-		{
-			Query();
-			return true;
-		}
-
 		if (!IsInGameThread())
 		{
 			return false;
@@ -362,7 +356,7 @@ bool UBertaSystemInfoBlueprintLibrary::GetAudioOutputDevices(
 	TArray<FBertaAudioOutputDeviceInfo>& OutDevices)
 {
 	OutDevices.Reset();
-	if (!WorldContextObject || !GEngine || (!IsInGameThread() && !IsInAudioThread()))
+	if (!IsInGameThread() || !WorldContextObject || !GEngine)
 	{
 		return false;
 	}

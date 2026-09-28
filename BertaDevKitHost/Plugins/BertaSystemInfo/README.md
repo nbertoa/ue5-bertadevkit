@@ -58,7 +58,7 @@ Display IDs are opaque lookup values returned by UE. Do not parse them or treat 
 
 Audio device IDs are opaque and should not be treated as global or permanent identity. `GetAudioInputDevices` performs fresh enumeration without opening or starting a microphone stream. No devices or an unavailable backend produces an empty array and is a normal result.
 
-`GetAudioOutputDevices` requires a valid `WorldContextObject` and the world's active Audio Mixer backend. It returns `false` for an invalid context, unavailable audio device/mixer, or a failed platform query; a successful query may return an empty array. Current-device matching uses `DeviceId` when available, with a name fallback only when the backend does not expose usable IDs.
+`GetAudioOutputDevices` must be called on the Game Thread; it rejects other threads and clears the output before consulting Engine or World objects. It requires a valid `WorldContextObject` and the world's active Audio Mixer backend. It returns `false` for an invalid context, unavailable audio device/mixer, or a failed platform query; a successful query may return an empty array. Current-device matching uses `DeviceId` when available, with a name fallback only when the backend does not expose usable IDs.
 
 ## Limits and verification status
 
