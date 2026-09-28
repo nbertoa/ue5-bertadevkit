@@ -52,6 +52,12 @@ namespace
 	template <typename QueryType>
 	bool RunAudioQuerySynchronously(QueryType&& Query)
 	{
+		if (IsInAudioThread())
+		{
+			Query();
+			return true;
+		}
+
 		if (!IsInGameThread())
 		{
 			return false;

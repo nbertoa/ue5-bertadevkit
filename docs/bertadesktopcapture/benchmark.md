@@ -47,7 +47,15 @@ $editorProcess = Get-Process UnrealEditor | Sort-Object StartTime -Descending | 
 } | Export-Csv -NoTypeInformation "$env:TEMP\BertaCaptureMemory.csv"
 ```
 
-`WorkingSetBytes` and `PrivateBytes` are process-wide, so compare their baseline and capture deltas. `PeakWorkingSetBytes` is a process-lifetime high-water mark, not necessarily a peak only within the 30-second window. For allocation attribution, run a **separate** trace with `Trace.File cpu,frame,bookmark,Memory_Light`; allocation tracing itself may perturb timing.
+`WorkingSetBytes` and `PrivateBytes` are process-wide, so compare their baseline and capture deltas. `PeakWorkingSetBytes` is a process-lifetime high-water mark, not necessarily a peak only within the 30-second window. These process measurements do not attribute allocations to call sites.
+
+For allocation attribution, make a **separate** Editor run with memory tracing enabled from process startup. UE 5.8.2 defines the `Memory_Light` preset (`memtag,memalloc`) and accepts channel presets through `-trace=`. Launch the Editor with the same project and RHI as above:
+
+```powershell
+& '<UE_5.8>\Engine\Binaries\Win64\UnrealEditor.exe' '<repo>\BertaDevKitHost\BertaDevKitHost.uproject' '-trace=default,Memory_Light' -tracefile
+```
+
+`-tracefile` starts writing a trace file at launch in Unreal's profiling trace directory; open that `.utrace` in Unreal Insights after the run. Do not add `Memory_Light` later with `Trace.File`: allocation tracing must be active at startup for this measurement. Keep the main 30-second timing benchmark on `Trace.File cpu,gpu,frame,bookmark`; allocation tracing can perturb frame timings, so its run need not be mixed with the timing runs.
 
 ## Read the result
 
