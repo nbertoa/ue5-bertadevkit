@@ -11,7 +11,7 @@ BertaDevKit is a personal Unreal Engine 5.8 repository for R&D, prototyping, deb
 - [BertaSerial](bertaserial/index.md) — Win64 Runtime COM-port enumeration and asynchronous raw-byte serial communication.
 - [BertaGASCompanionExt](bertagascompanionext/index.md) — optional readiness/loadout diagnostics, contract validation, queue bridging, and targeting integration for GAS Companion.
 - [BertaComboGraphExt](bertacombographext/index.md) — optional contract validation, runtime tracing, Targeting System adaptation, and conservative pre-input buffering for Combo Graph.
-- [BertaUltimateGameplayCameraExt](https://github.com/nbertoa/ue5-bertadevkit/blob/main/BertaDevKitHost/Plugins/BertaUltimateGameplayCameraExt/README.md) — optional UGC camera-data cycling, live summary, and Editor setup audit.
+- [BertaUltimateGameplayCameraExt](bertaultimategameplaycameraext/index.md) — optional UGC camera-data cycling, live summary, console commands, and Editor setup audit/preset comparison.
 - [BertaBlackEyeCameraExt](bertablackeyecameraext/index.md) — optional Black Eye camera reveals, return/external-camera policies, diagnostics, and Editor authoring tools.
 
 The seven base plugins can be copied independently. BertaGASCompanionExt additionally depends on BertaDevKit and a legitimate local GAS Companion installation. BertaComboGraphExt, BertaUltimateGameplayCameraExt, and BertaBlackEyeCameraExt each require their respective legitimate local third-party plugin; those dependencies are not distributed in this repository.
