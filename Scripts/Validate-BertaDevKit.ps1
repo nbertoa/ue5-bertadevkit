@@ -131,7 +131,7 @@ try {
     $testBranches = @(
         'Actor', 'AI', 'AssetCleaner', 'AssetInsights', 'AssetNaming', 'BlueprintAudit',
         'Collision', 'Component', 'Controller', 'DelegateInspector', 'Editor',
-        'Math', 'ObjectGraph', 'TickGraph', 'World'
+        'Localization', 'Math', 'ObjectGraph', 'TickGraph', 'World'
     )
     $testFilter = ($testBranches | ForEach-Object { "StartsWith:BertaDevKit.$_" }) -join '+'
     $editorArguments = @(

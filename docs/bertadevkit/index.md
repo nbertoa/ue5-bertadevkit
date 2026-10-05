@@ -57,6 +57,23 @@ Debug-facing Blueprint nodes use Unreal's `DevelopmentOnly` metadata where appro
 
 `UBertaControllerUtils` plays native dynamic vibration either uniformly or per motor, returning a handle for stopping only its own actions. It also delegates controller light color/reset and asset-based `ForceFeedbackEffect` play/stop to `APlayerController`, preserving Unreal's native client-RPC behavior for the effect calls. Input Device Property activation uses the resolved controller's Platform User and lets Unreal select that user's default input device; a controller does not identify one unique physical device. Properties can be queried or removed by handle. **Remove All Input Device Properties (Global)** removes active properties for every local Platform User, so use it only when global cleanup is intended.
 
+## Localization helpers
+
+`UBertaLocalizationUtils` adds five pure nodes under **BertaDevKit | Localization**:
+
+- **Is Current Language** compares UE-resolved culture names exactly. `en-US` matches `EN_us`, but not `en`.
+- **Is Current Language Compatible With** accepts an exact match or a culture in UE's prioritized fallback chain for the current language. `es-AR` matches `es`, but not `es-ES`; `es` does not match `es-AR`. Native culture remapping, script inference, and allowed-culture policy apply to the fallback chain.
+- **Get System Language** and **Get System Locale** return UE's OS-derived defaults captured when internationalization initializes, including native fallback for unsupported platform cultures. They do not track the current language/locale or poll later OS changes.
+- **Canonicalize Culture Name** uses `FCulture::GetCanonicalName`; `en_US` becomes `en-US`. It normalizes rather than strictly validates or checks culture availability. Empty input returns empty; malformed nonempty input can normalize to UE's invariant culture. The language predicates reject empty or unresolvable names and otherwise preserve that native resolution behavior, including invariant fallback.
+
+Language selects localized text; locale controls regional formatting; asset-group cultures are independent. Continue using Unreal's native Internationalization nodes for current language/locale getters and setters, culture lists, display names, and suitable-culture selection.
+
+Use **Get Engine Subsystem** with `BertaLocalizationSubsystem` to bind **On Language Changed** (`PreviousLanguage`, `CurrentLanguage`) and **On Locale Changed** (`PreviousLocale`, `CurrentLocale`). One listener follows the engine lifetime across all worlds and PIE sessions. It caches both names on initialization without emitting events, observes native changes regardless of their caller, and emits only the values that changed. Asset-group-only changes do not emit either event. Listeners that change language/locale again are dispatched after the current transition's events. Deinitialization removes the native subscription and checks internationalization availability during shutdown.
+
+Prefer changing internationalization on the game thread. Notifications received on another thread queue observation of the latest native state on the game thread through a weak subsystem reference. Intermediate off-thread changes may coalesce; stale snapshots cannot reverse a newer transition, and pending observation is ignored after deinitialization. This does not add synchronization to native internationalization setters. Widgets should unbind when destroyed because the subsystem outlives a world or widget. No persistence, setters, or world/game-instance ownership is added.
+
+Automation coverage is under `BertaDevKit.Localization`. Manual verification pending: bind both events in Blueprint, change locale only, language only, both together, and an asset-group culture using native APIs; check payloads and repeat across PIE sessions with proper unbinding. The tests restore the complete native culture snapshot, including asset groups.
+
 ## Video playback widget
 
 `UBertaVideoPlayerWidget` is a focused Runtime convenience layer over UE 5.8 Media Framework. It builds its own fullscreen `UImage`, transient `UMediaPlayer`, and transient `UMediaTexture`, so a separate Widget Blueprint or Media Texture asset is not required. Configure a `UMediaSource` and `FBertaVideoPlaybackOptions` on **Create Widget**, optionally bind the events, and then call **Add to Viewport**; construction in the viewport is the activation point.
