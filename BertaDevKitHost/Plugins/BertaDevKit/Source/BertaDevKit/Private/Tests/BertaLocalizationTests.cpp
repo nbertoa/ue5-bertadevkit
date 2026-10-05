@@ -201,7 +201,10 @@ bool FBertaLocalizationNotificationsTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("Unchanged values and asset groups emit no language/locale events"), Events.Num(), 0);
 
 	Listener.Receiver->ReentrantLocale = TEXT("ja");
-	TestTrue(TEXT("Native combined change"), Internationalization.SetCurrentLanguageAndLocale(TEXT("en-US")));
+	// UE checks the final pair after broadcasting; the listener has already changed the requested locale.
+	TestFalse(TEXT("Combined setter reports the reentrant locale differs"), Internationalization.SetCurrentLanguageAndLocale(TEXT("en-US")));
+	TestEqual(TEXT("Combined change applies the requested language"), Internationalization.GetCurrentLanguage()->GetName(), FString(TEXT("en-US")));
+	TestEqual(TEXT("Reentrant listener applies its locale"), Internationalization.GetCurrentLocale()->GetName(), FString(TEXT("ja")));
 	TestTrue(TEXT("A listener changing locale preserves transition order and payloads"), Events == TArray<FString>{
 		TEXT("Language:es-AR->en-US"), TEXT("Locale:de->en-US"), TEXT("Locale:en-US->ja")});
 	Events.Reset();
