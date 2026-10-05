@@ -13,10 +13,11 @@ namespace
 		}
 
 		const FString CanonicalName = FCulture::GetCanonicalName(Language);
+		FString NormalizedInput = Language;
+		NormalizedInput.ReplaceCharInline(TEXT('_'), TEXT('-'), ESearchCase::CaseSensitive);
 		// Canonicalization also sanitizes and substitutes invalid names. Permit only casing/separator changes,
-		// using UE's identifier conversion instead of parsing tags or maintaining a culture alias table.
-		if (!FCulture::CultureNameToVerseIdentifier(Language).Equals(
-			FCulture::CultureNameToVerseIdentifier(CanonicalName), ESearchCase::IgnoreCase))
+		// without parsing tags or requiring the arbitrary input to already be a well-formed culture name.
+		if (!NormalizedInput.Equals(CanonicalName, ESearchCase::IgnoreCase))
 		{
 			return nullptr;
 		}
