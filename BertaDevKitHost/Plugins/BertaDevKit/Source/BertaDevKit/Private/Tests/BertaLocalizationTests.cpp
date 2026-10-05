@@ -112,33 +112,63 @@ bool FBertaLocalizationFallbackLanguageTest::RunTest(const FString& Parameters)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FBertaLocalizationNormalizationAndDefaultsTest,
-	"BertaDevKit.Localization.NormalizationAndDefaults",
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FBertaLocalizationCanonicalizationTest,
+	"BertaDevKit.Localization.Canonicalization",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FBertaLocalizationNormalizationAndDefaultsTest::RunTest(const FString& Parameters)
+bool FBertaLocalizationCanonicalizationTest::RunTest(const FString& Parameters)
 {
-	FScopedCultureState Scope;
-	FInternationalization& Internationalization = FInternationalization::Get();
-	const FString DefaultLanguage = Internationalization.GetDefaultLanguage()->GetName();
-	const FString DefaultLocale = Internationalization.GetDefaultLocale()->GetName();
 	TestEqual(TEXT("Native canonical separators"), UBertaLocalizationUtils::CanonicalizeCultureName(TEXT("en_US")), FString(TEXT("en-US")));
 	TestEqual(TEXT("Native canonical casing"), UBertaLocalizationUtils::CanonicalizeCultureName(TEXT("ES_ar")), FString(TEXT("es-AR")));
 	TestTrue(TEXT("Empty input remains empty"), UBertaLocalizationUtils::CanonicalizeCultureName(TEXT("")).IsEmpty());
-	TestEqual(TEXT("Malformed input preserves UE normalization fallback"), UBertaLocalizationUtils::CanonicalizeCultureName(TEXT("!")), FCulture::GetCanonicalName(TEXT("!")));
-	if (!TestTrue(TEXT("Invariant language is available"), Internationalization.SetCurrentLanguage(Internationalization.GetInvariantCulture()->GetName())))
+	TestEqual(TEXT("Malformed input returns the native ICU invariant fallback"),
+		UBertaLocalizationUtils::CanonicalizeCultureName(TEXT("!")), FString(TEXT("en-US-POSIX")));
+	TestEqual(TEXT("Whitespace returns the native ICU invariant fallback"),
+		UBertaLocalizationUtils::CanonicalizeCultureName(TEXT(" \t")), FString(TEXT("en-US-POSIX")));
+	TestEqual(TEXT("Normalization does not check culture availability"),
+		UBertaLocalizationUtils::CanonicalizeCultureName(TEXT("zz-ZZ")), FString(TEXT("zz-ZZ")));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FBertaLocalizationInvalidLanguageNamesTest,
+	"BertaDevKit.Localization.Language.InvalidNames",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FBertaLocalizationInvalidLanguageNamesTest::RunTest(const FString& Parameters)
+{
+	FScopedCultureState Scope;
+	FInternationalization& Internationalization = FInternationalization::Get();
+	const FString InvariantName = Internationalization.GetInvariantCulture()->GetName();
+	if (!TestTrue(TEXT("Invariant language is available"), Internationalization.SetCurrentLanguage(InvariantName)))
 	{
 		return false;
 	}
-	TestTrue(TEXT("Malformed names resolving to the invariant culture can match it"), UBertaLocalizationUtils::IsCurrentLanguage(TEXT("!")));
-	TestFalse(TEXT("Empty is rejected even when UE would resolve it to invariant"), UBertaLocalizationUtils::IsCurrentLanguage(TEXT("")));
-	if (!TestTrue(TEXT("Independent language and locale are available"), Internationalization.SetCurrentLanguage(TEXT("fr")))
-		|| !TestTrue(TEXT("Locale is available"), Internationalization.SetCurrentLocale(TEXT("de"))))
+	const FString InvariantIdentifier = FCulture::CultureNameToVerseIdentifier(InvariantName).ToLower();
+	TestTrue(TEXT("Explicit invariant culture remains an exact match"), UBertaLocalizationUtils::IsCurrentLanguage(InvariantName));
+	TestTrue(TEXT("Invariant case and separators remain valid"), UBertaLocalizationUtils::IsCurrentLanguage(InvariantIdentifier));
+	TestTrue(TEXT("Explicit invariant culture remains compatible"), UBertaLocalizationUtils::IsCurrentLanguageCompatibleWith(InvariantIdentifier));
+
+	const TCHAR* InvalidNames[] = { TEXT(""), TEXT("!"), TEXT(" \t\r\n"), TEXT("not-a-culture"),
+		TEXT("zz-ZZ"), TEXT("C"), TEXT("POSIX"), TEXT("en-US-POSIX!") };
+	for (const TCHAR* Query : InvalidNames)
+	{
+		TestFalse(FString::Printf(TEXT("Invalid query '%s' cannot exactly match invariant"), Query),
+			UBertaLocalizationUtils::IsCurrentLanguage(Query));
+		TestFalse(FString::Printf(TEXT("Invalid query '%s' cannot match invariant fallback"), Query),
+			UBertaLocalizationUtils::IsCurrentLanguageCompatibleWith(Query));
+	}
+
+	if (!TestTrue(TEXT("Regional English is available"), Internationalization.SetCurrentLanguage(TEXT("en-US"))))
 	{
 		return false;
 	}
-	TestEqual(TEXT("System language remains the UE startup default"), UBertaLocalizationUtils::GetSystemLanguage(), DefaultLanguage);
-	TestEqual(TEXT("System locale remains the UE startup default"), UBertaLocalizationUtils::GetSystemLocale(), DefaultLocale);
+	const TCHAR* RepairedNames[] = { TEXT("en-US!"), TEXT(" en-US "), TEXT("e n-US"), TEXT("en--US"), TEXT("en-US-"), TEXT("en!") };
+	for (const TCHAR* Query : RepairedNames)
+	{
+		TestFalse(FString::Printf(TEXT("Sanitized query '%s' cannot exactly match"), Query), UBertaLocalizationUtils::IsCurrentLanguage(Query));
+		TestFalse(FString::Printf(TEXT("Sanitized query '%s' cannot match a fallback"), Query), UBertaLocalizationUtils::IsCurrentLanguageCompatibleWith(Query));
+	}
+	TestTrue(TEXT("Valid case and separators still resolve"), UBertaLocalizationUtils::IsCurrentLanguage(TEXT("EN_us")));
 	return true;
 }
 

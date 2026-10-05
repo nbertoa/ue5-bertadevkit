@@ -59,14 +59,15 @@ Debug-facing Blueprint nodes use Unreal's `DevelopmentOnly` metadata where appro
 
 ## Localization helpers
 
-`UBertaLocalizationUtils` adds five pure nodes under **BertaDevKit | Localization**:
+`UBertaLocalizationUtils` adds three pure nodes under **BertaDevKit | Localization**:
 
 - **Is Current Language** compares UE-resolved culture names exactly. `en-US` matches `EN_us`, but not `en`.
 - **Is Current Language Compatible With** accepts an exact match or a culture in UE's prioritized fallback chain for the current language. `es-AR` matches `es`, but not `es-ES`; `es` does not match `es-AR`. Native culture remapping, script inference, and allowed-culture policy apply to the fallback chain.
-- **Get System Language** and **Get System Locale** return UE's OS-derived defaults captured when internationalization initializes, including native fallback for unsupported platform cultures. They do not track the current language/locale or poll later OS changes.
-- **Canonicalize Culture Name** uses `FCulture::GetCanonicalName`; `en_US` becomes `en-US`. It normalizes rather than strictly validates or checks culture availability. Empty input returns empty; malformed nonempty input can normalize to UE's invariant culture. The language predicates reject empty or unresolvable names and otherwise preserve that native resolution behavior, including invariant fallback.
+- **Canonicalize Culture Name** uses `FCulture::GetCanonicalName`; `en_US` becomes `en-US`. It normalizes rather than strictly validates or checks culture availability. Empty input returns empty; on UE 5.8 with ICU, malformed input such as `!` or whitespace returns `en-US-POSIX`.
 
-Language selects localized text; locale controls regional formatting; asset-group cultures are independent. Continue using Unreal's native Internationalization nodes for current language/locale getters and setters, culture lists, display names, and suitable-culture selection.
+Both predicates require a native-resolvable name whose canonical form differs only in casing or `-`/`_` separators. Empty, whitespace, sanitized/malformed names, and aliases requiring substitution return false, even when the current language is invariant. An explicit `en-US-POSIX` name remains valid. These stricter predicate rules are separate from the permissive canonicalization node.
+
+Language selects localized text; locale controls regional formatting; asset-group cultures are independent. Use Unreal's native **Get Default Language** / **Get Default Locale** nodes (`UKismetSystemLibrary`) for platform defaults. Continue using native Internationalization nodes for current language/locale getters and setters, culture lists, display names, and suitable-culture selection.
 
 Use **Get Engine Subsystem** with `BertaLocalizationSubsystem` to bind **On Language Changed** (`PreviousLanguage`, `CurrentLanguage`) and **On Locale Changed** (`PreviousLocale`, `CurrentLocale`). One listener follows the engine lifetime across all worlds and PIE sessions. It caches both names on initialization without emitting events, observes native changes regardless of their caller, and emits only the values that changed. Asset-group-only changes do not emit either event. Listeners that change language/locale again are dispatched after the current transition's events. Deinitialization removes the native subscription and checks internationalization availability during shutdown.
 
