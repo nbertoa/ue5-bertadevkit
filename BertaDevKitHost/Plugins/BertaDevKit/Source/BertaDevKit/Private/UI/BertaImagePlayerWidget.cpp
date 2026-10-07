@@ -19,40 +19,39 @@ const FName ImageWidgetName(TEXT("BertaImageVisual"));
 
 TSharedRef<SWidget> UBertaImagePlayerWidget::RebuildWidget()
 {
-	if (!WidgetTree)
-	{
-		WidgetTree = NewObject<UWidgetTree>(this, TEXT("WidgetTree"), RF_Transient);
-	}
+	// Finish Blueprint tree initialization before installing the exclusively owned visual.
+	Initialize();
+	check(WidgetTree);
 
-	ImageVisual = Cast<UImage>(WidgetTree->FindWidget(BertaImagePlayerWidgetPrivate::ImageWidgetName));
-	if (!ImageVisual)
+	if (!ImageRoot)
 	{
-		UWidget* ExistingRoot = WidgetTree->RootWidget;
-		UOverlay* RootOverlay = WidgetTree->ConstructWidget<UOverlay>(
+		ImageRoot = WidgetTree->ConstructWidget<UOverlay>(
 			UOverlay::StaticClass(),
-			BertaImagePlayerWidgetPrivate::RootWidgetName);
+			MakeUniqueObjectName(WidgetTree, UOverlay::StaticClass(), BertaImagePlayerWidgetPrivate::RootWidgetName));
 		ImageVisual = WidgetTree->ConstructWidget<UImage>(
 			UImage::StaticClass(),
-			BertaImagePlayerWidgetPrivate::ImageWidgetName);
+			MakeUniqueObjectName(WidgetTree, UImage::StaticClass(), BertaImagePlayerWidgetPrivate::ImageWidgetName));
 		ImageVisual->SetVisibility(ESlateVisibility::HitTestInvisible);
 		ImageVisual->SetRenderOpacity(0.0f);
 
-		UOverlaySlot* ImageSlot = RootOverlay->AddChildToOverlay(ImageVisual);
+		UOverlaySlot* ImageSlot = ImageRoot->AddChildToOverlay(ImageVisual);
 		check(ImageSlot);
 		ImageSlot->SetHorizontalAlignment(HAlign_Fill);
 		ImageSlot->SetVerticalAlignment(VAlign_Fill);
-
-		if (ExistingRoot)
-		{
-			UOverlaySlot* ContentSlot = RootOverlay->AddChildToOverlay(ExistingRoot);
-			check(ContentSlot);
-			ContentSlot->SetHorizontalAlignment(HAlign_Fill);
-			ContentSlot->SetVerticalAlignment(VAlign_Fill);
-		}
-
-		WidgetTree->RootWidget = RootOverlay;
+	}
+	else
+	{
+		// NativeDestruct clears the playback reference, but the owned tree is reusable.
+		ImageVisual = CastChecked<UImage>(ImageRoot->GetChildAt(0));
 	}
 
+	// Preserving a Blueprint root as a sibling would let another image draw the
+	// supplied texture at full opacity, bypassing ImageVisual's fade entirely.
+	WidgetTree->RootWidget = ImageRoot;
+	if (PlaybackState == EPlaybackState::Inactive || PlaybackState == EPlaybackState::Closed)
+	{
+		ClearVisual();
+	}
 	return Super::RebuildWidget();
 }
 
@@ -97,6 +96,7 @@ bool UBertaImagePlayerWidget::Play()
 {
 	switch (PlaybackState)
 	{
+	case EPlaybackState::WaitingForFadeInTick:
 	case EPlaybackState::FadingIn:
 	case EPlaybackState::Displaying:
 	case EPlaybackState::FadingOut:
@@ -136,11 +136,15 @@ bool UBertaImagePlayerWidget::Play()
 	ActiveOptions.FadeInDuration = ActiveOptions.bUseFadeIn ? FMath::Max(0.0f, ActiveOptions.FadeInDuration) : 0.0f;
 	ActiveOptions.DisplayDuration = FMath::Max(0.0f, ActiveOptions.DisplayDuration);
 	ActiveOptions.FadeOutDuration = ActiveOptions.bUseFadeOut ? FMath::Max(0.0f, ActiveOptions.FadeOutDuration) : 0.0f;
-	ImageVisual->SetBrushFromTexture(Texture);
+	// Synchronize opacity with the cached Slate image before exposing its texture.
 	ImageVisual->SetRenderOpacity(ActiveOptions.bUseFadeIn ? 0.0f : 1.0f);
-	PlaybackState = EPlaybackState::FadingIn;
+	ImageVisual->SetBrushFromTexture(Texture);
+	PlaybackState = ActiveOptions.FadeInDuration > 0.0f ? EPlaybackState::WaitingForFadeInTick : EPlaybackState::FadingIn;
 	StateStartTime = FPlatformTime::Seconds();
-	AdvancePlayback(StateStartTime);
+	if (PlaybackState == EPlaybackState::FadingIn)
+	{
+		AdvancePlayback(StateStartTime);
+	}
 	return true;
 }
 
@@ -159,6 +163,13 @@ void UBertaImagePlayerWidget::AdvancePlayback(const double Now)
 		const double ElapsedSeconds = FMath::Max(0.0, Now - StateStartTime);
 		switch (PlaybackState)
 		{
+		case EPlaybackState::WaitingForFadeInTick:
+			// Slate ticks before painting the children. Keep its first frame transparent,
+			// even if construction/viewport setup took longer than the fade duration.
+			StateStartTime = Now;
+			PlaybackState = EPlaybackState::FadingIn;
+			return;
+
 		case EPlaybackState::FadingIn:
 			check(ImageVisual);
 			if (ElapsedSeconds < ActiveOptions.FadeInDuration)

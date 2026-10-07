@@ -42,7 +42,7 @@ bool FBertaImagePlayerWidgetPlaybackTest::RunTest(const FString& Parameters)
 		Widget->Options.DisplayDuration = 4.0f;
 		Widget->Options.FadeOutDuration = 1.0f;
 		TestTrue(TEXT("Inactive playback can start"), Widget->Play());
-		Widget->StateStartTime = 1000.0;
+		Widget->AdvancePlayback(1000.0); // First Slate update anchors the fade clock.
 		TestEqual(TEXT("Fade-in starts transparent"), Widget->ImageVisual->GetRenderOpacity(), 0.0f);
 		Widget->AdvancePlayback(1000.5);
 		TestEqual(TEXT("Fade-in is linear"), Widget->ImageVisual->GetRenderOpacity(), 0.5f);
@@ -86,7 +86,7 @@ bool FBertaImagePlayerWidgetPlaybackTest::RunTest(const FString& Parameters)
 		Widget->Options.DisplayDuration = 3.0f;
 		Widget->Options.FadeOutDuration = 1.0f;
 		TestTrue(TEXT("Late-tick scenario starts"), Widget->Play());
-		Widget->StateStartTime = 1000.0;
+		Widget->AdvancePlayback(1000.0);
 		Widget->AdvancePlayback(1010.0);
 		TestTrue(TEXT("A late fade-in tick starts the fully visible hold"), Widget->PlaybackState == UBertaImagePlayerWidget::EPlaybackState::Displaying);
 		TestEqual(TEXT("The hold clock starts when opacity reaches one"), Widget->StateStartTime, 1010.0);

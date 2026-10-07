@@ -101,7 +101,7 @@ The widget accepts `UMediaSource` assets rather than raw file paths and intentio
 
 ## Image playback widget
 
-`UBertaImagePlayerWidget` constructs a fullscreen, `HitTestInvisible` native `UImage` inside a fill-aligned overlay, using the same layout as the Video Player. No Widget Blueprint, Widget Animation, material, or auxiliary asset is required. It fades the image's own `RenderOpacity`.
+`UBertaImagePlayerWidget` constructs a fullscreen, `HitTestInvisible` native `UImage` inside an exclusively owned, fill-aligned overlay. Blueprint subclasses may configure properties and events, but their Designer root/content is not rendered: preserving another texture-bearing image as a sibling would bypass the native fade. No Widget Blueprint, Widget Animation, material, or auxiliary asset is required. It fades the image's own `RenderOpacity`.
 
 ```text
 Create Widget (BertaImagePlayerWidget)
@@ -112,6 +112,8 @@ Create Widget (BertaImagePlayerWidget)
 
 `Texture` (`UTexture2D`) and `FBertaImagePlaybackOptions` are exposed on **Create Widget**. Defaults are Auto Play and Remove On Completion enabled, both fades enabled at 0.5 seconds, and Display Duration at 3 seconds. With autoplay disabled, the native image remains transparent until `Play`. Call `Play` after construction, normally after **Add to Viewport**. A call before the native visual exists returns false with a warning and can be retried after construction.
 
+A positive fade-in starts its real-time clock on the first Slate update and keeps that first update at opacity zero. Construction and viewport setup before the first rendered frame cannot consume the fade duration. The native image starts transparent before Slate construction, and its opacity is synchronized before the texture brush is assigned. Disabled or zero-duration fade-in remains immediate.
+
 The sequence is linear fade-in (`0 → 1`), fully visible display (`1`), linear fade-out (`1 → 0`), then completion. **Display Duration excludes both fades**: 1 second fade-in, 4 seconds display, and 1 second fade-out take approximately 6 seconds. Disabled fades skip immediately; enabled fades with zero duration reach their endpoint immediately. Zero display immediately proceeds to fade-out or completion. Negative durations clamp to zero. Non-finite display or enabled fade durations fail safely.
 
 Timing uses `FPlatformTime::Seconds()` from Slate-driven `NativeTick`, independently of world pause, delta time, and time dilation. Transitions are observed on UI ticks. The full display interval starts on the tick that sets opacity to exactly 1, so a late fade-in tick never consumes the fully visible hold. Each later stage starts when its preceding stage finishes; frame sampling or a stalled UI can lengthen the total sequence. Options and the brush texture are captured when `Play` starts; changing the exposed properties during playback does not alter that sequence.
@@ -120,7 +122,7 @@ Timing uses `FPlatformTime::Seconds()` from Slate-driven `NativeTick`, independe
 
 `Close` is terminal and idempotent, clears the image brush, makes it transparent, and removes the widget without emitting natural completion. An invalid texture returns false, logs a `LogBertaDevKit` warning, and closes the widget. External destruction cancels a nonterminal sequence without completion and clears the visual; as with the Video Player, re-adding that nonterminal instance may start a fresh sequence. Completed and explicitly closed instances remain terminal.
 
-Contract tests are under `BertaDevKit.UI.ImagePlayer.PlaybackContracts`. They cover ordering and linear opacity, the full display interval including late fade ticks, captured configuration, disabled fades, zero/negative durations, invalid texture, repeated Play/Close, reentrant completion, deferred removal during construction, and destruction. They require Unreal to execute. Visual behavior, Blueprint pin presentation, removal in the viewport, and playback during world pause/time dilation remain pending manual verification.
+Contract tests are under `BertaDevKit.UI.ImagePlayer.PlaybackContracts`. They cover ordering and linear opacity, the full display interval including late fade ticks, captured configuration, disabled fades, zero/negative durations, invalid texture, repeated Play/Close, reentrant completion, deferred removal during construction, and destruction. The additional `BertaDevKit.UI.ImagePlayer.ConstructedHierarchy` test builds actual UMG/Slate children through `RebuildWidget` and `TakeWidget`, including template roots with duplicate textures or colliding names, autoplay/manual startup, Slate opacity/brush synchronization, a delayed first update, and reconstruction. Tests require Unreal to execute. Visual behavior, Blueprint pin presentation, removal in the viewport, and playback during world pause/time dilation remain pending manual verification.
 
 ## Fullscreen fade widget
 

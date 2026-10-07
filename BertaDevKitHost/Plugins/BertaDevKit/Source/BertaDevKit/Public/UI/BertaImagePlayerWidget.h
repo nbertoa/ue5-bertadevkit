@@ -5,6 +5,7 @@
 #include "BertaImagePlayerWidget.generated.h"
 
 class UImage;
+class UOverlay;
 class UTexture2D;
 class UBertaImagePlayerWidget;
 
@@ -42,7 +43,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FBertaImageDisplayCompletedEvent,
 	UBertaImagePlayerWidget*, Widget);
 
-/** Fullscreen Runtime image display with optional linear fades on the image itself. */
+/** Fullscreen Runtime image display. Owns its visual tree; Blueprint designer content is not rendered. */
 UCLASS(Blueprintable)
 class BERTADEVKIT_API UBertaImagePlayerWidget : public UUserWidget
 {
@@ -63,6 +64,7 @@ public:
 
 	/**
 	 * Starts once the native visual has been constructed (normally by Add to Viewport).
+	 * A positive fade-in anchors its clock on the first Slate update at zero opacity.
 	 * Returns true while already playing, false after completion or Close. Does not restart.
 	 * Invalid texture or non-finite active durations log a warning and close the widget.
 	 */
@@ -81,10 +83,12 @@ protected:
 
 private:
 	friend class FBertaImagePlayerWidgetPlaybackTest;
+	friend class FBertaImagePlayerWidgetHierarchyTest;
 
 	enum class EPlaybackState : uint8
 	{
 		Inactive,
+		WaitingForFadeInTick,
 		FadingIn,
 		Displaying,
 		FadingOut,
@@ -96,6 +100,9 @@ private:
 	void CompletePlayback();
 	void ClearVisual();
 	void RemoveWhenReady();
+
+	UPROPERTY(Transient)
+	TObjectPtr<UOverlay> ImageRoot;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UImage> ImageVisual;
