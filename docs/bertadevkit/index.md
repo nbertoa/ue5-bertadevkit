@@ -13,6 +13,7 @@ BertaDevKit is a general-purpose Unreal Engine 5.8 toolbox. Its Runtime module p
 | `UBertaScreenStats` | Named development screen stats for common value types; updating a name replaces its displayed value. |
 | `UBertaMathUtils` | Remapping, easing, angular helpers, snapping, distributions, and lightweight prediction helpers. |
 | `UBertaWorldUtils` | Actor queries, traces, player/camera access, and delayed-action timer helpers. |
+| `UBertaAudioUtils` | Repeated local sound playback in 2D, at a captured location, or attached to a component, with cancellable per-sequence handles. |
 | `UBertaUIUtils` | Blueprint conveniences for common UI/player-input boilerplate. |
 | `UBertaVideoPlayerWidget` | Self-contained fullscreen Media Framework playback with optional UI audio and gameplay pause ownership. |
 | `UBertaImagePlayerWidget` | Self-contained fullscreen Texture2D display with optional linear image-opacity fades. |
@@ -57,6 +58,49 @@ BertaDevKit is a general-purpose Unreal Engine 5.8 toolbox. Its Runtime module p
 Debug-facing Blueprint nodes use Unreal's `DevelopmentOnly` metadata where appropriate. This signals intended development use; it is not a blanket claim about all Runtime code or runtime cost.
 
 `UBertaControllerUtils` plays native dynamic vibration either uniformly or per motor, returning a handle for stopping only its own actions. It also delegates controller light color/reset and asset-based `ForceFeedbackEffect` play/stop to `APlayerController`, preserving Unreal's native client-RPC behavior for the effect calls. Input Device Property activation uses the resolved controller's Platform User and lets Unreal select that user's default input device; a controller does not identify one unique physical device. Properties can be queried or removed by handle. **Remove All Input Device Properties (Global)** removes active properties for every local Platform User, so use it only when global cleanup is intended.
+
+## Repeated audio
+
+`UBertaAudioUtils` exposes **Play Repeated Sound 2D**, **Play Repeated Sound at Location**, and **Play Repeated Sound Attached**. All accept a `USoundBase` asset and `FBertaRepeatedSoundOptions`, with hidden World Context. Concurrency is advanced on all three nodes; attenuation is advanced only on the spatial nodes.
+
+A typical Blueprint call needs no Delay, loop, counter, or custom timer:
+
+```text
+Play Repeated Sound 2D
+    Sound = S_Click
+    Options:
+        Repeat Count = 3
+        Interval = 0.5
+        Interval Variance = 0.1
+        Play Immediately = true
+```
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| Repeat Count | 1 | Total playback starts, including the first; must be positive. |
+| Interval / Interval Variance | 0.5 / 0 seconds | Each gap independently samples Interval ± Variance and clamps to non-negative. |
+| Play Immediately | true | Starts the first sound synchronously; false waits one independently sampled gap first. |
+| Volume Multiplier / Volume Variance | 1 / 0 | Each start independently samples target volume ± variance, clamped to non-negative. |
+| Pitch Multiplier / Pitch Variance | 1 / 0 | Independently sampled per start, then clamped using the audio device's configured native pitch range. |
+| Use Fade In / Fade In Duration | false / 0.2 seconds | Positive enabled duration starts inaudibly and uses a native linear fade to sampled volume. |
+| Playback Duration | 0 seconds | Positive values force a per-playback deadline; <= 0 allows natural completion or authored looping. |
+| Use Fade Out / Fade Out Duration | false / 0.2 seconds | With a positive Playback Duration, fades to zero by its deadline. |
+
+Repeat Count 3, Interval 0.5, Variance 0, Play Immediately true produces approximate starts at 0, 0.5, and 1.0 seconds. Intervals are measured **between starts**, allowing overlapping playback; they never wait for the previous sound to end. Interval 0.5 with Variance 0.1 independently generates each gap in 0.4–0.6 seconds. Starts follow actual timer dispatch, so frame delays can shift them; there is no catch-up burst. A zero sampled gap uses a minimum positive one-shot timer and advances at most once per subsequent TimerManager tick, without recursive immediate calls.
+
+Every public float must be finite. Intervals, variances, multipliers, and fade durations must be non-negative; invalid inputs return null with a `LogBertaDevKit` warning. Extremely large volume/interval samples saturate at the largest finite float rather than overflowing. Pitch uses UE's audio device clamp (normally 0.4–2.0, configurable through native audio settings). Native sound asset variation, attenuation, concurrency, virtualization, and audio-device availability still apply: a scheduled start is an attempt, not a guarantee that a sound will be audible.
+
+Components are created **before** playback, then started with native `FadeIn` or `Play`. There is no full-volume playback before a positive fade-in. Zero fade-in duration starts at target volume immediately. A positive Playback Duration schedules a hard stop at the deadline. Enabled positive fade-out begins at `max(0, PlaybackDuration - FadeOutDuration)` and its length is capped to Playback Duration. If fade-out covers the entire lifetime, it starts immediately and takes precedence over fade-in; combined with an initial zero fade-in this can leave the sound inaudible. Zero fade-out duration stops at the deadline. Without a positive Playback Duration there is no automatic fade-out deadline, and asset duration is never inferred. Natural early completion cancels that component's remaining timers.
+
+- **2D:** non-spatialized UI sound, with no attenuation pin.
+- **At Location:** captures Location/Rotation once; subsequent starts reuse that world transform.
+- **Attached:** each playback attaches with native relative component/socket Location/Rotation. It follows the target and stops when its owner is destroyed. Losing the component cancels the session, including active sounds; future starts validate the target and a game-time cleanup sweep detects invalid targets within approximately 0.1 seconds.
+
+The return value is an opaque `UBertaRepeatedSoundHandle`. The GameInstance retains each session, so Blueprint may ignore the return value and the complete sequence still runs. Retain it only when cancellation or activity inspection is needed. Audio components are tracked weakly; the native audio/world system owns their lifetime. Native play-state callbacks cover natural completion, explicit stops, and backend failures; the sweep also cleans up destroyed components. World teardown cancels timers, stops sounds, removes delegates, and releases registration.
+
+**Stop Repeated Sound** cancels future starts and replaces individual forced-lifetime schedules. Its **Fade Out Active Sounds Duration** defaults to 0, stopping immediately; positive values use native linear fades and release the session when they finish. Repeated Stop calls and null/finished handles are harmless. **Is Repeated Sound Active** is true while future starts or tracked active/fading sounds remain, including a Stop fade; it becomes false when the session has finished.
+
+Scheduling, deadline timers, and cleanup use normal **world/game time**, following pause and time dilation. Fades use UE's native audio fader, with no custom clock or pause policy; native 2D UI playback may continue while the world is paused. The feature is local and **does not replicate**. It intentionally does not provide music/playlist management, asset selection, global volume control, async loading, persistence, or unlimited repetition. Authored looping sounds with no positive Playback Duration remain active until stopped.
 
 ## Localization helpers
 
