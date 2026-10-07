@@ -15,6 +15,7 @@ struct BERTADEVKIT_API FBertaRepeatedSoundOptions
 {
 	GENERATED_BODY()
 
+	/** Total scheduled playback attempts, including native creation/concurrency rejections. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio", meta = (ClampMin = "1"))
 	int32 RepeatCount = 1;
 
@@ -49,10 +50,12 @@ struct BERTADEVKIT_API FBertaRepeatedSoundOptions
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio|Lifetime", meta = (ClampMin = "0.0"))
 	float PlaybackDuration = 0.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio|Fade")
+	/** Automatic fade-out requires PlaybackDuration > 0; it never infers asset duration. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio|Fade", meta = (EditCondition = "PlaybackDuration > 0.0"))
 	bool bUseFadeOut = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio|Fade", meta = (ClampMin = "0.0", EditCondition = "bUseFadeOut"))
+	/** Effective fade length is min(FadeOutDuration, PlaybackDuration). Zero stops at the deadline. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio|Fade", meta = (ClampMin = "0.0", EditCondition = "bUseFadeOut && PlaybackDuration > 0.0"))
 	float FadeOutDuration = 0.2f;
 };
 
@@ -63,7 +66,7 @@ class BERTADEVKIT_API UBertaAudioUtils : public UBlueprintFunctionLibrary
 	GENERATED_BODY()
 
 public:
-	/** RepeatCount is the total starts; each interval is measured between starts, allowing overlap. */
+	/** RepeatCount is the total attempts; rejected attempts are consumed without retry. Intervals allow overlap. */
 	UFUNCTION(BlueprintCallable, Category = "BertaDevKit|Audio",
 		meta = (WorldContext = "WorldContextObject", DisplayName = "Play Repeated Sound 2D",
 			ReturnDisplayName = "Repeated Sound Handle", AdvancedDisplay = "ConcurrencySettings"))

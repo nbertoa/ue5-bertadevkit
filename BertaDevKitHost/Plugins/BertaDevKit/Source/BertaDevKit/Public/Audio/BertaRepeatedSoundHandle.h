@@ -34,7 +34,7 @@ private:
 	void Start(const UObject* Context);
 	void StartNext();
 	void ScheduleNext();
-	UAudioComponent* CreatePlayback() const;
+	UAudioComponent* CreatePlayback(float Volume, float Pitch) const;
 	void FadePlayback(TWeakObjectPtr<UAudioComponent> Component, float Duration);
 	void StopPlayback(TWeakObjectPtr<UAudioComponent> Component);
 	void OnPlayStateChanged(const UAudioComponent* Component, EAudioComponentPlayState PlayState);

@@ -53,6 +53,27 @@ struct FBertaRepeatedSoundTestAccess
 	static int32 Tracked(const UBertaRepeatedSoundHandle* Handle) { return Handle->Playbacks.Num(); }
 	static FTimerHandle Deadline(const UBertaRepeatedSoundHandle* Handle) { return Handle->Playbacks[0].DeadlineTimer; }
 	static FTimerHandle Fade(const UBertaRepeatedSoundHandle* Handle) { return Handle->Playbacks[0].FadeTimer; }
+	static FTimerHandle NextStart(const UBertaRepeatedSoundHandle* Handle) { return Handle->NextStartTimer; }
+	static FTimerHandle SweepTimer(const UBertaRepeatedSoundHandle* Handle) { return Handle->SweepTimer; }
+	static bool Terminal(const UBertaRepeatedSoundHandle* Handle) { return Handle->State == UBertaRepeatedSoundHandle::EState::Finished; }
+	static bool Released(const UBertaRepeatedSoundHandle* Handle)
+	{
+		return Handle->World.IsExplicitlyNull() && Handle->AttachTarget.IsExplicitlyNull()
+			&& !Handle->Sound && !Handle->Attenuation && !Handle->Concurrency
+			&& !Handle->TearDownDelegate.IsValid() && !Handle->CleanupDelegate.IsValid();
+	}
+	static void LateCallbacks(UBertaRepeatedSoundHandle* Handle, UWorld* OriginalWorld, UAudioComponent* Component)
+	{
+		Handle->FadePlayback(Component, 0.2f);
+		Handle->StopPlayback(Component);
+		Handle->OnPlayStateChanged(Component, EAudioComponentPlayState::Stopped);
+		Handle->StartNext();
+		Handle->Sweep();
+		Handle->OnWorldTearDown(OriginalWorld);
+		Handle->OnWorldCleanup(OriginalWorld, true, true);
+		Handle->Finish();
+	}
+	static void ExpireWorldReference(UBertaRepeatedSoundHandle* Handle) { Handle->World.Reset(); }
 };
 
 namespace
@@ -70,7 +91,7 @@ namespace
 			World->bAllowAudioPlayback = false;
 			World->GetTimerManager().Tick(0.0f);
 		}
-		~FAudioTimerWorld() { World->DestroyWorld(false); }
+		~FAudioTimerWorld() { if (World) { World->DestroyWorld(false); } }
 		void Tick(float Delta)
 		{
 			++GFrameCounter;
@@ -160,11 +181,14 @@ bool FBertaRepeatedSoundSchedulingTest::RunTest(const FString& Parameters)
 	Scope.Tick(0.49f);
 	TestEqual(TEXT("No start before its interval"), FBertaRepeatedSoundTestAccess::Remaining(Immediate.Get()), 2);
 	Scope.Tick(0.02f);
-	TestEqual(TEXT("Second start does not wait for sound completion"), FBertaRepeatedSoundTestAccess::Remaining(Immediate.Get()), 1);
+	TestEqual(TEXT("A rejected occurrence does not cancel the next attempt"), FBertaRepeatedSoundTestAccess::Remaining(Immediate.Get()), 1);
 	Scope.Tick(0.51f);
-	TestEqual(TEXT("RepeatCount is total starts"), FBertaRepeatedSoundTestAccess::Remaining(Immediate.Get()), 0);
+	TestEqual(TEXT("All rejected creation attempts consume RepeatCount without retries"), FBertaRepeatedSoundTestAccess::Remaining(Immediate.Get()), 0);
 	TestFalse(TEXT("Rejected audio starts still release the session"), UBertaAudioUtils::IsRepeatedSoundActive(Immediate.Get()));
 	TestFalse(TEXT("Completion unregisters the handle"), FBertaRepeatedSoundTestAccess::Registered(Immediate.Get()));
+	TestEqual(TEXT("Unavailable audio creates no tracked voices"), FBertaRepeatedSoundTestAccess::Tracked(Immediate.Get()), 0);
+	FBertaRepeatedSoundTestAccess::LateCallbacks(Immediate.Get(), Scope.World, nullptr);
+	TestTrue(TEXT("Natural completion remains terminal after late callbacks"), FBertaRepeatedSoundTestAccess::Terminal(Immediate.Get()));
 
 	Options.bPlayImmediately = false;
 	TStrongObjectPtr<UBertaRepeatedSoundHandle> Delayed(FBertaRepeatedSoundTestAccess::Start(Scope.World, Options));
@@ -231,6 +255,7 @@ bool FBertaRepeatedSoundCleanupTest::RunTest(const FString& Parameters)
 	Component->DestroyComponent();
 	Scope.Tick(0.11f);
 	TestEqual(TEXT("Sweep releases destroyed components without a completion callback"), FBertaRepeatedSoundTestAccess::Tracked(Handle.Get()), 0);
+	TestFalse(TEXT("Destroyed component is still unbound symmetrically before GC"), Component->OnAudioPlayStateChangedNative.IsBound());
 	UBertaAudioUtils::StopRepeatedSound(Handle.Get());
 	TestFalse(TEXT("Stop releases remaining scheduling work"), FBertaRepeatedSoundTestAccess::Registered(Handle.Get()));
 
@@ -241,6 +266,84 @@ bool FBertaRepeatedSoundCleanupTest::RunTest(const FString& Parameters)
 	Scope.Tick(1.01f);
 	TestEqual(TEXT("Forced deadline releases tracked work"), FBertaRepeatedSoundTestAccess::Tracked(Forced.Get()), 0);
 	UBertaAudioUtils::StopRepeatedSound(Forced.Get());
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FBertaRepeatedSoundWorldLifetimeTest, "BertaDevKit.Audio.RepeatedSound.WorldLifetimeAndTerminalCallbacks",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FBertaRepeatedSoundWorldLifetimeTest::RunTest(const FString& Parameters)
+{
+	FAudioTimerWorld Origin;
+	FAudioTimerWorld Other;
+	// Model travel: successive Worlds share the same GameInstance and TimerManager.
+	Other.World->SetGameInstance(Origin.GameInstance.Get());
+	FBertaRepeatedSoundOptions Options;
+	Options.bPlayImmediately = false;
+	Options.RepeatCount = 3;
+	Options.Interval = 60.0f;
+
+	// Both native lifecycle signals and their possible ordering must converge safely.
+	for (const bool bCleanupFirst : { false, true })
+	{
+		TStrongObjectPtr<UBertaRepeatedSoundHandle> Handle(FBertaRepeatedSoundTestAccess::Start(Origin.World, Options));
+		TStrongObjectPtr<UAudioComponent> Component(NewObject<UAudioComponent>());
+		FBertaRepeatedSoundTestAccess::Track(Handle.Get(), Component.Get());
+		const FTimerHandle NextStart = FBertaRepeatedSoundTestAccess::NextStart(Handle.Get());
+		const FTimerHandle Sweep = FBertaRepeatedSoundTestAccess::SweepTimer(Handle.Get());
+		const FTimerHandle Fade = FBertaRepeatedSoundTestAccess::Fade(Handle.Get());
+		const FTimerHandle Deadline = FBertaRepeatedSoundTestAccess::Deadline(Handle.Get());
+
+		FWorldDelegates::OnWorldCleanup.Broadcast(Other.World, true, true);
+		TestTrue(TEXT("Cleanup of another World cannot finish this session"), UBertaAudioUtils::IsRepeatedSoundActive(Handle.Get()));
+		if (bCleanupFirst)
+		{
+			FWorldDelegates::OnWorldCleanup.Broadcast(Origin.World, true, true);
+		}
+		else
+		{
+			FWorldDelegates::OnWorldBeginTearDown.Broadcast(Origin.World);
+		}
+		TestTrue(TEXT("Original World cleanup establishes a terminal state"), FBertaRepeatedSoundTestAccess::Terminal(Handle.Get()));
+		TestFalse(TEXT("Teardown releases GameInstance retention immediately"), FBertaRepeatedSoundTestAccess::Registered(Handle.Get()));
+		TestFalse(TEXT("Teardown clears future starts"), Origin.World->GetTimerManager().TimerExists(NextStart));
+		TestFalse(TEXT("Teardown clears the sweep"), Origin.World->GetTimerManager().TimerExists(Sweep));
+		TestFalse(TEXT("Teardown clears each fade"), Origin.World->GetTimerManager().TimerExists(Fade));
+		TestFalse(TEXT("Teardown clears each deadline"), Origin.World->GetTimerManager().TimerExists(Deadline));
+		TestEqual(TEXT("Teardown clears all component tracking"), FBertaRepeatedSoundTestAccess::Tracked(Handle.Get()), 0);
+		TestTrue(TEXT("Teardown releases assets, context and lifecycle delegate handles"), FBertaRepeatedSoundTestAccess::Released(Handle.Get()));
+		TestFalse(TEXT("Teardown unbinds the audio delegate"), Component->OnAudioPlayStateChangedNative.IsBound());
+
+		// A component no longer owned by this session must not be touched by stale timers.
+		const float OriginalVolume = 0.7f;
+		Component->SetVolumeMultiplier(OriginalVolume);
+		// Simulate subsequent ownership of the component without starting an audible voice.
+		Component->SetActiveFlag(true);
+		FBertaRepeatedSoundTestAccess::LateCallbacks(Handle.Get(), Origin.World, Component.Get());
+		FWorldDelegates::OnWorldBeginTearDown.Broadcast(Origin.World);
+		FWorldDelegates::OnWorldCleanup.Broadcast(Origin.World, true, true);
+		UBertaAudioUtils::StopRepeatedSound(Handle.Get(), 0.2f);
+		Other.Tick(61.0f);
+		TestTrue(TEXT("Late callbacks keep terminal cleanup idempotent"), FBertaRepeatedSoundTestAccess::Terminal(Handle.Get()));
+		TestFalse(TEXT("Finished sequence never resumes in another World"), UBertaAudioUtils::IsRepeatedSoundActive(Handle.Get()));
+		TestEqual(TEXT("Late callbacks preserve released component configuration"), Component->VolumeMultiplier, OriginalVolume);
+		TestTrue(TEXT("Late callbacks cannot stop a component no longer owned by the session"), Component->IsPlaying());
+		Component->SetActiveFlag(false);
+		TestFalse(TEXT("A completed handle stays unregistered"), FBertaRepeatedSoundTestAccess::Registered(Handle.Get()));
+	}
+
+	TStrongObjectPtr<UBertaRepeatedSoundHandle> Expired(FBertaRepeatedSoundTestAccess::Start(Origin.World, Options));
+	const FTimerHandle Pending = FBertaRepeatedSoundTestAccess::NextStart(Expired.Get());
+	FBertaRepeatedSoundTestAccess::ExpireWorldReference(Expired.Get());
+	UBertaAudioUtils::StopRepeatedSound(Expired.Get());
+	TestFalse(TEXT("Expired World references still clear the original GameInstance timer manager"), Origin.World->GetTimerManager().TimerExists(Pending));
+	TestFalse(TEXT("Expired context releases GameInstance registration"), FBertaRepeatedSoundTestAccess::Registered(Expired.Get()));
+
+	TStrongObjectPtr<UBertaRepeatedSoundHandle> Destroyed(FBertaRepeatedSoundTestAccess::Start(Other.World, Options));
+	Other.World->DestroyWorld(false);
+	Other.World = nullptr;
+	TestTrue(TEXT("Actual lightweight World destruction finalizes the session"), FBertaRepeatedSoundTestAccess::Terminal(Destroyed.Get()));
+	TestFalse(TEXT("World destruction does not depend on another timer tick"), FBertaRepeatedSoundTestAccess::Registered(Destroyed.Get()));
 	return true;
 }
 

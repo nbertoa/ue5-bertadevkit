@@ -4,6 +4,7 @@
 #include "AudioDevice.h"
 #include "Components/AudioComponent.h"
 #include "Components/SceneComponent.h"
+#include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "Kismet/GameplayStatics.h"
@@ -15,9 +16,9 @@
 void UBertaRepeatedSoundHandle::Start(const UObject* Context)
 {
 	check(World.IsValid());
-	RegisterWithGameInstance(Context);
 	State = EState::Running;
 	RemainingStarts = Options.RepeatCount;
+	RegisterWithGameInstance(Context);
 	TearDownDelegate = FWorldDelegates::OnWorldBeginTearDown.AddUObject(this, &ThisClass::OnWorldTearDown);
 	CleanupDelegate = FWorldDelegates::OnWorldCleanup.AddUObject(this, &ThisClass::OnWorldCleanup);
 
@@ -76,7 +77,11 @@ void UBertaRepeatedSoundHandle::StartNext()
 	{
 		// Play can synchronously report failure/completion. Do not release the session mid-start.
 		TGuardValue<bool> StartingGuard(bStartingPlayback, true);
-		if (UAudioComponent* Component = CreatePlayback())
+		const float Volume = BertaRepeatedSoundPrivate::SampleNonNegative(
+			Options.VolumeMultiplier, Options.VolumeVariance, FMath::FRand());
+		const float Pitch = BertaRepeatedSoundPrivate::SampleNonNegative(
+			Options.PitchMultiplier, Options.PitchVariance, FMath::FRand());
+		if (UAudioComponent* Component = CreatePlayback(Volume, Pitch))
 		{
 			const TWeakObjectPtr<UAudioComponent> WeakComponent(Component);
 			FPlayback& Playback = Playbacks.AddDefaulted_GetRef();
@@ -123,7 +128,7 @@ void UBertaRepeatedSoundHandle::StartNext()
 	FinishIfIdle();
 }
 
-UAudioComponent* UBertaRepeatedSoundHandle::CreatePlayback() const
+UAudioComponent* UBertaRepeatedSoundHandle::CreatePlayback(float Volume, float Pitch) const
 {
 	UWorld* PlaybackWorld = World.Get();
 	FAudioDevice* AudioDevice = PlaybackWorld->GetAudioDeviceRaw();
@@ -170,17 +175,19 @@ UAudioComponent* UBertaRepeatedSoundHandle::CreatePlayback() const
 	}
 	if (Component)
 	{
-		Component->SetVolumeMultiplier(BertaRepeatedSoundPrivate::SampleNonNegative(
-			Options.VolumeMultiplier, Options.VolumeVariance, FMath::FRand()));
-		const float SampledPitch = BertaRepeatedSoundPrivate::SampleNonNegative(
-			Options.PitchMultiplier, Options.PitchVariance, FMath::FRand());
-		Component->SetPitchMultiplier(AudioDevice->ClampPitch(SampledPitch));
+		Component->SetVolumeMultiplier(Volume);
+		Component->SetPitchMultiplier(AudioDevice->ClampPitch(Pitch));
 	}
 	return Component;
 }
 
 void UBertaRepeatedSoundHandle::FadePlayback(TWeakObjectPtr<UAudioComponent> Component, float Duration)
 {
+	if (State == EState::Finished || !Playbacks.ContainsByPredicate(
+		[Component](const FPlayback& Playback) { return Playback.Component == Component; }))
+	{
+		return;
+	}
 	if (UAudioComponent* Audio = Component.Get())
 	{
 		Audio->FadeOut(Duration, 0.0f, EAudioFaderCurve::Linear);
@@ -189,6 +196,11 @@ void UBertaRepeatedSoundHandle::FadePlayback(TWeakObjectPtr<UAudioComponent> Com
 
 void UBertaRepeatedSoundHandle::StopPlayback(TWeakObjectPtr<UAudioComponent> Component)
 {
+	if (State == EState::Finished || !Playbacks.ContainsByPredicate(
+		[Component](const FPlayback& Playback) { return Playback.Component == Component; }))
+	{
+		return;
+	}
 	if (UAudioComponent* Audio = Component.Get())
 	{
 		Audio->Stop();
@@ -214,7 +226,8 @@ void UBertaRepeatedSoundHandle::RemovePlayback(TWeakObjectPtr<UAudioComponent> C
 	}
 	FPlayback Playback = Playbacks[Index];
 	Playbacks.RemoveAtSwap(Index);
-	if (UAudioComponent* Audio = Playback.Component.Get())
+	// Native completion can mark an auto-destroy component as garbage before notifying us.
+	if (UAudioComponent* Audio = Playback.Component.Get(true))
 	{
 		Audio->OnAudioPlayStateChangedNative.Remove(Playback.PlayStateDelegate);
 	}
@@ -315,13 +328,38 @@ void UBertaRepeatedSoundHandle::Finish()
 	{
 		return;
 	}
+	// Establish the terminal state before Stop can synchronously broadcast another callback.
 	State = EState::Finished;
+	RemainingStarts = 0;
 	if (UWorld* PlaybackWorld = World.Get())
 	{
 		PlaybackWorld->GetTimerManager().ClearAllTimersForObject(this);
 	}
+	else if (UGameInstance* TimerOwner = RegisteredWithGameInstance.Get())
+	{
+		// UE 5.8 worlds with a GameInstance use that instance's TimerManager.
+		// Clear the original manager even if the World weak reference has expired.
+		TimerOwner->GetTimerManager().ClearAllTimersForObject(this);
+	}
+	NextStartTimer.Invalidate();
+	SweepTimer.Invalidate();
 	FWorldDelegates::OnWorldBeginTearDown.Remove(TearDownDelegate);
 	FWorldDelegates::OnWorldCleanup.Remove(CleanupDelegate);
+	TearDownDelegate.Reset();
+	CleanupDelegate.Reset();
+
+	const TArray<FPlayback> Snapshot = MoveTemp(Playbacks);
+	for (const FPlayback& Playback : Snapshot)
+	{
+		if (UAudioComponent* Audio = Playback.Component.Get(true))
+		{
+			Audio->OnAudioPlayStateChangedNative.Remove(Playback.PlayStateDelegate);
+		}
+		if (UAudioComponent* Audio = Playback.Component.Get())
+		{
+			Audio->Stop();
+		}
+	}
 	Sound = nullptr;
 	Attenuation = nullptr;
 	Concurrency = nullptr;
@@ -334,7 +372,7 @@ void UBertaRepeatedSoundHandle::OnWorldTearDown(UWorld* InWorld)
 {
 	if (InWorld == World.Get())
 	{
-		Stop(0.0f);
+		Finish();
 	}
 }
 
