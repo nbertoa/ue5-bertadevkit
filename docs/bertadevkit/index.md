@@ -15,6 +15,7 @@ BertaDevKit is a general-purpose Unreal Engine 5.8 toolbox. Its Runtime module p
 | `UBertaWorldUtils` | Actor queries, traces, player/camera access, and delayed-action timer helpers. |
 | `UBertaUIUtils` | Blueprint conveniences for common UI/player-input boilerplate. |
 | `UBertaVideoPlayerWidget` | Self-contained fullscreen Media Framework playback with optional UI audio and gameplay pause ownership. |
+| `UBertaImagePlayerWidget` | Self-contained fullscreen Texture2D display with optional linear image-opacity fades. |
 | `UBertaFadeWidget` | Reusable fullscreen black fade driven by real UI elapsed time. |
 | `UBertaControllerUtils` | Controller feedback, light output, and Input Device Property conveniences without PlayerController casts. |
 | `UBertaBTDecorator_GameplayTag` / `UBertaBTDecorator_GameplayTagQuery` | Reactive GAS conditions controlling whether Behavior Tree branches may execute. |
@@ -97,6 +98,29 @@ Audio routing is selected on activation. When `bPlayAudio` is false, neither aud
 Pause acquisition uses an authoritative `AGameModeBase` pause delegate tied to this widget. If the world was already paused, the widget records no ownership and therefore never unpauses it. If another pause delegate still blocks unpause, releasing the video pause leaves the world paused. Consequently, **Pause Game** requires an owning Player Controller and authoritative Game Mode; client-only playback should disable that option and leave network pause policy to the game.
 
 The widget accepts `UMediaSource` assets rather than raw file paths and intentionally provides no playlist, subtitle, skip, URL, or playback-rate API. Actual codec/container availability remains determined by the selected Media Framework backend and target platform. Runtime visual/audio behavior still requires manual Unreal verification; the repository verification compiles the feature without launching Unreal.
+
+## Image playback widget
+
+`UBertaImagePlayerWidget` constructs a fullscreen, `HitTestInvisible` native `UImage` inside a fill-aligned overlay, using the same layout as the Video Player. No Widget Blueprint, Widget Animation, material, or auxiliary asset is required. It fades the image's own `RenderOpacity`.
+
+```text
+Create Widget (BertaImagePlayerWidget)
+→ set Texture and Options
+→ bind On Display Completed as needed
+→ Add to Viewport
+```
+
+`Texture` (`UTexture2D`) and `FBertaImagePlaybackOptions` are exposed on **Create Widget**. Defaults are Auto Play and Remove On Completion enabled, both fades enabled at 0.5 seconds, and Display Duration at 3 seconds. With autoplay disabled, the native image remains transparent until `Play`. Call `Play` after construction, normally after **Add to Viewport**. A call before the native visual exists returns false with a warning and can be retried after construction.
+
+The sequence is linear fade-in (`0 → 1`), fully visible display (`1`), linear fade-out (`1 → 0`), then completion. **Display Duration excludes both fades**: 1 second fade-in, 4 seconds display, and 1 second fade-out take approximately 6 seconds. Disabled fades skip immediately; enabled fades with zero duration reach their endpoint immediately. Zero display immediately proceeds to fade-out or completion. Negative durations clamp to zero. Non-finite display or enabled fade durations fail safely.
+
+Timing uses `FPlatformTime::Seconds()` from Slate-driven `NativeTick`, independently of world pause, delta time, and time dilation. Transitions are observed on UI ticks. The full display interval starts on the tick that sets opacity to exactly 1, so a late fade-in tick never consumes the fully visible hold. Each later stage starts when its preceding stage finishes; frame sampling or a stalled UI can lengthen the total sequence. Options and the brush texture are captured when `Play` starts; changing the exposed properties during playback does not alter that sequence.
+
+`Play` returns true when it starts or is already playing, and false after natural completion or `Close`; it never restarts an active or terminal sequence. All-zero durations may broadcast completion synchronously from `Play` or autoplay construction, so bind the delegate before adding the widget. Natural completion first sets terminal state and final opacity, emits `OnDisplayCompleted(Widget)` exactly once, then removes the widget if the captured Remove On Completion option is enabled. If completion or Close occurs inside construction, only removal waits until the first Slate tick, after UE has attached the viewport container. With removal disabled, fade-out leaves the image transparent; disabling fade-out leaves it fully visible.
+
+`Close` is terminal and idempotent, clears the image brush, makes it transparent, and removes the widget without emitting natural completion. An invalid texture returns false, logs a `LogBertaDevKit` warning, and closes the widget. External destruction cancels a nonterminal sequence without completion and clears the visual; as with the Video Player, re-adding that nonterminal instance may start a fresh sequence. Completed and explicitly closed instances remain terminal.
+
+Contract tests are under `BertaDevKit.UI.ImagePlayer.PlaybackContracts`. They cover ordering and linear opacity, the full display interval including late fade ticks, captured configuration, disabled fades, zero/negative durations, invalid texture, repeated Play/Close, reentrant completion, deferred removal during construction, and destruction. They require Unreal to execute. Visual behavior, Blueprint pin presentation, removal in the viewport, and playback during world pause/time dilation remain pending manual verification.
 
 ## Fullscreen fade widget
 
