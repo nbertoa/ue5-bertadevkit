@@ -280,6 +280,12 @@ void UBertaImagePlayerWidgetTestReceiver::RecordCompletion(UBertaImagePlayerWidg
 #if WITH_DEV_AUTOMATION_TESTS
 	++CompletionCount;
 	bPlayAcceptedDuringCompletion = Widget->Play();
+	if (bReplaceOnCompletion)
+	{
+		bReplaceOnCompletion = false;
+		Widget->Options.bRemoveOnCompletion = false;
+		Widget->SetTexture(ReplacementTexture);
+	}
 	if (bCloseOnCompletion)
 	{
 		Widget->Close();

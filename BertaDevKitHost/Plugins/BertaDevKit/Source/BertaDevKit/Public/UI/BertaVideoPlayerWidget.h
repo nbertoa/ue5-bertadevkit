@@ -73,8 +73,8 @@ class BERTADEVKIT_API UBertaVideoPlayerWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	/** Source opened when this widget is added to the viewport. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Video", meta = (ExposeOnSpawn = true))
+	/** Set Media Source opens a fresh run using current Options/ExternalAudio; null clears without closing. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, BlueprintSetter = SetMediaSource, Category = "Video", meta = (ExposeOnSpawn = true))
 	TObjectPtr<UMediaSource> MediaSource;
 
 	/** Replaces embedded audio when audio is enabled. Asset-authored looping is preserved. */
@@ -96,6 +96,10 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "BertaDevKit|UI|Video")
 	FBertaVideoPlaybackFailedEvent OnPlaybackFailed;
 
+	/** Same-source assignment restarts; pre-construction only configures. Close stays terminal. */
+	UFUNCTION(BlueprintSetter, Category = "BertaDevKit|UI|Video")
+	void SetMediaSource(UMediaSource* NewMediaSource);
+
 	/** Starts playback now, or queues it until an in-progress open completes. */
 	UFUNCTION(BlueprintCallable, Category = "BertaDevKit|UI|Video")
 	bool Play();
@@ -111,6 +115,8 @@ protected:
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
 private:
+	friend class FBertaVideoPlayerWidgetReplacementTest;
+
 	enum class EPlaybackState : uint8
 	{
 		Inactive,
@@ -127,6 +133,7 @@ private:
 		Closed
 	};
 
+	void ResetPlayback();
 	bool ActivatePlayback();
 	bool CreateMediaResources(FString& OutErrorMessage);
 	bool AcquireRequestedPause(FString& OutErrorMessage);
@@ -174,6 +181,11 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UAudioComponent> InternalExternalAudio;
 
+	FBertaVideoPlaybackOptions ActiveOptions;
+	uint64 PlaybackGeneration = 0;
+	bool bNativeConstructed = false;
+	bool bSourceCleared = false;
+	bool bClosedExplicitly = false;
 	TWeakObjectPtr<AGameModeBase> PauseGameMode;
 	EPlaybackState PlaybackState = EPlaybackState::Inactive;
 	double FadeStartTime = 0.0;

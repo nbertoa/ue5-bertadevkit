@@ -50,8 +50,8 @@ class BERTADEVKIT_API UBertaImagePlayerWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	/** Texture sampled when Play starts. No Widget Blueprint or material is required. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Image", meta = (ExposeOnSpawn = true))
+	/** Set Texture restarts using current Options; null clears without closing. C++ callers should use SetTexture. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, BlueprintSetter = SetTexture, Category = "Image", meta = (ExposeOnSpawn = true))
 	TObjectPtr<UTexture2D> Texture;
 
 	/** Options are captured by Play; edits do not change an active sequence. */
@@ -62,8 +62,12 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "BertaDevKit|UI|Image")
 	FBertaImageDisplayCompletedEvent OnDisplayCompleted;
 
+	/** Same-source assignment restarts; before construction this only configures the source. Close stays terminal. */
+	UFUNCTION(BlueprintSetter, Category = "BertaDevKit|UI|Image")
+	void SetTexture(UTexture2D* NewTexture);
+
 	/**
-	 * Starts once the native visual has been constructed (normally by Add to Viewport).
+	 * Starts once the native visual has been constructed (including construction as an embedded child).
 	 * A positive fade-in anchors its clock on the first Slate update at zero opacity.
 	 * Returns true while already playing, false after completion or Close. Does not restart.
 	 * Invalid texture or non-finite active durations log a warning and close the widget.
@@ -84,6 +88,7 @@ protected:
 private:
 	friend class FBertaImagePlayerWidgetPlaybackTest;
 	friend class FBertaImagePlayerWidgetHierarchyTest;
+	friend class FBertaImagePlayerWidgetReplacementTest;
 
 	enum class EPlaybackState : uint8
 	{
@@ -96,6 +101,7 @@ private:
 		Closed
 	};
 
+	void ResetPlayback();
 	void AdvancePlayback(double Now);
 	void CompletePlayback();
 	void ClearVisual();
@@ -110,5 +116,8 @@ private:
 	FBertaImagePlaybackOptions ActiveOptions;
 	EPlaybackState PlaybackState = EPlaybackState::Inactive;
 	double StateStartTime = 0.0;
+	uint64 PlaybackGeneration = 0;
+	bool bNativeConstructed = false;
+	bool bSourceCleared = false;
 	bool bIsConstructing = false;
 };

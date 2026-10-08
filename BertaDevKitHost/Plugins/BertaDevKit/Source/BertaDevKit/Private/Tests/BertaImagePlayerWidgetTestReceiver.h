@@ -5,6 +5,7 @@
 #include "BertaImagePlayerWidgetTestReceiver.generated.h"
 
 class UBertaImagePlayerWidget;
+class UTexture2D;
 
 // UHT needs this private reflected receiver in every configuration; only automation uses it.
 UCLASS(Transient, NotBlueprintable)
@@ -19,4 +20,7 @@ public:
 	int32 CompletionCount = 0;
 	bool bPlayAcceptedDuringCompletion = false;
 	bool bCloseOnCompletion = false;
+	bool bReplaceOnCompletion = false;
+	UPROPERTY()
+	TObjectPtr<UTexture2D> ReplacementTexture;
 };

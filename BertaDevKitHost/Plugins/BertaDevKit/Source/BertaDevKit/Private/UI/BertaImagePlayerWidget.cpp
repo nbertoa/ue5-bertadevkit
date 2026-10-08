@@ -58,9 +58,11 @@ TSharedRef<SWidget> UBertaImagePlayerWidget::RebuildWidget()
 void UBertaImagePlayerWidget::NativeConstruct()
 {
 	TGuardValue<bool> ConstructGuard(bIsConstructing, true);
+	bNativeConstructed = false;
 	Super::NativeConstruct();
+	bNativeConstructed = true;
 
-	if (!IsDesignTime() && PlaybackState == EPlaybackState::Inactive && Options.bAutoPlay)
+	if (!IsDesignTime() && PlaybackState == EPlaybackState::Inactive && !bSourceCleared && Options.bAutoPlay)
 	{
 		Play();
 	}
@@ -68,6 +70,8 @@ void UBertaImagePlayerWidget::NativeConstruct()
 
 void UBertaImagePlayerWidget::NativeDestruct()
 {
+	bNativeConstructed = false;
+	++PlaybackGeneration;
 	// Like the video utility, external removal cancels a nonterminal sequence.
 	// Re-adding that instance may start again; completion and Close remain terminal.
 	if (PlaybackState != EPlaybackState::Completed && PlaybackState != EPlaybackState::Closed)
@@ -90,6 +94,30 @@ void UBertaImagePlayerWidget::NativeTick(const FGeometry& MyGeometry, const floa
 		return;
 	}
 	AdvancePlayback(FPlatformTime::Seconds());
+}
+
+void UBertaImagePlayerWidget::SetTexture(UTexture2D* NewTexture)
+{
+	Texture = NewTexture;
+	bSourceCleared = NewTexture == nullptr;
+	if (PlaybackState == EPlaybackState::Closed)
+	{
+		return;
+	}
+	ResetPlayback();
+	if (bNativeConstructed && !IsDesignTime() && IsValid(Texture) && Options.bAutoPlay)
+	{
+		Play();
+	}
+}
+
+void UBertaImagePlayerWidget::ResetPlayback()
+{
+	++PlaybackGeneration;
+	ClearVisual();
+	ActiveOptions = {};
+	PlaybackState = EPlaybackState::Inactive;
+	StateStartTime = 0.0;
 }
 
 bool UBertaImagePlayerWidget::Play()
@@ -132,6 +160,7 @@ bool UBertaImagePlayerWidget::Play()
 		return false;
 	}
 
+	++PlaybackGeneration;
 	ActiveOptions = Options;
 	ActiveOptions.FadeInDuration = ActiveOptions.bUseFadeIn ? FMath::Max(0.0f, ActiveOptions.FadeInDuration) : 0.0f;
 	ActiveOptions.DisplayDuration = FMath::Max(0.0f, ActiveOptions.DisplayDuration);
@@ -150,6 +179,7 @@ bool UBertaImagePlayerWidget::Play()
 
 void UBertaImagePlayerWidget::Close()
 {
+	++PlaybackGeneration;
 	PlaybackState = EPlaybackState::Closed;
 	ClearVisual();
 	RemoveWhenReady();
@@ -224,8 +254,9 @@ void UBertaImagePlayerWidget::CompletePlayback()
 	// Establish terminal state before calling listeners, including reentrant Play/Close.
 	PlaybackState = EPlaybackState::Completed;
 	const bool bShouldRemove = ActiveOptions.bRemoveOnCompletion;
+	const uint64 CompletedGeneration = PlaybackGeneration;
 	OnDisplayCompleted.Broadcast(this);
-	if (bShouldRemove && PlaybackState == EPlaybackState::Completed)
+	if (bShouldRemove && PlaybackGeneration == CompletedGeneration && PlaybackState == EPlaybackState::Completed)
 	{
 		RemoveWhenReady();
 	}
@@ -247,6 +278,7 @@ void UBertaImagePlayerWidget::RemoveWhenReady()
 	// an unmanaged container. Terminal playback removes on the first Slate tick instead.
 	if (!bIsConstructing)
 	{
+		bNativeConstructed = false;
 		RemoveFromParent();
 	}
 }

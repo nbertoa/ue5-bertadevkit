@@ -17,6 +17,7 @@
 #include "MediaTexture.h"
 #include "Misc/Timespan.h"
 #include "Sound/SoundBase.h"
+#include "UObject/UObjectGlobals.h"
 
 namespace BertaVideoPlayerWidgetPrivate
 {
@@ -88,9 +89,11 @@ TSharedRef<SWidget> UBertaVideoPlayerWidget::RebuildWidget()
 
 void UBertaVideoPlayerWidget::NativeConstruct()
 {
+	bNativeConstructed = false;
 	Super::NativeConstruct();
+	bNativeConstructed = true;
 
-	if (!IsDesignTime() && !bTerminal && PlaybackState == EPlaybackState::Inactive)
+	if (!IsDesignTime() && !bTerminal && !bSourceCleared && PlaybackState == EPlaybackState::Inactive)
 	{
 		ActivatePlayback();
 	}
@@ -98,6 +101,8 @@ void UBertaVideoPlayerWidget::NativeConstruct()
 
 void UBertaVideoPlayerWidget::NativeDestruct()
 {
+	bNativeConstructed = false;
+	++PlaybackGeneration;
 	CleanupMediaResources();
 	PlaybackState = bTerminal ? EPlaybackState::Closed : EPlaybackState::Inactive;
 	ResetVisuals();
@@ -124,6 +129,37 @@ void UBertaVideoPlayerWidget::NativeTick(const FGeometry& MyGeometry, const floa
 	{
 		FinishFade();
 	}
+}
+
+void UBertaVideoPlayerWidget::SetMediaSource(UMediaSource* NewMediaSource)
+{
+	MediaSource = NewMediaSource;
+	bSourceCleared = NewMediaSource == nullptr;
+	if (bClosedExplicitly)
+	{
+		return;
+	}
+	ResetPlayback();
+	if (bNativeConstructed && !IsDesignTime() && IsValid(MediaSource))
+	{
+		ActivatePlayback();
+	}
+}
+
+void UBertaVideoPlayerWidget::ResetPlayback()
+{
+	++PlaybackGeneration;
+	CleanupMediaResources();
+	ResetVisuals();
+	bTerminal = false;
+	PlaybackState = EPlaybackState::Inactive;
+	ActiveOptions = {};
+	FadeStartTime = 0.0;
+	ActiveFadeDuration = 0.0f;
+	TransitionHalfDuration = 0.0f;
+	FadeStartOpacity = 0.0f;
+	FadeEndOpacity = 1.0f;
+	bPauseReleaseRequested = false;
 }
 
 bool UBertaVideoPlayerWidget::Play()
@@ -157,15 +193,20 @@ bool UBertaVideoPlayerWidget::Play()
 
 void UBertaVideoPlayerWidget::Close()
 {
+	++PlaybackGeneration;
+	bClosedExplicitly = true;
 	bTerminal = true;
 	PlaybackState = EPlaybackState::Closed;
 	CleanupMediaResources();
 	ResetVisuals();
+	bNativeConstructed = false;
 	RemoveFromParent();
 }
 
 bool UBertaVideoPlayerWidget::ActivatePlayback()
 {
+	const uint64 ActivationGeneration = ++PlaybackGeneration;
+	ActiveOptions = Options;
 	if (!IsValid(MediaSource))
 	{
 		FailPlayback(TEXT("No valid Media Source was configured."));
@@ -178,7 +219,7 @@ bool UBertaVideoPlayerWidget::ActivatePlayback()
 		return false;
 	}
 
-	if (Options.bUseStartFade && VideoImage)
+	if (ActiveOptions.bUseStartFade && VideoImage)
 	{
 		VideoImage->SetVisibility(ESlateVisibility::Hidden);
 	}
@@ -196,11 +237,11 @@ bool UBertaVideoPlayerWidget::ActivatePlayback()
 		return false;
 	}
 
-	bPlayRequested = Options.bAutoPlay;
+	bPlayRequested = ActiveOptions.bAutoPlay;
 	PlaybackState = EPlaybackState::Opening;
 	UMediaPlayer* MediaPlayer = InternalMediaPlayer;
 	const bool bOpenStarted = MediaPlayer->OpenSource(MediaSource);
-	if (!bOpenStarted && !bTerminal)
+	if (!bOpenStarted && PlaybackGeneration == ActivationGeneration && !bTerminal)
 	{
 		FailPlayback(FString::Printf(
 			TEXT("Failed to begin opening Media Source '%s'."),
@@ -208,13 +249,13 @@ bool UBertaVideoPlayerWidget::ActivatePlayback()
 		return false;
 	}
 
-	return !bTerminal;
+	return PlaybackGeneration == ActivationGeneration && !bTerminal;
 }
 
 bool UBertaVideoPlayerWidget::CreateMediaResources(FString& OutErrorMessage)
 {
 	OutErrorMessage.Reset();
-	if (!VideoImage || ((Options.bUseStartFade || Options.bUseEndFade) && !BlackVisual))
+	if (!VideoImage || ((ActiveOptions.bUseStartFade || ActiveOptions.bUseEndFade) && !BlackVisual))
 	{
 		OutErrorMessage = TEXT("Failed to create the native video visuals.");
 		return false;
@@ -245,7 +286,7 @@ bool UBertaVideoPlayerWidget::CreateMediaResources(FString& OutErrorMessage)
 	InternalMediaTexture->UpdateResource();
 	VideoImage->SetBrushResourceObject(InternalMediaTexture);
 
-	if (Options.bPlayAudio && IsValid(ExternalAudio))
+	if (ActiveOptions.bPlayAudio && IsValid(ExternalAudio))
 	{
 		InternalExternalAudio = NewObject<UAudioComponent>(this, NAME_None, RF_Transient);
 		InternalExternalAudio->SetAutoActivate(false);
@@ -261,7 +302,7 @@ bool UBertaVideoPlayerWidget::CreateMediaResources(FString& OutErrorMessage)
 			return false;
 		}
 	}
-	else if (Options.bPlayAudio)
+	else if (ActiveOptions.bPlayAudio)
 	{
 		InternalMediaSound = NewObject<UMediaSoundComponent>(this, NAME_None, RF_Transient);
 		if (!InternalMediaSound)
@@ -289,7 +330,7 @@ bool UBertaVideoPlayerWidget::CreateMediaResources(FString& OutErrorMessage)
 bool UBertaVideoPlayerWidget::AcquireRequestedPause(FString& OutErrorMessage)
 {
 	OutErrorMessage.Reset();
-	if (!Options.bPauseGame)
+	if (!ActiveOptions.bPauseGame)
 	{
 		return true;
 	}
@@ -337,7 +378,14 @@ bool UBertaVideoPlayerWidget::StartReadyMedia(const EPlaybackState StartingState
 	}
 
 	PlaybackState = StartingState;
-	if (!InternalMediaPlayer->Play())
+	const uint64 StartingGeneration = PlaybackGeneration;
+	UMediaPlayer* MediaPlayer = InternalMediaPlayer;
+	const bool bStarted = MediaPlayer->Play();
+	if (PlaybackGeneration != StartingGeneration)
+	{
+		return false;
+	}
+	if (!bStarted)
 	{
 		FailPlayback(FString::Printf(
 			TEXT("Failed to start playback for Media Source '%s'."),
@@ -350,9 +398,9 @@ bool UBertaVideoPlayerWidget::StartReadyMedia(const EPlaybackState StartingState
 
 bool UBertaVideoPlayerWidget::StartRequestedPlayback()
 {
-	if (Options.bUseStartFade && !bRestartingLoop)
+	if (ActiveOptions.bUseStartFade && !bRestartingLoop)
 	{
-		TransitionHalfDuration = FMath::Max(0.0f, Options.StartFadeDuration);
+		TransitionHalfDuration = FMath::Max(0.0f, ActiveOptions.StartFadeDuration);
 		BeginFade(EPlaybackState::FadingOutLevel, TransitionHalfDuration);
 		return !bTerminal;
 	}
@@ -362,7 +410,7 @@ bool UBertaVideoPlayerWidget::StartRequestedPlayback()
 
 void UBertaVideoPlayerWidget::TryStartEndFade()
 {
-	if (!Options.bUseEndFade || Options.bLoop || Options.EndFadeDuration <= 0.0f || bTerminal
+	if (!ActiveOptions.bUseEndFade || ActiveOptions.bLoop || ActiveOptions.EndFadeDuration <= 0.0f || bTerminal
 		|| (PlaybackState != EPlaybackState::Playing && PlaybackState != EPlaybackState::FadingInVideo)
 		|| !InternalMediaPlayer || !InternalMediaPlayer->IsPlaying())
 	{
@@ -377,9 +425,9 @@ void UBertaVideoPlayerWidget::TryStartEndFade()
 	}
 
 	const double RemainingSeconds = (Duration - CurrentTime).GetTotalSeconds();
-	if (RemainingSeconds <= Options.EndFadeDuration)
+	if (RemainingSeconds <= ActiveOptions.EndFadeDuration)
 	{
-		TransitionHalfDuration = FMath::Max(0.0f, Options.EndFadeDuration);
+		TransitionHalfDuration = FMath::Max(0.0f, ActiveOptions.EndFadeDuration);
 		// A late UI tick uses the remaining media time so black is reached near the natural end.
 		BeginFade(EPlaybackState::FadingOutVideoAtEnd, static_cast<float>(FMath::Max(0.0, RemainingSeconds)));
 	}
@@ -426,8 +474,9 @@ void UBertaVideoPlayerWidget::FinishFade()
 
 	case EPlaybackState::FadingInLevel:
 		PlaybackState = EPlaybackState::Closed;
-		if (Options.bRemoveOnCompletion)
+		if (ActiveOptions.bRemoveOnCompletion)
 		{
+			bNativeConstructed = false;
 			RemoveFromParent();
 		}
 		break;
@@ -547,10 +596,15 @@ void UBertaVideoPlayerWidget::FailPlayback(const FString& ErrorMessage)
 		Warning,
 		TEXT("[BertaVideoPlayerWidget] %s"),
 		*ErrorMessage);
-	OnPlaybackFailed.Broadcast(this, ErrorMessage);
+	const uint64 FailedGeneration = PlaybackGeneration;
 	CleanupMediaResources();
 	ResetVisuals();
-	RemoveFromParent();
+	OnPlaybackFailed.Broadcast(this, ErrorMessage);
+	if (PlaybackGeneration == FailedGeneration && bTerminal)
+	{
+		bNativeConstructed = false;
+		RemoveFromParent();
+	}
 }
 
 void UBertaVideoPlayerWidget::HandleMediaOpened(FString OpenedUrl)
@@ -591,7 +645,7 @@ void UBertaVideoPlayerWidget::HandlePlaybackResumed()
 	PlaybackState = EPlaybackState::Playing;
 	const bool bWasRestartingLoop = bRestartingLoop;
 	bRestartingLoop = false;
-	if (InternalExternalAudio && (!bWasRestartingLoop || Options.bRestartExternalAudioOnLoop))
+	if (InternalExternalAudio && (!bWasRestartingLoop || ActiveOptions.bRestartExternalAudioOnLoop))
 	{
 		InternalExternalAudio->Stop();
 		InternalExternalAudio->Play(0.0f);
@@ -599,8 +653,9 @@ void UBertaVideoPlayerWidget::HandlePlaybackResumed()
 
 	if (!bWasRestartingLoop)
 	{
+		const uint64 StartedGeneration = PlaybackGeneration;
 		OnPlaybackStarted.Broadcast(this);
-		if (!bTerminal && PlaybackState == EPlaybackState::Playing && bRevealVideo)
+		if (PlaybackGeneration == StartedGeneration && !bTerminal && PlaybackState == EPlaybackState::Playing && bRevealVideo)
 		{
 			BeginFade(EPlaybackState::FadingInVideo, TransitionHalfDuration);
 		}
@@ -614,7 +669,7 @@ void UBertaVideoPlayerWidget::HandleEndReached()
 		return;
 	}
 
-	if (Options.bLoop)
+	if (ActiveOptions.bLoop)
 	{
 		if (BlackVisual)
 		{
@@ -630,9 +685,11 @@ void UBertaVideoPlayerWidget::HandleEndReached()
 		return;
 	}
 
-	if (Options.bUseEndFade)
+	const uint64 CompletedGeneration = PlaybackGeneration;
+	const bool bShouldRemove = ActiveOptions.bRemoveOnCompletion;
+	if (ActiveOptions.bUseEndFade)
 	{
-		TransitionHalfDuration = FMath::Max(0.0f, Options.EndFadeDuration);
+		TransitionHalfDuration = FMath::Max(0.0f, ActiveOptions.EndFadeDuration);
 		// Cover any final sample or backend clear before hiding the video.
 		BlackVisual->SetRenderOpacity(1.0f);
 		VideoImage->SetVisibility(ESlateVisibility::Hidden);
@@ -640,7 +697,7 @@ void UBertaVideoPlayerWidget::HandleEndReached()
 		PlaybackState = EPlaybackState::FadingInLevel;
 		CleanupMediaResources();
 		OnPlaybackCompleted.Broadcast(this);
-		if (PlaybackState == EPlaybackState::FadingInLevel)
+		if (PlaybackGeneration == CompletedGeneration && PlaybackState == EPlaybackState::FadingInLevel)
 		{
 			BeginFade(EPlaybackState::FadingInLevel, TransitionHalfDuration);
 		}
@@ -652,8 +709,9 @@ void UBertaVideoPlayerWidget::HandleEndReached()
 	CleanupMediaResources();
 	ResetVisuals();
 	OnPlaybackCompleted.Broadcast(this);
-	if (Options.bRemoveOnCompletion)
+	if (PlaybackGeneration == CompletedGeneration && bTerminal && bShouldRemove)
 	{
+		bNativeConstructed = false;
 		RemoveFromParent();
 	}
 }
