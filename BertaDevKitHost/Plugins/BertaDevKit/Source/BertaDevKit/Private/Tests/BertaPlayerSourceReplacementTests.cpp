@@ -234,6 +234,7 @@ void UBertaVideoPlayerWidgetTestReceiver::Started(UBertaVideoPlayerWidget* Widge
 {
 #if WITH_DEV_AUTOMATION_TESTS
 	++StartedCount;
+	if (bStopOnStarted) Widget->Stop();
 	if (bClearOnEvent) Widget->SetMediaSource(nullptr);
 #endif
 }

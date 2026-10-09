@@ -19,4 +19,5 @@ public:
 	int32 CompletedCount = 0;
 	int32 FailedCount = 0;
 	bool bClearOnEvent = false;
+	bool bStopOnStarted = false;
 };

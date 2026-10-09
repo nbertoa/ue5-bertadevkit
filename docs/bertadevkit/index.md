@@ -122,7 +122,7 @@ Automation coverage is under `BertaDevKit.Localization`. Manual verification pen
 
 ## Video playback widget
 
-`UBertaVideoPlayerWidget` is a focused Runtime convenience layer over UE 5.8 Media Framework. It builds its own fullscreen `UImage`, transient `UMediaPlayer`, and transient `UMediaTexture`, so a separate Widget Blueprint or Media Texture asset is not required. Configure a `UMediaSource` and `FBertaVideoPlaybackOptions` on **Create Widget**, optionally bind the events, and then call **Add to Viewport**; construction in the viewport is the activation point.
+`UBertaVideoPlayerWidget` is a focused Runtime convenience layer over UE 5.8 Media Framework. It builds its own fullscreen `UImage`, transient `UMediaPlayer`, and transient `UMediaTexture`, so a separate Widget Blueprint or Media Texture asset is not required. Configure a `UMediaSource` and `FBertaVideoPlaybackOptions` on **Create Widget**, optionally bind the events, and then call **Add to Viewport**; native construction, including construction as an embedded child, is the activation point.
 
 ```text
 Create Widget (BertaVideoPlayerWidget)
@@ -135,13 +135,44 @@ The options control autoplay, gameplay pause, removal after terminal natural com
 
 `bUseStartFade` and `bUseEndFade` default to false. `StartFadeDuration` and `EndFadeDuration` default to 0.5 seconds and specify the real-time duration of **each** half of the respective transition; zero completes a half immediately. With start fade enabled, the level stays visible while the source opens, then `Play` fades the level to black **before** starting media playback. Once Media Framework confirms playback, the black layer fades away to reveal the video. With end fade enabled and a usable media duration, the final `EndFadeDuration` seconds fade the still-playing video to black. At natural completion, the widget hides the video, releases playback resources and any pause it owned, broadcasts completion, then fades black back to the level. If the duration is unavailable or the end arrives early, it first forces black before hiding the video. Removal after completion occurs only after the level is fully revealed. Audio continues during the video fade and stops at natural completion. Loop boundaries do not trigger the end fade, and the start fade runs only on the first playback start. Both fades use a fullscreen, `HitTestInvisible` black layer inside the Video Player and continue while gameplay is paused.
 
-Media open and playback completion are delegate-driven rather than polled. `OnPlaybackStarted` fires after Media Framework reports playback resumed, `OnPlaybackCompleted` is reserved for a terminal natural end and fires after the widget releases its media/audio resources and any pause it owned, and `OnPlaybackFailed` carries a concise error before cleanup and removal. With `bLoop` enabled, each end seeks back to the beginning and resumes playback, retaining the widget, resources, and owned pause without repeating Started or Completed events. Looping requires a seekable source/backend; a rejected seek or playback request emits failure and cleans up. **Remove on Completion** only determines whether the now-closed widget remains in its parent. Explicit `Close` and failures do not broadcast natural completion.
+Media open and playback completion are delegate-driven rather than polled. `OnPlaybackStarted` fires on a new run after Media Framework confirms playback, not on transport Resume or loop restarts, `OnPlaybackCompleted` is reserved for a terminal natural end and fires after the widget releases its media/audio resources and any pause it owned, and `OnPlaybackFailed` carries a concise error after cleanup and before removal. With `bLoop` enabled, each end seeks back to the beginning and resumes playback, retaining the widget, resources, and owned pause without repeating Started or Completed events. Looping requires a seekable source/backend; a rejected seek or playback request emits failure and cleans up. **Remove on Completion** only determines whether the now-closed widget remains in its parent. Explicit `Close` and failures do not broadcast natural completion.
 
 Audio routing is selected on activation. When `bPlayAudio` is false, neither audio path is created. Otherwise, a valid optional `ExternalAudio` (`USoundBase`, exposed on Create Widget) replaces embedded audio using a widget-owned, non-spatial `UAudioComponent`; without it, the existing `UMediaSoundComponent` plays embedded audio. Native media audio output stays disabled, so the two paths never play together. Both paths use UI sound to continue during gameplay pause. External audio starts only after confirmed video playback, including when autoplay is disabled. Close, failure, destruction, and terminal completion stop and release it. With loop restart enabled, the external track restarts from zero only after the video returns to the beginning and resumes. With restart disabled, loop boundaries leave the external track untouched: if it ends, it stays ended. The widget never enables independent audio looping; any looping authored inside a Sound Wave, Sound Cue, or MetaSound remains in effect. The restart option has no effect on embedded audio.
 
 Pause acquisition uses an authoritative `AGameModeBase` pause delegate tied to this widget. If the world was already paused, the widget records no ownership and therefore never unpauses it. If another pause delegate still blocks unpause, releasing the video pause leaves the world paused. Consequently, **Pause Game** requires an owning Player Controller and authoritative Game Mode; client-only playback should disable that option and leave network pause policy to the game.
 
 The widget accepts `UMediaSource` assets rather than raw file paths and intentionally provides no playlist, subtitle, skip, URL, or playback-rate API. Actual codec/container availability remains determined by the selected Media Framework backend and target platform. Runtime visual/audio behavior still requires manual Unreal verification; the repository verification compiles the feature without launching Unreal.
+
+### Video transport controls
+
+The Blueprint API under **BertaDevKit | UI | Video** is **Play**, **Pause**, **Resume**, **Stop**, **Set Media Source**, and **Close**.
+
+| Control | Contract |
+| --- | --- |
+| Play | Queues playback while Opening, starts when Ready, succeeds harmlessly while playing, and uses Resume while paused. After Stop, reopens the configured source from the beginning with current Options/External Audio and an explicit playback request, even if Auto Play is false. |
+| Pause | Returns true only when native playback accepts Pause. Preserves position, resources, parent, loop configuration and gameplay pause ownership; freezes media reveal/end fades. Opening, the pre-play level-to-black fade, stopped/closed and already-paused calls return false without failure events. |
+| Resume | Returns true when a transport-paused run accepts native Play, or processes a queued natural-end boundary. Continues the same player/audio and fade progress, without reopening, seeking, another Started event or another start fade. Unpaused calls return false. Play while paused uses this same path. |
+| Stop | Cleans up media/audio/delegates, cancels transitions/loop state and releases only gameplay pause owned by this widget. Retains the parent, source, Options, External Audio and Blueprint event bindings. Remains stopped until explicit Play or source replacement; repeated Stop is harmless. |
+| Set Media Source | Cancels/restarts on the same instance according to current Options, including while paused/stopped. Same-source assignment restarts; null clears to reusable inactive state. |
+| Close | Terminal cleanup/removal. Neither Play, Stop nor source assignment revives an explicitly closed widget. |
+
+Transport requests do not manufacture playback events. Pause/Resume never repeat Started; Stop never emits completion or failure. Only a terminal natural media end emits Completed, including a queued natural-end notification processed on Resume; ordinary invalid transport timing is not a playback failure. Play after natural completion remains terminal unless a source setter or Stop explicitly resets the run.
+
+Transport Pause uses native Media Framework rate 0, and Resume uses native rate 1; supported behavior depends on the backend. Embedded media audio follows that rate. External audio uses SetPaused on the same component, then unpauses on Resume; Stop stops and releases it. Video transport Pause is **independent of Pause Game**: it retains an acquired gameplay pause until Stop, Close, replacement, failure, destruction or natural completion releases it.
+
+While transport-paused, UI ticks neither advance media-related fades nor start an end fade. Resume shifts the monotonic fade start clock by the paused real-time interval, preserving visible progress. An EndReached notification already queued when Pause succeeds is retained until Resume processes that natural boundary; Stop/replacement discard it. The level-to-black pre-play fade is not pausable transport. A reveal is established before Started listeners run, so a listener may Pause, Stop or replace the source without an old continuation restarting its transition. Stop/replacement invalidate the run generation and unbind old media callbacks before closing the player.
+
+For an embedded child (configure an initial valid source or intentionally clear through the setter before construction):
+
+```text
+VideoPlayerChild -> Set Media Source(Video A)
+VideoPlayerChild -> Pause
+VideoPlayerChild -> Resume
+VideoPlayerChild -> Stop
+VideoPlayerChild -> Play
+```
+
+`BertaDevKit.UI.VideoPlayer.TransportContracts` covers transport bookkeeping, audio pause flags, fade clock suspension, cleanup/late callbacks, stopped activation and event reentrancy without opening a media backend. Automation tests are compiled but require Unreal to execute. Actual position/audio continuity, Blueprint interaction, backend pause support and visual fade behavior remain pending manual verification.
 
 ## Image playback widget
 

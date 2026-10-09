@@ -84,7 +84,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Video", meta = (ExposeOnSpawn = true))
 	FBertaVideoPlaybackOptions Options;
 
-	/** Broadcast after Media Framework reports that playback actually resumed. */
+	/** Broadcast on a new playback start, not on transport Resume or loop restarts. */
 	UPROPERTY(BlueprintAssignable, Category = "BertaDevKit|UI|Video")
 	FBertaVideoPlaybackEvent OnPlaybackStarted;
 
@@ -100,9 +100,21 @@ public:
 	UFUNCTION(BlueprintSetter, Category = "BertaDevKit|UI|Video")
 	void SetMediaSource(UMediaSource* NewMediaSource);
 
-	/** Starts playback now, or queues it until an in-progress open completes. */
+	/** Starts/queues playback, resumes transport Pause, or reopens a stopped run even without autoplay. */
 	UFUNCTION(BlueprintCallable, Category = "BertaDevKit|UI|Video")
 	bool Play();
+
+	/** Preserves position/resources and freezes media fades. False when not playing or already paused. */
+	UFUNCTION(BlueprintCallable, Category = "BertaDevKit|UI|Video")
+	bool Pause();
+
+	/** Continues a transport-paused run without repeating Started or the start fade. */
+	UFUNCTION(BlueprintCallable, Category = "BertaDevKit|UI|Video")
+	bool Resume();
+
+	/** Nonterminal cleanup; retains parent/source/configuration and waits for explicit Play or source replacement. */
+	UFUNCTION(BlueprintCallable, Category = "BertaDevKit|UI|Video")
+	void Stop();
 
 	/** Terminal, idempotent cleanup. Does not broadcast natural completion. */
 	UFUNCTION(BlueprintCallable, Category = "BertaDevKit|UI|Video")
@@ -116,10 +128,12 @@ protected:
 
 private:
 	friend class FBertaVideoPlayerWidgetReplacementTest;
+	friend class FBertaVideoPlayerWidgetTransportTest;
 
 	enum class EPlaybackState : uint8
 	{
 		Inactive,
+		Stopped,
 		Opening,
 		Ready,
 		FadingOutLevel,
@@ -134,7 +148,9 @@ private:
 	};
 
 	void ResetPlayback();
-	bool ActivatePlayback();
+	bool ActivatePlayback(bool bExplicitPlay = false);
+	void ApplyTransportPause(bool bPaused, double Now);
+	void AdvanceFade(double Now);
 	bool CreateMediaResources(FString& OutErrorMessage);
 	bool AcquireRequestedPause(FString& OutErrorMessage);
 	bool StartRequestedPlayback();
@@ -189,6 +205,9 @@ private:
 	TWeakObjectPtr<AGameModeBase> PauseGameMode;
 	EPlaybackState PlaybackState = EPlaybackState::Inactive;
 	double FadeStartTime = 0.0;
+	double TransportPauseStartTime = 0.0;
+	bool bTransportPaused = false;
+	bool bEndReachedWhilePaused = false;
 	float ActiveFadeDuration = 0.0f;
 	float TransitionHalfDuration = 0.0f;
 	float FadeStartOpacity = 0.0f;

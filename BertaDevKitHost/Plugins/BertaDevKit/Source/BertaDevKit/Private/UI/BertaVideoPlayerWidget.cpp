@@ -103,8 +103,9 @@ void UBertaVideoPlayerWidget::NativeDestruct()
 {
 	bNativeConstructed = false;
 	++PlaybackGeneration;
+	const bool bWasStopped = PlaybackState == EPlaybackState::Stopped;
 	CleanupMediaResources();
-	PlaybackState = bTerminal ? EPlaybackState::Closed : EPlaybackState::Inactive;
+	PlaybackState = bWasStopped ? EPlaybackState::Stopped : (bTerminal ? EPlaybackState::Closed : EPlaybackState::Inactive);
 	ResetVisuals();
 	Super::NativeDestruct();
 }
@@ -114,6 +115,15 @@ void UBertaVideoPlayerWidget::NativeTick(const FGeometry& MyGeometry, const floa
 	Super::NativeTick(MyGeometry, InDeltaTime);
 
 	TryStartEndFade();
+	AdvanceFade(FPlatformTime::Seconds());
+}
+
+void UBertaVideoPlayerWidget::AdvanceFade(const double Now)
+{
+	if (bTransportPaused)
+	{
+		return;
+	}
 
 	const bool bFadingOut = PlaybackState == EPlaybackState::FadingOutLevel || PlaybackState == EPlaybackState::FadingOutVideoAtEnd;
 	const bool bFadingIn = PlaybackState == EPlaybackState::FadingInVideo || PlaybackState == EPlaybackState::FadingInLevel;
@@ -122,7 +132,7 @@ void UBertaVideoPlayerWidget::NativeTick(const FGeometry& MyGeometry, const floa
 		return;
 	}
 
-	const double ElapsedSeconds = FMath::Max(0.0, FPlatformTime::Seconds() - FadeStartTime);
+	const double ElapsedSeconds = FMath::Max(0.0, Now - FadeStartTime);
 	const float Alpha = FMath::Clamp(static_cast<float>(ElapsedSeconds / ActiveFadeDuration), 0.0f, 1.0f);
 	BlackVisual->SetRenderOpacity(FMath::Lerp(FadeStartOpacity, FadeEndOpacity, Alpha));
 	if (Alpha >= 1.0f)
@@ -169,8 +179,16 @@ bool UBertaVideoPlayerWidget::Play()
 		return false;
 	}
 
+	if (bTransportPaused)
+	{
+		return Resume();
+	}
+
 	switch (PlaybackState)
 	{
+	case EPlaybackState::Stopped:
+		return bNativeConstructed && IsValid(MediaSource) && ActivatePlayback(true);
+
 	case EPlaybackState::Opening:
 		bPlayRequested = true;
 		return true;
@@ -184,11 +202,95 @@ bool UBertaVideoPlayerWidget::Play()
 	case EPlaybackState::StartingBehindBlack:
 	case EPlaybackState::FadingInVideo:
 	case EPlaybackState::Playing:
+	case EPlaybackState::FadingOutVideoAtEnd:
+	case EPlaybackState::WaitingForEndBehindBlack:
 		return true;
 
 	default:
 		return false;
 	}
+}
+
+bool UBertaVideoPlayerWidget::Pause()
+{
+	if (bTerminal || bTransportPaused || !InternalMediaPlayer || bLoopSeekPending
+		|| (PlaybackState != EPlaybackState::Playing && PlaybackState != EPlaybackState::FadingInVideo
+			&& PlaybackState != EPlaybackState::FadingOutVideoAtEnd && PlaybackState != EPlaybackState::WaitingForEndBehindBlack))
+	{
+		return false;
+	}
+
+	const uint64 PausingGeneration = PlaybackGeneration;
+	const double Now = FPlatformTime::Seconds();
+	const bool bPaused = InternalMediaPlayer->Pause();
+	if (!bPaused || PlaybackGeneration != PausingGeneration || bTerminal)
+	{
+		return false;
+	}
+	ApplyTransportPause(true, Now);
+	return true;
+}
+
+bool UBertaVideoPlayerWidget::Resume()
+{
+	if (bTerminal || !bTransportPaused || !InternalMediaPlayer)
+	{
+		return false;
+	}
+
+	// EndReached can already be queued when Pause succeeds. Preserve the natural
+	// boundary, but do not complete/restart a loop until transport resumes.
+	if (bEndReachedWhilePaused)
+	{
+		bEndReachedWhilePaused = false;
+		ApplyTransportPause(false, FPlatformTime::Seconds());
+		HandleEndReached();
+		return true;
+	}
+
+	const uint64 ResumingGeneration = PlaybackGeneration;
+	const bool bResumed = InternalMediaPlayer->Play();
+	if (!bResumed || PlaybackGeneration != ResumingGeneration || bTerminal || !bTransportPaused)
+	{
+		return false;
+	}
+	ApplyTransportPause(false, FPlatformTime::Seconds());
+	return true;
+}
+
+void UBertaVideoPlayerWidget::ApplyTransportPause(const bool bPaused, const double Now)
+{
+	if (bTransportPaused == bPaused)
+	{
+		return;
+	}
+	if (bPaused)
+	{
+		TransportPauseStartTime = Now;
+	}
+	else
+	{
+		if (PlaybackState == EPlaybackState::FadingInVideo || PlaybackState == EPlaybackState::FadingOutVideoAtEnd)
+		{
+			FadeStartTime += FMath::Max(0.0, Now - TransportPauseStartTime);
+		}
+		TransportPauseStartTime = 0.0;
+	}
+	bTransportPaused = bPaused;
+	if (InternalExternalAudio)
+	{
+		InternalExternalAudio->SetPaused(bPaused);
+	}
+}
+
+void UBertaVideoPlayerWidget::Stop()
+{
+	if (bClosedExplicitly)
+	{
+		return;
+	}
+	ResetPlayback();
+	PlaybackState = EPlaybackState::Stopped;
 }
 
 void UBertaVideoPlayerWidget::Close()
@@ -203,7 +305,7 @@ void UBertaVideoPlayerWidget::Close()
 	RemoveFromParent();
 }
 
-bool UBertaVideoPlayerWidget::ActivatePlayback()
+bool UBertaVideoPlayerWidget::ActivatePlayback(const bool bExplicitPlay)
 {
 	const uint64 ActivationGeneration = ++PlaybackGeneration;
 	ActiveOptions = Options;
@@ -237,7 +339,7 @@ bool UBertaVideoPlayerWidget::ActivatePlayback()
 		return false;
 	}
 
-	bPlayRequested = ActiveOptions.bAutoPlay;
+	bPlayRequested = bExplicitPlay || ActiveOptions.bAutoPlay;
 	PlaybackState = EPlaybackState::Opening;
 	UMediaPlayer* MediaPlayer = InternalMediaPlayer;
 	const bool bOpenStarted = MediaPlayer->OpenSource(MediaSource);
@@ -410,7 +512,7 @@ bool UBertaVideoPlayerWidget::StartRequestedPlayback()
 
 void UBertaVideoPlayerWidget::TryStartEndFade()
 {
-	if (!ActiveOptions.bUseEndFade || ActiveOptions.bLoop || ActiveOptions.EndFadeDuration <= 0.0f || bTerminal
+	if (bTransportPaused || !ActiveOptions.bUseEndFade || ActiveOptions.bLoop || ActiveOptions.EndFadeDuration <= 0.0f || bTerminal
 		|| (PlaybackState != EPlaybackState::Playing && PlaybackState != EPlaybackState::FadingInVideo)
 		|| !InternalMediaPlayer || !InternalMediaPlayer->IsPlaying())
 	{
@@ -522,6 +624,9 @@ void UBertaVideoPlayerWidget::ReleaseOwnedPause()
 
 void UBertaVideoPlayerWidget::CleanupMediaResources()
 {
+	bTransportPaused = false;
+	bEndReachedWhilePaused = false;
+	TransportPauseStartTime = 0.0;
 	ReleaseOwnedPause();
 	bPlayRequested = false;
 	bRestartingLoop = false;
@@ -625,7 +730,7 @@ void UBertaVideoPlayerWidget::HandleMediaOpened(FString OpenedUrl)
 
 void UBertaVideoPlayerWidget::HandleMediaOpenFailed(FString FailedUrl)
 {
-	if (!bTerminal)
+	if (!bTerminal && PlaybackState == EPlaybackState::Opening)
 	{
 		FailPlayback(FString::Printf(
 			TEXT("Media Source '%s' failed to open (%s)."),
@@ -636,7 +741,7 @@ void UBertaVideoPlayerWidget::HandleMediaOpenFailed(FString FailedUrl)
 
 void UBertaVideoPlayerWidget::HandlePlaybackResumed()
 {
-	if (bTerminal || bLoopSeekPending || (PlaybackState != EPlaybackState::Starting && PlaybackState != EPlaybackState::StartingBehindBlack))
+	if (bTerminal || bTransportPaused || bLoopSeekPending || (PlaybackState != EPlaybackState::Starting && PlaybackState != EPlaybackState::StartingBehindBlack))
 	{
 		return;
 	}
@@ -653,12 +758,13 @@ void UBertaVideoPlayerWidget::HandlePlaybackResumed()
 
 	if (!bWasRestartingLoop)
 	{
-		const uint64 StartedGeneration = PlaybackGeneration;
-		OnPlaybackStarted.Broadcast(this);
-		if (PlaybackGeneration == StartedGeneration && !bTerminal && PlaybackState == EPlaybackState::Playing && bRevealVideo)
+		// Establish the reveal before listeners can Pause/Stop/replace this run.
+		// There is no old-run continuation after the broadcast.
+		if (bRevealVideo)
 		{
 			BeginFade(EPlaybackState::FadingInVideo, TransitionHalfDuration);
 		}
+		OnPlaybackStarted.Broadcast(this);
 	}
 }
 
@@ -666,6 +772,12 @@ void UBertaVideoPlayerWidget::HandleEndReached()
 {
 	if (bTerminal || bLoopSeekPending || (PlaybackState != EPlaybackState::Starting && PlaybackState != EPlaybackState::StartingBehindBlack && PlaybackState != EPlaybackState::FadingInVideo && PlaybackState != EPlaybackState::Playing && PlaybackState != EPlaybackState::FadingOutVideoAtEnd && PlaybackState != EPlaybackState::WaitingForEndBehindBlack))
 	{
+		return;
+	}
+
+	if (bTransportPaused)
+	{
+		bEndReachedWhilePaused = true;
 		return;
 	}
 
