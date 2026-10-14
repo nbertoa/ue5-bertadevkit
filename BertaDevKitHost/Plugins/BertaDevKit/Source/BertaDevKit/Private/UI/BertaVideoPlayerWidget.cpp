@@ -125,7 +125,7 @@ void UBertaVideoPlayerWidget::AdvanceFade(const double Now)
 		return;
 	}
 
-	const bool bFadingOut = PlaybackState == EPlaybackState::FadingOutLevel || PlaybackState == EPlaybackState::FadingOutVideoAtEnd;
+	const bool bFadingOut = PlaybackState == EPlaybackState::FadingOutLevel || PlaybackState == EPlaybackState::FadingOutVideoAtEnd || PlaybackState == EPlaybackState::FadingOutSkippedVideo;
 	const bool bFadingIn = PlaybackState == EPlaybackState::FadingInVideo || PlaybackState == EPlaybackState::FadingInLevel;
 	if ((!bFadingOut && !bFadingIn) || !BlackVisual)
 	{
@@ -203,6 +203,7 @@ bool UBertaVideoPlayerWidget::Play()
 	case EPlaybackState::FadingInVideo:
 	case EPlaybackState::Playing:
 	case EPlaybackState::FadingOutVideoAtEnd:
+	case EPlaybackState::FadingOutSkippedVideo:
 	case EPlaybackState::WaitingForEndBehindBlack:
 		return true;
 
@@ -291,6 +292,94 @@ void UBertaVideoPlayerWidget::Stop()
 	}
 	ResetPlayback();
 	PlaybackState = EPlaybackState::Stopped;
+}
+
+bool UBertaVideoPlayerWidget::SkipToFadeOut()
+{
+	if (PlaybackState == EPlaybackState::FadingOutSkippedVideo || PlaybackState == EPlaybackState::FadingInLevel)
+	{
+		return true;
+	}
+	if (bTerminal)
+	{
+		return false;
+	}
+	const EPlaybackState PreviousState = PlaybackState;
+	switch (PreviousState)
+	{
+	case EPlaybackState::Opening:
+	case EPlaybackState::Ready:
+	case EPlaybackState::FadingOutLevel:
+	case EPlaybackState::Starting:
+	case EPlaybackState::StartingBehindBlack:
+	case EPlaybackState::FadingInVideo:
+	case EPlaybackState::Playing:
+	case EPlaybackState::FadingOutVideoAtEnd:
+	case EPlaybackState::WaitingForEndBehindBlack:
+		break;
+	default:
+		return false;
+	}
+
+	++PlaybackGeneration;
+	if (bTransportPaused && PreviousState == EPlaybackState::FadingOutVideoAtEnd)
+	{
+		// Continue an existing end fade without consuming the real time spent paused.
+		FadeStartTime += FMath::Max(0.0, FPlatformTime::Seconds() - TransportPauseStartTime);
+	}
+	bTransportPaused = false;
+	TransportPauseStartTime = 0.0;
+	bEndReachedWhilePaused = false;
+	bPlayRequested = false;
+	bRestartingLoop = false;
+	bLoopSeekPending = false;
+	UnbindMediaDelegates();
+	if (InternalMediaTexture)
+	{
+		// UE 5.8 retains the last rendered sample when playback closes and AutoClear
+		// is disabled. Keep the same texture/resource until black covers the frame.
+		InternalMediaTexture->AutoClear = false;
+	}
+	if (InternalMediaPlayer)
+	{
+		// Closing also cancels pending opens/seeks on backends that cannot Pause.
+		InternalMediaPlayer->Close();
+	}
+	if (InternalMediaSound)
+	{
+		InternalMediaSound->Stop();
+	}
+	if (InternalExternalAudio)
+	{
+		InternalExternalAudio->Stop();
+		InternalExternalAudio->SetPaused(false);
+	}
+
+	if (PreviousState == EPlaybackState::FadingOutVideoAtEnd)
+	{
+		// Adopt the existing fade's clock/endpoints; its finish now completes directly.
+		PlaybackState = EPlaybackState::FadingOutSkippedVideo;
+		return true;
+	}
+	if (PreviousState == EPlaybackState::WaitingForEndBehindBlack)
+	{
+		CompletePlayback();
+		return true;
+	}
+	if ((PreviousState == EPlaybackState::Playing || PreviousState == EPlaybackState::FadingInVideo)
+		&& ActiveOptions.bUseEndFade)
+	{
+		const float CurrentBlackOpacity = FMath::Clamp(BlackVisual->GetRenderOpacity(), 0.0f, 1.0f);
+		BeginFade(EPlaybackState::FadingOutSkippedVideo,
+			FMath::Max(0.0f, ActiveOptions.EndFadeDuration) * (1.0f - CurrentBlackOpacity));
+	}
+	else
+	{
+		// Before playback there is no stable frame to cover. Cancel and reveal the
+		// level from its current overlay alpha, without first forcing full black.
+		CompletePlayback(true);
+	}
+	return true;
 }
 
 void UBertaVideoPlayerWidget::Close()
@@ -539,8 +628,9 @@ void UBertaVideoPlayerWidget::BeginFade(const EPlaybackState FadeState, const fl
 {
 	PlaybackState = FadeState;
 	ActiveFadeDuration = FMath::Max(0.0f, Duration);
-	const bool bFadingOut = FadeState == EPlaybackState::FadingOutLevel || FadeState == EPlaybackState::FadingOutVideoAtEnd;
-	FadeStartOpacity = FadeState == EPlaybackState::FadingOutVideoAtEnd ? BlackVisual->GetRenderOpacity() : (bFadingOut ? 0.0f : 1.0f);
+	const bool bFadingOut = FadeState == EPlaybackState::FadingOutLevel || FadeState == EPlaybackState::FadingOutVideoAtEnd || FadeState == EPlaybackState::FadingOutSkippedVideo;
+	FadeStartOpacity = (FadeState == EPlaybackState::FadingOutVideoAtEnd || FadeState == EPlaybackState::FadingOutSkippedVideo || FadeState == EPlaybackState::FadingInLevel)
+		? FMath::Clamp(BlackVisual->GetRenderOpacity(), 0.0f, 1.0f) : (bFadingOut ? 0.0f : 1.0f);
 	FadeEndOpacity = bFadingOut ? 1.0f : 0.0f;
 	BlackVisual->SetRenderOpacity(FadeStartOpacity);
 	if (ActiveFadeDuration <= 0.0f)
@@ -572,6 +662,10 @@ void UBertaVideoPlayerWidget::FinishFade()
 	case EPlaybackState::FadingOutVideoAtEnd:
 		PlaybackState = EPlaybackState::WaitingForEndBehindBlack;
 		VideoImage->SetVisibility(ESlateVisibility::Hidden);
+		break;
+
+	case EPlaybackState::FadingOutSkippedVideo:
+		CompletePlayback();
 		break;
 
 	case EPlaybackState::FadingInLevel:
@@ -622,6 +716,18 @@ void UBertaVideoPlayerWidget::ReleaseOwnedPause()
 	PauseGameMode.Reset();
 }
 
+void UBertaVideoPlayerWidget::UnbindMediaDelegates()
+{
+	if (InternalMediaPlayer)
+	{
+		InternalMediaPlayer->OnMediaOpened.RemoveDynamic(this, &ThisClass::HandleMediaOpened);
+		InternalMediaPlayer->OnMediaOpenFailed.RemoveDynamic(this, &ThisClass::HandleMediaOpenFailed);
+		InternalMediaPlayer->OnPlaybackResumed.RemoveDynamic(this, &ThisClass::HandlePlaybackResumed);
+		InternalMediaPlayer->OnEndReached.RemoveDynamic(this, &ThisClass::HandleEndReached);
+		InternalMediaPlayer->OnSeekCompleted.RemoveDynamic(this, &ThisClass::HandleSeekCompleted);
+	}
+}
+
 void UBertaVideoPlayerWidget::CleanupMediaResources()
 {
 	bTransportPaused = false;
@@ -634,11 +740,7 @@ void UBertaVideoPlayerWidget::CleanupMediaResources()
 
 	if (InternalMediaPlayer)
 	{
-		InternalMediaPlayer->OnMediaOpened.RemoveDynamic(this, &ThisClass::HandleMediaOpened);
-		InternalMediaPlayer->OnMediaOpenFailed.RemoveDynamic(this, &ThisClass::HandleMediaOpenFailed);
-		InternalMediaPlayer->OnPlaybackResumed.RemoveDynamic(this, &ThisClass::HandlePlaybackResumed);
-		InternalMediaPlayer->OnEndReached.RemoveDynamic(this, &ThisClass::HandleEndReached);
-		InternalMediaPlayer->OnSeekCompleted.RemoveDynamic(this, &ThisClass::HandleSeekCompleted);
+		UnbindMediaDelegates();
 		InternalMediaPlayer->Close();
 	}
 
@@ -797,13 +899,24 @@ void UBertaVideoPlayerWidget::HandleEndReached()
 		return;
 	}
 
+	CompletePlayback();
+}
+
+void UBertaVideoPlayerWidget::CompletePlayback(const bool bPreserveBlackOpacity)
+{
+	if (bTerminal)
+	{
+		return;
+	}
 	const uint64 CompletedGeneration = PlaybackGeneration;
 	const bool bShouldRemove = ActiveOptions.bRemoveOnCompletion;
 	if (ActiveOptions.bUseEndFade)
 	{
-		TransitionHalfDuration = FMath::Max(0.0f, ActiveOptions.EndFadeDuration);
-		// Cover any final sample or backend clear before hiding the video.
-		BlackVisual->SetRenderOpacity(1.0f);
+		const float RevealStartOpacity = bPreserveBlackOpacity
+			? FMath::Clamp(BlackVisual->GetRenderOpacity(), 0.0f, 1.0f) : 1.0f;
+		TransitionHalfDuration = FMath::Max(0.0f, ActiveOptions.EndFadeDuration) * RevealStartOpacity;
+		// A visible video's cover is complete; pre-play exits retain current black.
+		BlackVisual->SetRenderOpacity(RevealStartOpacity);
 		VideoImage->SetVisibility(ESlateVisibility::Hidden);
 		bTerminal = true;
 		PlaybackState = EPlaybackState::FadingInLevel;

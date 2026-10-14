@@ -88,7 +88,7 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "BertaDevKit|UI|Video")
 	FBertaVideoPlaybackEvent OnPlaybackStarted;
 
-	/** Broadcast once on terminal natural completion, after owned media, audio, and pause are released; not emitted for loops. */
+	/** Broadcast once on natural or Skip completion, after owned media, audio, and pause are released; not emitted at ordinary loop boundaries. */
 	UPROPERTY(BlueprintAssignable, Category = "BertaDevKit|UI|Video")
 	FBertaVideoPlaybackEvent OnPlaybackCompleted;
 
@@ -116,6 +116,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "BertaDevKit|UI|Video")
 	void Stop();
 
+	/** Abandons content and gracefully completes using the captured end fade. Works while paused and exits loops. */
+	UFUNCTION(BlueprintCallable, Category = "BertaDevKit|UI|Video", meta = (DisplayName = "Skip To Fade Out"))
+	bool SkipToFadeOut();
+
 	/** Terminal, idempotent cleanup. Does not broadcast natural completion. */
 	UFUNCTION(BlueprintCallable, Category = "BertaDevKit|UI|Video")
 	void Close();
@@ -129,6 +133,7 @@ protected:
 private:
 	friend class FBertaVideoPlayerWidgetReplacementTest;
 	friend class FBertaVideoPlayerWidgetTransportTest;
+	friend class FBertaVideoPlayerWidgetSkipTest;
 
 	enum class EPlaybackState : uint8
 	{
@@ -142,6 +147,7 @@ private:
 		FadingInVideo,
 		Playing,
 		FadingOutVideoAtEnd,
+		FadingOutSkippedVideo,
 		WaitingForEndBehindBlack,
 		FadingInLevel,
 		Closed
@@ -161,7 +167,9 @@ private:
 	void ResetVisuals();
 	bool CanReleaseOwnedPause() const;
 	void ReleaseOwnedPause();
+	void UnbindMediaDelegates();
 	void CleanupMediaResources();
+	void CompletePlayback(bool bPreserveBlackOpacity = false);
 	void FailPlayback(const FString& ErrorMessage);
 
 	UFUNCTION()

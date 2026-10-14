@@ -242,6 +242,11 @@ void UBertaVideoPlayerWidgetTestReceiver::Completed(UBertaVideoPlayerWidget* Wid
 {
 #if WITH_DEV_AUTOMATION_TESTS
 	++CompletedCount;
+	if (bReplaceOnCompletion)
+	{
+		bReplaceOnCompletion = false;
+		Widget->SetMediaSource(ReplacementSource);
+	}
 	if (bClearOnEvent) Widget->SetMediaSource(nullptr);
 #endif
 }

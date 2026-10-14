@@ -3,6 +3,7 @@
 #include "BertaVideoPlayerWidgetTestReceiver.generated.h"
 
 class UBertaVideoPlayerWidget;
+class UMediaSource;
 
 UCLASS(Transient, NotBlueprintable)
 class UBertaVideoPlayerWidgetTestReceiver : public UObject
@@ -20,4 +21,7 @@ public:
 	int32 FailedCount = 0;
 	bool bClearOnEvent = false;
 	bool bStopOnStarted = false;
+	bool bReplaceOnCompletion = false;
+	UPROPERTY()
+	TObjectPtr<UMediaSource> ReplacementSource;
 };

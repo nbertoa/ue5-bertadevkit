@@ -118,6 +118,8 @@ void UBertaImagePlayerWidget::ResetPlayback()
 	ActiveOptions = {};
 	PlaybackState = EPlaybackState::Inactive;
 	StateStartTime = 0.0;
+	FadeOutStartOpacity = 1.0f;
+	ActiveFadeOutDuration = 0.0f;
 }
 
 bool UBertaImagePlayerWidget::Play()
@@ -177,6 +179,35 @@ bool UBertaImagePlayerWidget::Play()
 	return true;
 }
 
+bool UBertaImagePlayerWidget::SkipToFadeOut()
+{
+	switch (PlaybackState)
+	{
+	case EPlaybackState::FadingOut:
+		return true;
+	case EPlaybackState::WaitingForFadeInTick:
+	case EPlaybackState::FadingIn:
+	case EPlaybackState::Displaying:
+		++PlaybackGeneration;
+		BeginFadeOut(FPlatformTime::Seconds());
+		AdvancePlayback(StateStartTime);
+		return true;
+	default:
+		return false;
+	}
+}
+
+void UBertaImagePlayerWidget::BeginFadeOut(const double Now)
+{
+	check(ImageVisual);
+	// UWidget reads the cached Slate opacity when available. Preserve the visible
+	// starting alpha and the configured full-range fade speed, including at zero.
+	FadeOutStartOpacity = FMath::Clamp(ImageVisual->GetRenderOpacity(), 0.0f, 1.0f);
+	ActiveFadeOutDuration = ActiveOptions.FadeOutDuration * FadeOutStartOpacity;
+	PlaybackState = EPlaybackState::FadingOut;
+	StateStartTime = Now;
+}
+
 void UBertaImagePlayerWidget::Close()
 {
 	++PlaybackGeneration;
@@ -222,15 +253,14 @@ void UBertaImagePlayerWidget::AdvancePlayback(const double Now)
 				return;
 			}
 
-			PlaybackState = EPlaybackState::FadingOut;
-			StateStartTime = Now;
+			BeginFadeOut(Now);
 			break;
 
 		case EPlaybackState::FadingOut:
 			check(ImageVisual);
-			if (ElapsedSeconds < ActiveOptions.FadeOutDuration)
+			if (ElapsedSeconds < ActiveFadeOutDuration)
 			{
-				ImageVisual->SetRenderOpacity(1.0f - static_cast<float>(ElapsedSeconds / ActiveOptions.FadeOutDuration));
+				ImageVisual->SetRenderOpacity(FadeOutStartOpacity * (1.0f - static_cast<float>(ElapsedSeconds / ActiveFadeOutDuration)));
 				return;
 			}
 

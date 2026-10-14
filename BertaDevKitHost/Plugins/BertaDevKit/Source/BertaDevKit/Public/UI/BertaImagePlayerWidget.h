@@ -75,6 +75,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "BertaDevKit|UI|Image")
 	bool Play();
 
+	/** Gracefully completes early using the captured fade-out, from current opacity. Repeated exit calls are harmless. */
+	UFUNCTION(BlueprintCallable, Category = "BertaDevKit|UI|Image", meta = (DisplayName = "Skip To Fade Out"))
+	bool SkipToFadeOut();
+
 	/** Terminal, idempotent cancellation and removal. Does not broadcast natural completion. */
 	UFUNCTION(BlueprintCallable, Category = "BertaDevKit|UI|Image")
 	void Close();
@@ -89,6 +93,7 @@ private:
 	friend class FBertaImagePlayerWidgetPlaybackTest;
 	friend class FBertaImagePlayerWidgetHierarchyTest;
 	friend class FBertaImagePlayerWidgetReplacementTest;
+	friend class FBertaImagePlayerWidgetSkipTest;
 
 	enum class EPlaybackState : uint8
 	{
@@ -103,6 +108,7 @@ private:
 
 	void ResetPlayback();
 	void AdvancePlayback(double Now);
+	void BeginFadeOut(double Now);
 	void CompletePlayback();
 	void ClearVisual();
 	void RemoveWhenReady();
@@ -116,6 +122,8 @@ private:
 	FBertaImagePlaybackOptions ActiveOptions;
 	EPlaybackState PlaybackState = EPlaybackState::Inactive;
 	double StateStartTime = 0.0;
+	float FadeOutStartOpacity = 1.0f;
+	float ActiveFadeOutDuration = 0.0f;
 	uint64 PlaybackGeneration = 0;
 	bool bNativeConstructed = false;
 	bool bSourceCleared = false;
