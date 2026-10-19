@@ -4,7 +4,13 @@ BertaGASCompanionExt is an optional Unreal Engine 5.8 Runtime/Editor extension f
 
 ## Setup
 
-Install a licensed copy of GAS Companion at `BertaDevKitHost/Plugins/GASCompanion/`, then enable **BertaDevKit**, **GAS Companion**, **Targeting System**, and **BertaGASCompanionExt**. The local GAS Companion directory is ignored and must never be committed.
+Install a licensed GAS Companion copy as a discoverable UE 5.8 engine plugin or at `BertaDevKitHost/Plugins/GASCompanion/`, then enable **BertaDevKit**, **GAS Companion**, **Targeting System**, and **BertaGASCompanionExt**. The project-local GAS Companion directory is ignored and must never be committed.
+
+## Universal Gameplay Tags
+
+The extension includes a native reusable Gameplay Tags vocabulary in `Config/Tags`, registered from its Runtime module when the plugin loads. Ordinary names use `Berta.*`; cue names use `GameplayCue.Berta.*`. Registration does not grant abilities, add actor-owned tags, apply effects, bind input, or install gameplay behavior.
+
+The comprehensive [Gameplay Tags documentation](gameplay-tags/index.md) includes individual reference entries for every tag, family semantics, ownership/lifecycle guidance, Blueprint and C++ examples, native GAS configuration, a manual GA_Jump Sandbox walkthrough, maintenance/migration, and troubleshooting. Keep **Import Tags From Config** enabled and restart Editor after enabling the plugin or editing INI sources. See [architecture](gameplay-tags/architecture.md) for the exact UE 5.8 registration and staging assumptions.
 
 ## Runtime diagnostics
 

@@ -26,7 +26,40 @@ nav:
       - Overview: bertadesktopcapture/index.md
       - 1080p/30 benchmark: bertadesktopcapture/benchmark.md
   - BertaSerial: bertaserial/index.md
-  - BertaGASCompanionExt: bertagascompanionext/index.md
+  - BertaGASCompanionExt:
+      - Overview: bertagascompanionext/index.md
+      - Gameplay Tags:
+          - Overview: bertagascompanionext/gameplay-tags/index.md
+          - Architecture: bertagascompanionext/gameplay-tags/architecture.md
+          - Conventions: bertagascompanionext/gameplay-tags/conventions.md
+          - Integration and GA_Jump: bertagascompanionext/gameplay-tags/integration.md
+          - Ownership and lifecycle: bertagascompanionext/gameplay-tags/lifecycle.md
+          - Extending and migrating: bertagascompanionext/gameplay-tags/extension-guide.md
+          - Troubleshooting and manual checks: bertagascompanionext/gameplay-tags/troubleshooting.md
+          - Catalog:
+              - Ability: bertagascompanionext/gameplay-tags/catalog/ability.md
+              - State: bertagascompanionext/gameplay-tags/catalog/state.md
+              - Status: bertagascompanionext/gameplay-tags/catalog/status.md
+              - Event: bertagascompanionext/gameplay-tags/catalog/event.md
+              - Cooldown: bertagascompanionext/gameplay-tags/catalog/cooldown.md
+              - Damage: bertagascompanionext/gameplay-tags/catalog/damage.md
+              - Effect: bertagascompanionext/gameplay-tags/catalog/effect.md
+              - Resource: bertagascompanionext/gameplay-tags/catalog/resource.md
+              - Input: bertagascompanionext/gameplay-tags/catalog/input.md
+              - Interaction: bertagascompanionext/gameplay-tags/catalog/interaction.md
+              - Equipment: bertagascompanionext/gameplay-tags/catalog/equipment.md
+              - Weapon: bertagascompanionext/gameplay-tags/catalog/weapon.md
+              - Item: bertagascompanionext/gameplay-tags/catalog/item.md
+              - Inventory: bertagascompanionext/gameplay-tags/catalog/inventory.md
+              - Targeting: bertagascompanionext/gameplay-tags/catalog/targeting.md
+              - AI: bertagascompanionext/gameplay-tags/catalog/ai.md
+              - Quest: bertagascompanionext/gameplay-tags/catalog/quest.md
+              - Progression: bertagascompanionext/gameplay-tags/catalog/progression.md
+              - World: bertagascompanionext/gameplay-tags/catalog/world.md
+              - Vehicle: bertagascompanionext/gameplay-tags/catalog/vehicle.md
+              - Camera: bertagascompanionext/gameplay-tags/catalog/camera.md
+              - UI: bertagascompanionext/gameplay-tags/catalog/ui.md
+              - Gameplay Cue: bertagascompanionext/gameplay-tags/catalog/gameplay-cue.md
   - BertaComboGraphExt: bertacombographext/index.md
   - BertaUltimateGameplayCameraExt: bertaultimategameplaycameraext/index.md
   - BertaBlackEyeCameraExt: bertablackeyecameraext/index.md

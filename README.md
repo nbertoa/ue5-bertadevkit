@@ -40,6 +40,8 @@ A Win64 Runtime C++ and Blueprint API for current COM-port enumeration, asynchro
 
 An optional Runtime/Editor extension for projects already using GAS Companion. It adds single-ability and actor-wide readiness diagnostics, evidence-qualified effective loadout snapshots, event-driven tracing, a conservative Ability Queue + Enhanced Input bridge, Ability Set/Game Feature contract validation, target diagnostics, and a native UE 5.8 Targeting System adapter. It is disabled by default and depends on both BertaDevKit and a local GAS Companion installation that is never committed.
 
+It also supplies a reusable native Gameplay Tags vocabulary under `Berta.*` and `GameplayCue.Berta.*`, with individual reference entries and practical Blueprint, C++, GAS, and GA_Jump integration guidance in the [Gameplay Tags documentation](docs/bertagascompanionext/gameplay-tags/index.md). The catalog defines names only; projects own gameplay behavior and tag lifetimes.
+
 ### BertaComboGraphExt
 
 An optional Runtime/Editor extension for projects already using Combo Graph `1.6.3+5.8`. It adds deterministic contract validation, bounded per-execution tracing and snapshots, EffectContext compatibility inspection, an opt-in multi-target UE Targeting System task, and conservative `Triggered` pre-input buffering. It is disabled by default and depends on a legitimate local Combo Graph installation that is never committed.

@@ -6,6 +6,8 @@ public class BertaGASCompanionExt : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
+		PrivateDependencyModuleNames.Add("Projects");
+
 		PublicDependencyModuleNames.AddRange(new string[]
 		{
 			"BertaDevKit",
