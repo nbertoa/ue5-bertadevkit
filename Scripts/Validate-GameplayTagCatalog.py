@@ -42,7 +42,8 @@ APPROVED = {
     "GameplayCue": (20, "35f9550dc3512835aa142e17dfeeba1a0af51f94c184c3744519cfd36c7e73fc"),
 }
 SECTION = "[/Script/GameplayTags.GameplayTagsList]"
-ROW = re.compile(r'\+GameplayTagList=\(Tag="([^"\\]+)",DevComment="([^"\\]*)"\)')
+# This catalog's tested additional-source path uses entries without a '+' prefix.
+ROW = re.compile(r'GameplayTagList=\(Tag="([^"\\]+)",DevComment="([^"\\]*)"\)')
 NAME = re.compile(r"(?:Berta\.[A-Z][A-Za-z0-9]*|GameplayCue\.Berta)(?:\.[A-Z][A-Za-z0-9]*)+")
 HEADING = re.compile(r"^### (\S+)\s*$", re.MULTILINE)
 # Include unknown families/case to catch misspelled references, not just known names.

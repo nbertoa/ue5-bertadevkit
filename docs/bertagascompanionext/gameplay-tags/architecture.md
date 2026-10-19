@@ -31,8 +31,10 @@ Each uses the native additional-source class and array format:
 
 ```ini
 [/Script/GameplayTags.GameplayTagsList]
-+GameplayTagList=(Tag="Berta.Ability.Movement.Jump",DevComment="Initiates a deliberate takeoff from a supporting surface.")
+GameplayTagList=(Tag="Berta.Ability.Movement.Jump",DevComment="Initiates a deliberate takeoff from a supporting surface.")
 ```
+
+For this catalog's tested UE 5.8 plugin registration path, repeat `GameplayTagList=` entries without a leading `+`. Source discovery alone does not prove that the rows loaded; see the [observed visibility issue and resolution](troubleshooting.md#sources-appear-but-predefined-tags-are-missing).
 
 The complete names in these INI files are authoritative for registration. `DevComment` supplies the picker tooltip; comprehensive semantics live in MkDocs. Entries within each file are sorted by canonical name. Source basenames also matter: UE identifies these sources using the clean INI filename. Keep them distinctive and do not put another unrelated `BertaAbilities.ini` in a different plugin.
 

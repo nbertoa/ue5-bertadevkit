@@ -14,6 +14,16 @@ Begin by identifying which layer failed: plugin discovery, source registration, 
 
 Do not redeclare a missing name in `DefaultGameplayTags.ini` as the first workaround: that hides why the plugin source was unavailable and creates source ambiguity later.
 
+## Sources appear but predefined tags are missing
+
+In a user-performed UE 5.8 Editor test, the plugin's INI files appeared as available sources when creating tags, but their predefined Berta tags were absent from Gameplay Tag Manager and pickers. Removing the leading `+` from the entries in `BertaAbilities.ini`, saving, and restarting Editor made those tags visible. This confirms a distinction between discovering a source file and loading its entries.
+
+For this catalog and its tested `AddTagIniSearchPath` registration setup, write every entry as `GameplayTagList=(Tag="...",DevComment="...")`, without a leading `+`. The correction applies to all fourteen catalog INI files. It does not establish that Unreal universally rejects the `+` array operator; leave unrelated configuration arrays unchanged.
+
+If this symptom occurs, inspect the installed plugin copy's `Config/Tags` files, correct any prefixed catalog entries, save, and restart Editor. Run `python Scripts/Validate-GameplayTagCatalog.py` in the repository to check the corrected syntax, approved names/counts, comments, and documentation coverage. The validator rejects the old prefixed catalog syntax.
+
+The reported Editor result confirms visibility for the corrected Ability source. After installing the complete correction, manually check the other family sources and representative tags, including `Berta.State.Movement.Jumping` and `GameplayCue.Berta.Movement.Jump`, their tooltips, and Blueprint selections. Full-catalog Editor verification remains pending; the static checker does not establish runtime registration.
+
 ## Wrong source, duplicate name, or collision
 
 Inspect the entry's source in Gameplay Tag Manager and compare the catalog's [source-file table](architecture.md#authoritative-files). A Berta name supplied by a game config file, native declaration, or third-party table deserves investigation even if matching works. Search project/plugin config, data tables, and native declarations for duplicate names. Check clean source filenames as well as full tag names.
