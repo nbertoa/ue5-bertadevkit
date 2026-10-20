@@ -18,15 +18,40 @@ This project-owned Blueprint child is the **recommended reproducible setup**, no
 
 ### Example: near, medium, and far
 
-Make three `UGC_CameraDataAssetBase` Data Assets. For a quick visual smoke test, duplicate Medium and vary only Arm Length and FOV, leaving blending and other modifiers unchanged:
+This is a **reusable smoke-test recipe for three UGC Camera Data Assets**, not three `CameraComponent` objects, nor vendor-provided presets. Create `DA_Camera_Medium` with base class **`UGC_CameraDataAssetBase`**, then duplicate it as `DA_Camera_Near` and `DA_Camera_Far`. Change **only** the `Camera Arm → Arm Length Settings` and `Camera FOV → FOVSettings` fields below.
 
-| Preset | Min Arm Length | Max Arm Length | Min FOV | Max FOV |
-| --- | ---: | ---: | ---: | ---: |
-| `DA_Camera_Medium` (Sandbox screenshot) | 100 | 250 | 90 | 125 |
-| `DA_Camera_Near` (suggested test values) | 80 | 120 | 80 | 90 |
-| `DA_Camera_Far` (suggested test values) | 350 | 450 | 95 | 105 |
+| Data Asset | Min Arm Length | Max Arm Length | Min FOV | Max FOV | Arm Range Blend Time | FOVRange Blend Time |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `DA_Camera_Medium` | 100 | 250 | 90 | 125 | 0.5 | 0.5 |
+| `DA_Camera_Near` | 80 | 120 | 80 | 90 | 0.5 | 0.5 |
+| `DA_Camera_Far` | 350 | 450 | 95 | 105 | 0.5 | 0.5 |
 
-Keep **Arm Range Blend Time = 0.5** and **FOVRange Blend Time = 0.5** for the test. These are experimental starting values, not vendor presets or a promise of final view distance/FOV. In the UE 5.8 Sandbox the user confirmed two visual camera changes with `Berta.UGC.Next` in PIE; no UGC-packaged-build validation is claimed.
+**Provenance:** the Medium values above were transcribed from the user's UE 5.8 Sandbox screenshots; Near and Far are **suggested experimental values**, not official manufacturer defaults. The user reported two visible `Next` transitions in PIE after following the manager/default-data setup, but the final serialized asset values were not independently inspected. Keep the other fields inherited from Medium unchanged for this isolated comparison. Arm ranges and FOV ranges are **settings**, not guaranteed final in-game POV values.
+
+For the example to cycle reliably, use the following **same initial asset** in both configurations:
+
+```text
+BP_SandboxUGCCameraManager (child of BP_UGCCameraManager)
+  Default Camera Data: DA_Camera_Medium
+
+Existing Third Person PlayerController
+  Player Camera Manager Class: BP_SandboxUGCCameraManager
+  BertaUGCCameraCycleComponent
+    CameraPresets[0]: DA_Camera_Medium
+    CameraPresets[1]: DA_Camera_Near
+    CameraPresets[2]: DA_Camera_Far
+```
+
+In PIE use:
+
+```text
+Berta.UGC.Dump        # confirm ActivePreset is DA_Camera_Medium
+Berta.UGC.Next        # Medium → Near
+Berta.UGC.Next        # Near → Far
+Berta.UGC.Previous    # Far → Near (test case, not yet user-confirmed)
+```
+
+Do not assign gameplay input buttons just to perform this initial test. `Default Camera Data` is **not** configured by adding `BertaUGCCameraCycleComponent`; configure it on the manager first. These examples are a quick comparison exercise, not a recommendation that every game expose three player-selectable camera distances. UGC packaged-build validation remains pending in this Sandbox.
 
 ### Troubleshooting: `success=false` and `storedCycleIndex=-1`
 
