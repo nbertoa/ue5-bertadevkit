@@ -53,6 +53,35 @@ Berta.UGC.Previous    # Far → Near (test case, not yet user-confirmed)
 
 Do not assign gameplay input buttons just to perform this initial test. `Default Camera Data` is **not** configured by adding `BertaUGCCameraCycleComponent`; configure it on the manager first. These examples are a quick comparison exercise, not a recommendation that every game expose three player-selectable camera distances. **Update (2026-10-20):** the Sandbox user confirmed that packaging completed and the packaged application works. The precise build configuration and per-modifier regression tests were not supplied. Full-project backup `07_UGC_CameraPresets_Validated` is the **recommended next checkpoint**, not yet confirmed as created.
 
+### Dynamic Spring Arm and predictive collision — tested UE 5.8 migration
+
+This workflow configures the **licensed UGC plugin's own Spring Arm** inside the existing Third Person Character; it does **not** introduce a new BertaDevKit runtime component. Follow the vendor's [current Dynamic Spring Arm instructions](https://docs.superhuman.com/@aurora-devs/documentation-ultimate-gameplay-camera/new-dynamic-spring-arm-36), not the deprecated pre-UE5.5 Collision Modifier setup.
+
+**Known-good Sandbox experiment (user-reported PIE, 2026-10-20):**
+
+1. In the existing `BP_ThirdPersonCharacter`, inspect the native `CameraBoom` Spring Arm and note the `FollowCamera` socket and settings before changing anything.
+2. Add UGC's **`BP_UGCSpringArmComponent`** as a sibling of the old `CameraBoom` under the Character's `CapsuleComponent` **temporarily**; do not attach the new arm under the old arm.
+3. Transfer the relevant original Spring Arm settings to the new UGC Spring Arm. For the Sandbox they were: **Target Arm Length 400**, **Socket Offset (0,0,0)**, **Target Offset (0,0,0)**, **Use Pawn Control Rotation enabled**, **Inherit Pitch/Yaw/Roll enabled**, **Do Collision Test enabled**, **Probe Size 12**, **Probe Channel Camera**, and **Camera Lag/Rotation Lag disabled**. Leave the UGC-specific predictive-collision defaults unchanged for the first test.
+4. **Reparent the existing `FollowCamera`** to `BP_UGCSpringArmComponent` and explicitly set **FollowCamera → Parent Socket = `SpringEndpoint`**, matching the socket used under the original `CameraBoom`. Confirm camera **relative Location/Rotation = (0,0,0)**.
+5. **Remove the original native `CameraBoom`** after the reparenting: the final tested Character has **only one Spring Arm**, UGC's, with `FollowCamera` as its child. Compile and save.
+6. In PIE, verify the Near/Medium/Far presets still produce their expected changes in distance/composition. Rotate against a wall to observe collision interpolation, then move around a corner to look for predictive avoidance.
+
+```text
+BP_ThirdPersonCharacter (keeps its existing Character / GAS setup)
+└── CapsuleComponent
+    └── BP_UGCSpringArmComponent    (the only Spring Arm)
+        └── FollowCamera
+            Parent Socket: SpringEndpoint
+            Relative Location: (0,0,0)
+            Relative Rotation: (0,0,0)
+```
+
+**Pitfall directly observed:** leaving **both** `CameraBoom` and `BP_UGCSpringArmComponent` present while attaching `FollowCamera` to the new arm made the camera appear **too centered on the character**, and switching Near/Medium/Far changed distance **only slightly**. After the user **deleted `CameraBoom`**, framing/preset transitions behaved properly. UGC may have targeted the wrong arm, but **no before/after runtime `Berta.UGC.Dump` confirmed the internal mechanism**. Therefore **do not keep two competing Spring Arms in this configuration**; do not claim that every Unreal Pawn with two Spring Arms is categorically broken. For a non-removable inherited Spring Arm, inspect ownership/parent class instead of forcing deletion.
+
+**Evidence and verification boundary:** the user observed **smooth interpolation at walls** and **anticipation at a corner** in PIE with the UGC arm; this is positive visual behavior, **not an instrumented feeler trace**. Earlier Windows packaging and project backup 07 predate this Spring Arm change; **packaging with the updated Character is still pending**. Retest Look, Jump/Sprint/Stamina/HUD and interaction after replacing the boom, and rebuild the package before describing this migration as packaged-tested.
+
+Detailed chronology and current project state: [UGC Sandbox integration report](https://github.com/nbertoa/rnd-prototyping-engineer/blob/main/research/plugins/ultimate-gameplay-camera-sandbox-integration.md#update--dynamic-spring-arm-migration-and-predictive-collision-2026-10-20).
+
 ### Troubleshooting: `success=false` and `storedCycleIndex=-1`
 
 In the Sandbox, `Berta.UGC.Next` initially reported `success=false` and `storedCycleIndex=-1` while the UGC manager was using a **vendor Data Asset**. Editing project presets did not affect the camera, and **adding that vendor asset to `CameraPresets` alone did not fix the failure**. The user identified the missing manager-child/default-data setup from an earlier project. After we prescribed a child manager with `Default Camera Data = DA_Camera_Medium` and reassigned the existing PlayerController, the user reported two successful Next changes in PIE.
