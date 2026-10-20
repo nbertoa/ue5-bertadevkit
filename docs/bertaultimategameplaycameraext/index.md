@@ -51,7 +51,7 @@ Berta.UGC.Next        # Near → Far
 Berta.UGC.Previous    # Far → Near (test case, not yet user-confirmed)
 ```
 
-Do not assign gameplay input buttons just to perform this initial test. `Default Camera Data` is **not** configured by adding `BertaUGCCameraCycleComponent`; configure it on the manager first. These examples are a quick comparison exercise, not a recommendation that every game expose three player-selectable camera distances. UGC packaged-build validation remains pending in this Sandbox.
+Do not assign gameplay input buttons just to perform this initial test. `Default Camera Data` is **not** configured by adding `BertaUGCCameraCycleComponent`; configure it on the manager first. These examples are a quick comparison exercise, not a recommendation that every game expose three player-selectable camera distances. **Update (2026-10-20):** the Sandbox user confirmed that packaging completed and the packaged application works. The precise build configuration and per-modifier regression tests were not supplied. Full-project backup `07_UGC_CameraPresets_Validated` is the **recommended next checkpoint**, not yet confirmed as created.
 
 ### Troubleshooting: `success=false` and `storedCycleIndex=-1`
 
