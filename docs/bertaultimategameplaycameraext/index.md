@@ -7,10 +7,41 @@ Optional UE 5.8 Runtime/Editor integration for a licensed local Ultimate Gamepla
 1. Copy `BertaDevKitHost/Plugins/BertaUltimateGameplayCameraExt/` into `<YourProject>/Plugins/BertaUltimateGameplayCameraExt/`.
 2. Install the licensed UGC plugin alongside it. The declared plugin dependency is `AuroraDevs_UGC`; UGC source, assets, and binaries are not distributed here.
 3. Enable both plugins in the consuming project and build for UE 5.8. This extension is disabled by default and does not require BertaDevKit.
-4. On your PlayerController, set `PlayerCameraManagerClass` to `AUGC_PlayerCameraManager` or its Blueprint child and add `UBertaUGCCameraCycleComponent`.
-5. Fill the component's ordered `CameraPresets` array with distinct, valid UGC camera data assets. Bind your own input actions to `SelectNextCamera()` and `SelectPreviousCamera()`, or call `SelectCamera(Index)` directly.
+4. Create a **project-owned Blueprint child of the vendor `BP_UGCCameraManager`**, for example `BP_SandboxUGCCameraManager`. This retains the UGC manager inheritance. In its **Class Defaults**, assign **`Default Camera Data`** to your initial project preset, for example `DA_Camera_Medium`.
+5. In the **existing** PlayerController Blueprint, assign that child as **`Player Camera Manager Class`** (`PlayerCameraManagerClass`). Keep any GAS Companion, interaction, or other controller inheritance/components already in use. Add `UBertaUGCCameraCycleComponent` to this same PlayerController.
+6. Populate the component's ordered **`CameraPresets`** with distinct, valid UGC camera data assets **including the exact asset selected as the manager's `Default Camera Data`**. For example: `[DA_Camera_Medium, DA_Camera_Near, DA_Camera_Far]`.
+7. Compile/save and verify the active manager and current preset with `Berta.UGC.Dump` in PIE, then try `Berta.UGC.Next`. Only after confirming transitions, optionally bind your own input actions to `SelectNextCamera()`/`SelectPreviousCamera()` or use `SelectCamera(Index)`.
 
-Adding the component does not activate a preset. Selection state is local and non-replicated; the component does not bind input, tick, manage possession, or write camera properties.
+**Important for preset cycling:** creating the Camera Data Assets or attaching the cycle component **does not activate a preset**. The manager initializes its own default; if it is a **different asset** from the presets in `CameraPresets`, the cycle rejects Next/Previous while that unrelated preset is active. The starting `Default Camera Data` and one element of `CameraPresets` must therefore reference **the same asset object**, not merely assets with matching values or names. The ordering may change, but the initial preset must be present.
+
+This project-owned Blueprint child is the **recommended reproducible setup**, not a separate hard-coded class requirement of the extension: the C++ component accepts any active `AUGC_PlayerCameraManager` or derived manager. The key runtime contract is that the active data asset is absent, or belongs to the cycle. Creating the child lets the project reliably control the default rather than inheriting the vendor demo's preset. The component's selection state is local and non-replicated; it does not bind input, tick, manage possession, or write camera properties.
+
+### Example: near, medium, and far
+
+Make three `UGC_CameraDataAssetBase` Data Assets. For a quick visual smoke test, duplicate Medium and vary only Arm Length and FOV, leaving blending and other modifiers unchanged:
+
+| Preset | Min Arm Length | Max Arm Length | Min FOV | Max FOV |
+| --- | ---: | ---: | ---: | ---: |
+| `DA_Camera_Medium` (Sandbox screenshot) | 100 | 250 | 90 | 125 |
+| `DA_Camera_Near` (suggested test values) | 80 | 120 | 80 | 90 |
+| `DA_Camera_Far` (suggested test values) | 350 | 450 | 95 | 105 |
+
+Keep **Arm Range Blend Time = 0.5** and **FOVRange Blend Time = 0.5** for the test. These are experimental starting values, not vendor presets or a promise of final view distance/FOV. In the UE 5.8 Sandbox the user confirmed two visual camera changes with `Berta.UGC.Next` in PIE; no UGC-packaged-build validation is claimed.
+
+### Troubleshooting: `success=false` and `storedCycleIndex=-1`
+
+In the Sandbox, `Berta.UGC.Next` initially reported `success=false` and `storedCycleIndex=-1` while the UGC manager was using a **vendor Data Asset**. Editing project presets did not affect the camera, and **adding that vendor asset to `CameraPresets` alone did not fix the failure**. The user identified the missing manager-child/default-data setup from an earlier project. After we prescribed a child manager with `Default Camera Data = DA_Camera_Medium` and reassigned the existing PlayerController, the user reported two successful Next changes in PIE.
+
+This is a **verified functional resolution, not a forensically established single root cause**: no full before/after runtime log or Blueprint inspection was captured. Do not assume every `false` is an unrelated default. The same result can arise from an empty array, invalid/duplicate entries, missing/wrong manager, an active asset outside the cycle, invalid index, or failure to retain the pushed asset. `-1` alone says only that the stored index was not set.
+
+To diagnose:
+
+1. Run `Berta.UGC.Dump` and inspect **`Manager`**, **`ActivePreset`**, and **`CycleActiveIndex`**. A valid UGC manager **does not imply** that your intended data asset is active.
+2. Confirm the **PlayerController in the actual GameMode** uses the project manager child and that its **`Default Camera Data` is in the component's `CameraPresets` array** (asset identity, no `None` or duplicates).
+3. Re-run `Berta.UGC.Next` and Dump. For static checks use **Tools → Audit Ultimate Gameplay Camera**; it does not validate every runtime rejection.
+4. If it still fails, inspect the precise early-return path in `UBertaUGCCameraCycleComponent::SelectAdjacentCamera`/`SelectCamera` before changing the Character, SpringArm, or input. Some failure paths lack a specific runtime warning, so the last console line is not a complete diagnosis.
+
+Full account of the experiment and failure chronology: [R&D Engineer — UGC Sandbox integration](https://github.com/nbertoa/rnd-prototyping-engineer/blob/main/research/plugins/ultimate-gameplay-camera-sandbox-integration.md).
 
 ## Preset selection contract
 
