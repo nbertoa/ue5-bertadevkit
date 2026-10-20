@@ -9,7 +9,7 @@ public class BertaUltimateGameplayCameraExtEditor : ModuleRules
 		{
 			"Core", "CoreUObject", "Engine", "EngineSettings", "AssetRegistry", "ContentBrowser",
 			"BertaUltimateGameplayCameraExt", "AuroraDevs_UGC", "ToolMenus", "Slate", "SlateCore",
-			"BlueprintGraph"
+			"BlueprintGraph", "UnrealEd" // Transient Blueprint inheritance fixtures in Editor Automation Tests.
 		});
 	}
 }

@@ -22,7 +22,9 @@
 #include "K2Node_VariableSet.h"
 #include "Modules/ModuleManager.h"
 #include "Pawn/UGC_PawnInterface.h"
+#include "UObject/Class.h"
 #include "UObject/SoftObjectPath.h"
+#include "UObject/UObjectBaseUtility.h"
 #include "UObject/UnrealType.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogBertaUGCAudit, Log, All);
@@ -31,11 +33,11 @@ namespace
 {
 	enum class ESeverity { Error, Warning, Info };
 
-	void Report(ESeverity Severity, const FString& Path, const FString& Symbol, const TCHAR* Message)
+	void Report(ESeverity Severity, const FString& Path, const FString& Symbol, const FString& Message)
 	{
 		const FString Line = FString::Printf(TEXT("[UGC Audit] [%s] %s :: %s: %s"),
 			Severity == ESeverity::Error ? TEXT("ERROR") : Severity == ESeverity::Warning ? TEXT("WARNING") : TEXT("INFO"),
-			*Path, *Symbol, Message);
+			*Path, *Symbol, *Message);
 		if (Severity == ESeverity::Error) { UE_LOG(LogBertaUGCAudit, Error, TEXT("%s"), *Line); }
 		else if (Severity == ESeverity::Warning) { UE_LOG(LogBertaUGCAudit, Warning, TEXT("%s"), *Line); }
 		else { UE_LOG(LogBertaUGCAudit, Display, TEXT("%s"), *Line); }
@@ -64,15 +66,37 @@ namespace
 		return nullptr;
 	}
 
-	void AuditCycle(const UClass* ControllerClass)
+	bool HasCompiledDefaults(const UClass* Class, FString& OutReason)
 	{
-		const UBertaUGCCameraCycleComponent* Cycle = FindDeclaredComponent<UBertaUGCCameraCycleComponent>(ControllerClass);
+		for (const UClass* Current = Class; Current; Current = Current->GetSuperClass())
+		{
+			const UBlueprint* Blueprint = Cast<UBlueprint>(Current->ClassGeneratedBy);
+			if (Current->HasAnyClassFlags(CLASS_NewerVersionExists) || (Blueprint && !Blueprint->IsUpToDate()))
+			{
+				OutReason = FString::Printf(TEXT("Class %s has stale or uncompiled Blueprint defaults; compile it before auditing."), *Current->GetPathName());
+				return false;
+			}
+		}
+		return true;
+	}
+
+	void AuditCycle(const UClass* ControllerClass, bool bDefaultResolved, const UUGC_CameraDataAssetBase* DefaultData)
+	{
+		FString Reason;
+		const UBertaUGCCameraCycleComponent* Cycle = BertaUGCAudit::ResolveCycleTemplate(ControllerClass, Reason);
+		if (!Reason.IsEmpty())
+		{
+			Report(ESeverity::Warning, ControllerClass->GetPathName(), TEXT("CameraPresets"), TEXT("INCONCLUSIVE: ") + Reason);
+			return;
+		}
 		if (!Cycle)
 		{
-			Report(ESeverity::Info, ControllerClass->GetPathName(), TEXT("CameraCycle"), TEXT("No Berta camera cycle component declared; optional."));
+			Report(ESeverity::Info, ControllerClass->GetPathName(), TEXT("CameraCycle"), TEXT("No Berta camera cycle component declared; optional. No CameraPresets array to compare."));
 			return;
 		}
 		const FString Path = Cycle->GetPathName();
+		Report(ESeverity::Info, Path, TEXT("CameraPresets"), FString::Printf(TEXT("Effective component/template; %d entries."), Cycle->CameraPresets.Num()));
+		bool bValidCycle = !Cycle->CameraPresets.IsEmpty();
 		if (Cycle->CameraPresets.IsEmpty())
 		{
 			Report(ESeverity::Warning, Path, TEXT("CameraPresets"), TEXT("Camera cycle has no presets and cannot select a camera."));
@@ -82,11 +106,39 @@ namespace
 		{
 			const UUGC_CameraDataAssetBase* Preset = Cycle->CameraPresets[Index].Get();
 			const FString Symbol = FString::Printf(TEXT("CameraPresets[%d]"), Index);
-			if (!IsValid(Preset)) Report(ESeverity::Warning, Path, Symbol, TEXT("Null or invalid preset blocks camera cycling."));
-			else if (Seen.Contains(Preset)) Report(ESeverity::Warning, Path, Symbol, TEXT("Duplicate preset makes cycle indices ambiguous."));
-			else Seen.Add(Preset);
+			const FString AssetPath = GetPathNameSafe(Preset);
+			if (!IsValid(Preset))
+			{
+				Report(ESeverity::Warning, Path, Symbol, AssetPath + TEXT("; null or invalid preset invalidates the cycle and blocks selection."));
+				bValidCycle = false;
+			}
+			else if (Seen.Contains(Preset))
+			{
+				Report(ESeverity::Warning, Path, Symbol, AssetPath + TEXT("; duplicate preset invalidates the cycle because indices are ambiguous."));
+				bValidCycle = false;
+			}
+			else
+			{
+				Report(ESeverity::Info, Path, Symbol, AssetPath);
+				Seen.Add(Preset);
+			}
 		}
-		if (!Cycle->CameraPresets.IsEmpty()) Report(ESeverity::Info, Path, TEXT("CameraPresets"), TEXT("Camera cycle configuration inspected."));
+		if (!bValidCycle || !bDefaultResolved || !DefaultData) return;
+
+		const int32 DefaultIndex = Cycle->CameraPresets.IndexOfByPredicate(
+			[DefaultData](const TObjectPtr<UUGC_CameraDataAssetBase>& Preset) { return Preset.Get() == DefaultData; });
+		if (DefaultIndex != INDEX_NONE)
+		{
+			Report(ESeverity::Info, Path, TEXT("DefaultCameraData"), FString::Printf(
+				TEXT("Manager default %s matches CameraPresets[%d] by object identity; statically consistent membership, not a runtime success guarantee."),
+				*DefaultData->GetPathName(), DefaultIndex));
+		}
+		else
+		{
+			Report(ESeverity::Warning, Path, TEXT("DefaultCameraData"), FString::Printf(
+				TEXT("Manager default %s is absent from the CameraPresets listed above. If it becomes active, Next/Previous and Select reject changes while that asset remains outside the cycle. In the manager's Class Defaults choose a default from the cycle (prefer a project-owned asset), or include this default in the component's CameraPresets only if it should be selectable. Any array index is valid. This conditional risk does not prove the cause of a previous success=false."),
+				*DefaultData->GetPathName()));
+		}
 	}
 
 	void AuditProjectSetup()
@@ -98,6 +150,13 @@ namespace
 			Report(ESeverity::Error, TEXT("Project Settings/Maps & Modes"), TEXT("GlobalDefaultGameMode"), TEXT("Default GameMode class cannot be loaded."));
 			return;
 		}
+		Report(ESeverity::Info, GameModeClass->GetPathName(), TEXT("GlobalDefaultGameMode"), TEXT("Inspecting global compiled Class Defaults; the active map may use another GameMode."));
+		FString Reason;
+		if (!HasCompiledDefaults(GameModeClass, Reason))
+		{
+			Report(ESeverity::Warning, GameModeClass->GetPathName(), TEXT("GlobalDefaultGameMode"), TEXT("INCONCLUSIVE: ") + Reason);
+			return;
+		}
 		const AGameModeBase* GameMode = GameModeClass->GetDefaultObject<AGameModeBase>();
 		UClass* ControllerClass = GameMode->PlayerControllerClass.Get();
 		if (!ControllerClass)
@@ -105,16 +164,34 @@ namespace
 			Report(ESeverity::Error, GameModeClass->GetPathName(), TEXT("PlayerControllerClass"), TEXT("PlayerController class is not configured."));
 			return;
 		}
+		Report(ESeverity::Info, ControllerClass->GetPathName(), TEXT("PlayerControllerClass"), TEXT("Configured by the global GameMode; dynamic replacements are not inspected."));
+		if (!HasCompiledDefaults(ControllerClass, Reason))
+		{
+			Report(ESeverity::Warning, ControllerClass->GetPathName(), TEXT("PlayerControllerClass"), TEXT("INCONCLUSIVE: ") + Reason);
+			return;
+		}
 		const APlayerController* Controller = ControllerClass->GetDefaultObject<APlayerController>();
-		const bool bGlobalUsesUGCManager = Controller->PlayerCameraManagerClass &&
-			Controller->PlayerCameraManagerClass->IsChildOf(AUGC_PlayerCameraManager::StaticClass());
+		const UClass* ManagerClass = Controller->PlayerCameraManagerClass.Get();
+		Report(ESeverity::Info, ControllerClass->GetPathName(), TEXT("PlayerCameraManagerClass"), GetPathNameSafe(ManagerClass));
+		const bool bGlobalUsesUGCManager = ManagerClass && ManagerClass->IsChildOf(AUGC_PlayerCameraManager::StaticClass());
+		bool bDefaultResolved = false;
+		const UUGC_CameraDataAssetBase* DefaultData = nullptr;
 		if (!bGlobalUsesUGCManager)
 		{
 			Report(ESeverity::Warning, ControllerClass->GetPathName(), TEXT("PlayerCameraManagerClass"),
 				TEXT("Global Default GameMode does not configure AUGC_PlayerCameraManager; map-specific GameMode overrides are not inspected."));
 		}
-		else Report(ESeverity::Info, ControllerClass->GetPathName(), TEXT("PlayerCameraManagerClass"), TEXT("UGC camera manager class configured."));
-		AuditCycle(ControllerClass);
+		else
+		{
+			bDefaultResolved = BertaUGCAudit::ResolveDefaultCameraData(ManagerClass, DefaultData, Reason);
+			if (!bDefaultResolved)
+				Report(ESeverity::Warning, ManagerClass->GetPathName(), TEXT("DefaultCameraData"), TEXT("INCONCLUSIVE: ") + Reason + TEXT(" No default/cycle compatibility conclusion."));
+			else if (!DefaultData)
+				Report(ESeverity::Info, ManagerClass->GetPathName(), TEXT("DefaultCameraData"), TEXT("Unassigned in effective Class Defaults; no static initial preset. Not an error: with no active runtime asset, Next selects index 0 and Previous the last. Runtime initialization may choose other data."));
+			else
+				Report(ESeverity::Info, ManagerClass->GetPathName(), TEXT("DefaultCameraData"), DefaultData->GetPathName() + TEXT(" (configured default, not the current runtime asset)."));
+		}
+		AuditCycle(ControllerClass, bDefaultResolved, DefaultData);
 		if (!bGlobalUsesUGCManager) return;
 
 		UClass* PawnClass = GameMode->DefaultPawnClass.Get();
@@ -203,9 +280,99 @@ namespace
 	}
 }
 
+bool BertaUGCAudit::ResolveDefaultCameraData(const UClass* ManagerClass, const UUGC_CameraDataAssetBase*& OutData, FString& OutReason)
+{
+	OutData = nullptr;
+	OutReason.Reset();
+	if (!ManagerClass || !ManagerClass->IsChildOf(AUGC_PlayerCameraManager::StaticClass()))
+	{
+		OutReason = TEXT("No UGC manager class to inspect.");
+		return false;
+	}
+	if (!HasCompiledDefaults(ManagerClass, OutReason)) return false;
+
+	// Verified on the installed vendor Blueprint: DefaultCameraData is a hard object
+	// property, displayed as Default Camera Data. FindFProperty includes ancestors.
+	const FProperty* Property = FindFProperty<FProperty>(ManagerClass, TEXT("DefaultCameraData"));
+	const FObjectProperty* ObjectProperty = CastField<FObjectProperty>(Property);
+	if (!ObjectProperty || ObjectProperty->ArrayDim != 1 || !ObjectProperty->PropertyClass ||
+		!ObjectProperty->PropertyClass->IsChildOf(UUGC_CameraDataAssetBase::StaticClass()))
+	{
+		OutReason = TEXT("Known DefaultCameraData hard object property is missing or has an unsupported type (including soft references). No default was inferred from runtime stack state or display-name matching.");
+		return false;
+	}
+	const UObject* CDO = ManagerClass->GetDefaultObject();
+	if (!IsValid(CDO))
+	{
+		OutReason = TEXT("Effective manager Class Default Object is unavailable.");
+		return false;
+	}
+	const UObject* Value = ObjectProperty->GetObjectPropertyValue_InContainer(CDO);
+	OutData = Cast<UUGC_CameraDataAssetBase>(Value);
+	if (Value && (!IsValid(OutData)))
+	{
+		OutData = nullptr;
+		OutReason = TEXT("Configured DefaultCameraData references an invalid or incompatible object.");
+		return false;
+	}
+	return true;
+}
+
+const UBertaUGCCameraCycleComponent* BertaUGCAudit::ResolveCycleTemplate(const UClass* ControllerClass, FString& OutReason)
+{
+	OutReason.Reset();
+	if (!ControllerClass || !ControllerClass->IsChildOf(APlayerController::StaticClass()))
+	{
+		OutReason = TEXT("No PlayerController class to inspect.");
+		return nullptr;
+	}
+	if (!HasCompiledDefaults(ControllerClass, OutReason)) return nullptr;
+	const APlayerController* CDO = ControllerClass->GetDefaultObject<APlayerController>();
+	TArray<UBertaUGCCameraCycleComponent*> Candidates;
+	CDO->GetComponents(Candidates);
+	UBlueprintGeneratedClass* ActualBPGC = Cast<UBlueprintGeneratedClass>(CDO->GetClass());
+	for (const UClass* Class = ControllerClass; Class; Class = Class->GetSuperClass())
+	{
+		const UBlueprintGeneratedClass* BPClass = Cast<UBlueprintGeneratedClass>(Class);
+		if (!BPClass || !BPClass->SimpleConstructionScript) continue;
+		for (const USCS_Node* Node : BPClass->SimpleConstructionScript->GetAllNodes())
+		{
+			if (!IsValid(Node) || !Node->ComponentClass)
+			{
+				OutReason = TEXT("An SCS node or its component class is unavailable; effective cycle configuration cannot be established.");
+				return nullptr;
+			}
+			if (!Node->ComponentClass->IsChildOf(UBertaUGCCameraCycleComponent::StaticClass())) continue;
+			// UE consults existing UInheritableComponentHandler overrides from the most
+			// derived class toward the declaring SCS. It does not create override records.
+			UBertaUGCCameraCycleComponent* Template = ActualBPGC
+				? Cast<UBertaUGCCameraCycleComponent>(Node->GetActualComponentTemplate(ActualBPGC)) : nullptr;
+			if (!IsValid(Template))
+			{
+				OutReason = FString::Printf(TEXT("Effective cycle template for %s cannot be resolved; no parent-template fallback was used."), *Node->GetPathName());
+				return nullptr;
+			}
+			Candidates.AddUnique(Template);
+		}
+	}
+	if (Candidates.Num() > 1)
+	{
+		OutReason = TEXT("Multiple cycle components/templates; runtime component lookup order is not inferred:");
+		for (const UBertaUGCCameraCycleComponent* Candidate : Candidates)
+			OutReason += TEXT(" ") + GetPathNameSafe(Candidate);
+		return nullptr;
+	}
+	if (Candidates.Num() == 1 && !IsValid(Candidates[0]))
+	{
+		OutReason = TEXT("Native cycle component is invalid.");
+		return nullptr;
+	}
+	return Candidates.IsEmpty() ? nullptr : Candidates[0];
+}
+
 void BertaUGCAudit::Run()
 {
-	UE_LOG(LogBertaUGCAudit, Display, TEXT("[UGC Audit] Starting read-only project audit. Scope: global GameMode, /Game UGC presets and standalone Blueprint graphs."));
+	UE_LOG(LogBertaUGCAudit, Display, TEXT("[UGC Audit] Starting read-only project audit. Scope: global GameMode compiled defaults, /Game UGC presets and standalone Blueprint graphs. Map GameModes, dynamic controllers/managers and temporary active camera data may differ; static consistency does not guarantee Next succeeds."));
 	AuditProjectSetup();
 	IAssetRegistry& Registry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 	if (Registry.IsLoadingAssets())
@@ -248,6 +415,6 @@ void BertaUGCAudit::Run()
 		else Report(ESeverity::Warning, Data.GetSoftObjectPath().ToString(), TEXT("Load"), TEXT("Blueprint could not be loaded; writer scan incomplete."));
 	}
 	UE_LOG(LogBertaUGCAudit, Display,
-		TEXT("[UGC Audit] Complete: %d UGC presets and %d standalone Blueprints inspected. Map level scripts, C++ writes, runtime conditions and map-specific GameMode overrides are outside this static pass."),
+		TEXT("[UGC Audit] Static pass finished: %d UGC presets and %d standalone Blueprints inspected; review warnings and inconclusive findings above. Map level scripts, C++ writes, runtime conditions and map-specific GameMode overrides are outside this static pass."),
 		InspectedPresets, InspectedBlueprints);
 }

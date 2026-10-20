@@ -145,8 +145,8 @@ Berta.UGC.Dump 0
 
 Choose **Tools → Audit Ultimate Gameplay Camera** and inspect Output Log under `LogBertaUGCAudit`. The pass is read-only and checks:
 
-- the global GameMode's PlayerController and camera-manager class;
-- camera-cycle presets on that controller;
+- the global GameMode's PlayerController and concrete camera-manager class, with full paths;
+- the manager's effective **Default Camera Data** against the controller's effective `CameraPresets`, including each index and full asset path;
 - source-backed range and blend-duration rules in `/Game` UGC presets;
 - explicit Blueprint writes to SpringArm arm length/offset and CameraComponent FOV, plus calls to `SetFieldOfView` and `SetControlRotation`.
 
@@ -155,9 +155,47 @@ Choose **Tools → Audit Ultimate Gameplay Camera** and inspect Output Log under
 | Non-finite range or negative/non-finite blend time | Error. |
 | Inverted Min/Max range | Warning; UGC's mapped values do not prove every reversal is invalid. |
 | Global GameMode has a non-UGC manager | Warning; a map-specific GameMode override may use UGC. |
+| Valid default is in a valid cycle, at any index | Info: statically consistent object membership, not proof that Next succeeds during gameplay. |
+| Valid default is outside a valid cycle | Warning: conditional blocking risk if that asset becomes active. |
+| Default is unassigned | Info: no statically configured initial preset; not automatically an error. |
+| Empty, null/invalid, or duplicate presets | Warning: the cycle cannot select with that configuration; no compatibility success is reported. |
+| Missing/unsupported default property, stale Blueprint defaults, unresolved or multiple cycle templates | Warning marked **INCONCLUSIVE**; no compatibility conclusion. |
+| No declared cycle component | Info: cycling is optional, with no array to compare. |
 | Explicit Blueprint camera write | Info; its runtime target and execution must be verified before declaring a conflict. |
 
-Pawn-specific UGC checks apply only when the Global Default GameMode uses a UGC manager. The audit does not inspect C++ writes, map level scripts, or map-specific GameMode overrides. Blueprint-inherited component overrides may require manual inspection. Unloadable assets and an incomplete Asset Registry are reported instead of being counted as clean.
+### Effective defaults and component inheritance
+
+In the inspected local UGC installation, **Default Camera Data** is the hard object property **`DefaultCameraData`** declared by the vendor `BP_UGCCameraManager` generated class. Its declared object class is the vendor's `UGC_CameraDataAsset_C`, derived from `UUGC_CameraDataAssetBase`. It is not a native default accessor on `AUGC_PlayerCameraManager`.
+
+The audit uses `FindFProperty` with that exact verified name, checks its scalar hard-object type and camera-data class, and reads it through `FObjectProperty`/`FObjectPropertyBase::GetObjectPropertyValue_InContainer` on the **selected concrete class's `GetDefaultObject()`**. An inherited value and a child Blueprint CDO override are both inspected correctly. It never guesses from a Details label, spawns a camera manager, calls its startup logic, or substitutes `GetCurrentCameraDataAsset()` on a CDO. A missing field or an unsupported type, including a soft reference, is inconclusive rather than implicitly valid. The native manager and arbitrary valid UGC derivatives remain accepted manager classes; a vendor Blueprint child is a setup recommendation, not a class-name requirement.
+
+For the cycle component, native defaults come from the concrete PlayerController CDO. SCS declarations are located through the Blueprint hierarchy and resolved with `USCS_Node::GetActualComponentTemplate` against the most-derived generated class. UE 5.8 consults existing `UInheritableComponentHandler` overrides along that hierarchy without creating records. Thus a component declared in a parent can use the child's preset override instead of stale parent data. Missing effective templates, uncompiled classes, and ambiguous multiple cycle components are inconclusive. No construction script or gameplay initialization is executed. Pawn SpringArm/Camera checks retain their existing declared-component scope; this change does not broaden them into a general component resolver.
+
+### Interpreting and correcting a mismatch
+
+Comparison uses **object identity**, matching Camera Cycle's actual contract, not asset names or equal settings. The report first identifies the manager/default, then prints the component/template and `CameraPresets[N]` entries. If the default is absent, its Warning explains that **if this asset becomes active**, Next/Previous and direct Select reject changes while it remains outside the cycle.
+
+In the manager's **Class Defaults**, choose a default that belongs to the intended cycle, preferably a project-owned preset such as `DA_Camera_Medium`. Alternatively edit the PlayerController component's effective **CameraPresets** to include the default only if it really belongs among selectable presets. Compile the affected Blueprints and rerun the audit. **Index zero is a convention, not a requirement**: a default at index 1 or another index is equally consistent. Do not add vendor assets indiscriminately.
+
+A null configured default does not prove that runtime has no active asset. If runtime truly has no active asset and the array is valid, Next starts at index zero and Previous at the last index. UGC's Blueprint initialization and later camera operations can choose other data; its current-data getter reads the runtime stack head, which need not remain the configured default. Neither `storedCycleIndex=-1` nor a default mismatch identifies the exact cause of an earlier `success=false`, and correcting this warning does not promise every selection succeeds.
+
+### Static scope and manual verification
+
+Pawn-specific UGC checks apply only when the Global Default GameMode uses a UGC manager. The active map may select another GameMode; a controller or manager can be replaced dynamically, and UGC can temporarily activate data outside the cycle. The audit does not inspect C++ writes, map level scripts, map-specific GameMode overrides, or all dynamic camera changes. Unloadable assets and an incomplete Asset Registry are reported instead of being counted as clean. It reads compiled defaults/templates and never writes or saves packages, Blueprints, CDOs, or provider assets.
+
+The two Editor Automation Tests `BertaDevKit.UGC.Editor.Audit.DefaultInheritance` and `BertaDevKit.UGC.Editor.Audit.ComponentInheritance` use transient Blueprint fixtures and camera-data objects, not redistributable vendor assets. They cover inherited/default overrides, null/missing defaults, component overrides, repeated reads, and stale-class handling. They require an explicitly authorized Unreal session to execute; compilation alone does not pass them. The private Editor `UnrealEd` dependency supports fixture creation/compilation and does not affect Runtime or the base plugins.
+
+Manual Sandbox checklist, to be executed by Nicolas after compiling the affected Blueprints:
+
+1. Set `DA_Camera_Medium` as the manager's default and include that exact asset alongside Near/Far in the controller's cycle. Run **Tools → Audit Ultimate Gameplay Camera**. Under `LogBertaUGCAudit`, verify `[UGC Audit]`, full GameMode/controller/manager/template paths, indexed assets, and Info showing the matching index.
+2. Reorder the array so Medium is not index zero. Rerun and verify Info reports its actual new index with no mismatch Warning.
+3. Temporarily select a valid default absent from the array. Verify a conditional Warning identifies that default and the listed cycle, describes the blocking condition, and gives Class Defaults/component remedies without claiming a proven historical failure.
+4. Clear the default and rerun. Expect Info for no configured initial preset, not an Error or a guarantee that runtime has no active asset.
+5. Use a manager Blueprint child inheriting the parent's default, then override it in the child. Verify the audit reads the selected concrete child's effective CDO each time. Restore the intended default.
+6. Declare the cycle on a parent PlayerController Blueprint and override/reorder its presets in the selected child. Verify the child's template path/values are reported, with parent values unchanged. Compile both classes first; an uncompiled class should produce INCONCLUSIVE rather than a parent fallback.
+7. Separately test an empty array, a null element, a duplicate, absence of the optional component, and a non-UGC manager. Expect the corresponding warnings/information and no false compatibility success. Restore the working setup afterward.
+8. Run the audit twice without editing anything. Verify no new dirty assets/packages or provider modifications result. If a default/template cannot be inspected, verify INCONCLUSIVE is visible and no consistency claim follows.
+9. Restore the correct manager/default/cycle, then manually start PIE and run `Berta.UGC.Dump`, `Berta.UGC.Next`, and `Berta.UGC.Previous`. Confirm the existing preset transitions and other gameplay still work. This static audit does not change those commands or Camera Cycle's runtime behavior.
 
 ## Compare presets
 
