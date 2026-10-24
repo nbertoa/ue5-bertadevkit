@@ -1,19 +1,183 @@
 #include "BlueprintUsages/BertaBlueprintUsageFinder.h"
+
+#include "CoreMinimal.h"
 #include "Log/BertaDevKitEditorLog.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphNode.h"
 #include "EdGraph/EdGraphPin.h"
 #include "Engine/Blueprint.h"
+#include "Engine/Level.h"
 #include "Engine/LevelScriptBlueprint.h"
 #include "Engine/World.h"
 #include "Logging/MessageLog.h"
 #include "Misc/PackageName.h"
 #include "Misc/UObjectToken.h"
 #include "Modules/ModuleManager.h"
+#include "UObject/UObjectGlobals.h"
 
-namespace { const FName LogName(TEXT("BertaDevKitBlueprintUsages"));
-bool Matches(const UEdGraphNode& Node,const TSet<FString>& Paths){TArray<UObject*> Refs;FReferenceFinder Finder(Refs);Finder.FindReferences(const_cast<UEdGraphNode*>(&Node));for(UObject* O:Refs)if(O&&Paths.Contains(O->GetPathName()))return true;for(UEdGraphPin* P:Node.Pins)if(P){FString V=FPackageName::ExportTextPathToObjectPath(P->DefaultValue);if(Paths.Contains(V)||Paths.Contains(P->DefaultObject?P->DefaultObject->GetPathName():FString()))return true;}return false;}
-void AddBlueprint(UBlueprint* B,TArray<UBlueprint*>& Out){if(B)Out.AddUnique(B);}
+namespace
+{
+	const FName LogName(TEXT("BertaDevKitBlueprintUsages"));
+	constexpr int32 MaxBlueprintAssetsPerSearch = 256;
+	constexpr int32 MaxWorldAssetsPerSearch = 16;
+
+	bool Matches(const UEdGraphNode& Node, const TSet<FString>& Paths)
+	{
+		TArray<UObject*> Refs;
+		FReferenceFinder Finder(Refs);
+		Finder.FindReferences(const_cast<UEdGraphNode*>(&Node));
+		for (UObject* Object : Refs)
+		{
+			if (Object && Paths.Contains(Object->GetPathName()))
+			{
+				return true;
+			}
+		}
+		for (UEdGraphPin* Pin : Node.Pins)
+		{
+			if (!Pin)
+			{
+				continue;
+			}
+			const FString DefaultPath = FPackageName::ExportTextPathToObjectPath(Pin->DefaultValue);
+			if (Paths.Contains(DefaultPath) || (Pin->DefaultObject && Paths.Contains(Pin->DefaultObject->GetPathName())))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
 }
-void FBertaBlueprintUsageFinder::FindUsages(const FAssetData& TargetAsset){FMessageLog Log(LogName);Log.NewPage(FText::FromString(TEXT("Find Blueprint Usages")));IAssetRegistry& R=FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();if(R.IsLoadingAssets()){Log.Error(FText::FromString(TEXT("Asset Registry is still gathering; the Blueprint universe is incomplete.")));Log.Notify(FText::FromString(TEXT("Blueprint usage search could not run.")));return;}TSet<FString> Paths;Paths.Add(TargetAsset.GetObjectPathString());if(UBlueprint* T=Cast<UBlueprint>(TargetAsset.GetAsset())){if(T->GeneratedClass)Paths.Add(T->GeneratedClass->GetPathName());if(T->SkeletonGeneratedClass)Paths.Add(T->SkeletonGeneratedClass->GetPathName());}FARFilter F;F.bRecursivePaths=true;F.bRecursiveClasses=true;F.PackagePaths.Add(TEXT("/Game"));F.ClassPaths.Add(UBlueprint::StaticClass()->GetClassPathName());TArray<FAssetData>A;R.GetAssets(F,A);TArray<UBlueprint*> Bs;bool Complete=true;for(const FAssetData& D:A){UBlueprint* B=Cast<UBlueprint>(D.GetAsset());if(B)AddBlueprint(B,Bs);else Complete=false;}FARFilter W;W.bRecursivePaths=true;W.PackagePaths.Add(TEXT("/Game"));W.ClassPaths.Add(UWorld::StaticClass()->GetClassPathName());A.Reset();R.GetAssets(W,A);for(const FAssetData&D:A){UWorld* World=Cast<UWorld>(D.GetAsset());if(!World||!World->PersistentLevel){Complete=false;continue;}AddBlueprint(World->PersistentLevel->GetLevelScriptBlueprint(true),Bs);}if(!Complete){Log.Error(FText::FromString(TEXT("One or more Blueprint consumers could not be loaded; results are incomplete.")));Log.Notify(FText::FromString(TEXT("Blueprint usage search is incomplete.")));return;}int32 Hits=0;for(UBlueprint* B:Bs){TArray<UEdGraph*> G;B->GetAllGraphs(G);for(UEdGraph* Graph:G)if(Graph)for(UEdGraphNode* N:Graph->Nodes)if(N&&Matches(*N,Paths)){TSharedRef<FTokenizedMessage>M=FTokenizedMessage::Create(EMessageSeverity::Info);M->AddToken(FTextToken::Create(FText::FromString(FString::Printf(TEXT("%s > %s > %s"),*B->GetPathName(),*Graph->GetName(),*N->GetNodeTitle(ENodeTitleType::ListView).ToString()))));M->AddToken(FUObjectToken::Create(N,FText::FromString(TEXT("Open node"))));Log.AddMessage(M);++Hits;}}Log.Info(FText::FromString(FString::Printf(TEXT("Target %s: inspected %d Blueprint consumers; found %d graph nodes; universe complete."),*TargetAsset.GetObjectPathString(),Bs.Num(),Hits)));Log.Notify(FText::FromString(TEXT("Blueprint usage search complete.")));}
+
+void FBertaBlueprintUsageFinder::FindUsages(const FAssetData& TargetAsset)
+{
+	FMessageLog Log(LogName);
+	Log.NewPage(FText::FromString(TEXT("Find Blueprint Usages")));
+	Log.Info(FText::FromString(TEXT("Scope: /Game Blueprint graph nodes and Level Script graph nodes only. This does not search C++, non-graph properties, dynamic lookups or all indirect/soft references.")));
+
+	IAssetRegistry& Registry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+	if (Registry.IsLoadingAssets())
+	{
+		Log.Error(FText::FromString(TEXT("The Asset Registry is still gathering assets. Search did not run.")));
+		Log.Notify(FText::FromString(TEXT("Blueprint usage search could not run.")));
+		return;
+	}
+
+	TSet<FString> TargetPaths;
+	TargetPaths.Add(TargetAsset.GetObjectPathString());
+	if (UBlueprint* TargetBlueprint = Cast<UBlueprint>(TargetAsset.GetAsset()))
+	{
+		if (TargetBlueprint->GeneratedClass)
+		{
+			TargetPaths.Add(TargetBlueprint->GeneratedClass->GetPathName());
+		}
+		if (TargetBlueprint->SkeletonGeneratedClass)
+		{
+			TargetPaths.Add(TargetBlueprint->SkeletonGeneratedClass->GetPathName());
+		}
+	}
+
+	FARFilter BlueprintFilter;
+	BlueprintFilter.bRecursivePaths = true;
+	BlueprintFilter.bRecursiveClasses = true;
+	BlueprintFilter.PackagePaths.Add(TEXT("/Game"));
+	BlueprintFilter.ClassPaths.Add(UBlueprint::StaticClass()->GetClassPathName());
+	TArray<FAssetData> BlueprintAssets;
+	Registry.GetAssets(BlueprintFilter, BlueprintAssets);
+
+	FARFilter WorldFilter;
+	WorldFilter.bRecursivePaths = true;
+	WorldFilter.PackagePaths.Add(TEXT("/Game"));
+	WorldFilter.ClassPaths.Add(UWorld::StaticClass()->GetClassPathName());
+	TArray<FAssetData> WorldAssets;
+	Registry.GetAssets(WorldFilter, WorldAssets);
+
+	// Asset Registry enumeration order is not stable. A capped search must visit
+	// the same set of assets in the same order each time.
+	const auto SortByPackageName = [](const FAssetData& A, const FAssetData& B)
+	{
+		return A.PackageName.LexicalLess(B.PackageName);
+	};
+	BlueprintAssets.Sort(SortByPackageName);
+	WorldAssets.Sort(SortByPackageName);
+
+	const int32 BlueprintLimit = FMath::Min(BlueprintAssets.Num(), MaxBlueprintAssetsPerSearch);
+	const int32 WorldLimit = FMath::Min(WorldAssets.Num(), MaxWorldAssetsPerSearch);
+	const int32 SkippedByLimit = BlueprintAssets.Num() - BlueprintLimit + WorldAssets.Num() - WorldLimit;
+	int32 LoadFailures = 0;
+	int32 ConsumersInspected = 0;
+	int32 MatchingNodes = 0;
+
+	const auto InspectBlueprint = [&Log, &TargetPaths, &ConsumersInspected, &MatchingNodes](UBlueprint* Blueprint)
+	{
+		if (!Blueprint)
+		{
+			return;
+		}
+		++ConsumersInspected;
+		TArray<UEdGraph*> Graphs;
+		Blueprint->GetAllGraphs(Graphs);
+		for (UEdGraph* Graph : Graphs)
+		{
+			if (!Graph)
+			{
+				continue;
+			}
+			for (UEdGraphNode* Node : Graph->Nodes)
+			{
+				if (!Node || !Matches(*Node, TargetPaths))
+				{
+					continue;
+				}
+				TSharedRef<FTokenizedMessage> Message = FTokenizedMessage::Create(EMessageSeverity::Info);
+				Message->AddToken(FTextToken::Create(FText::FromString(FString::Printf(
+					TEXT("%s > %s > %s"),
+					*Blueprint->GetPathName(), *Graph->GetName(), *Node->GetNodeTitle(ENodeTitleType::ListView).ToString()))));
+				Message->AddToken(FUObjectToken::Create(Node, FText::FromString(TEXT("Open node"))));
+				Log.AddMessage(Message);
+				++MatchingNodes;
+			}
+		}
+	};
+
+	for (int32 Index = 0; Index < BlueprintLimit; ++Index)
+	{
+		if (UBlueprint* Blueprint = Cast<UBlueprint>(BlueprintAssets[Index].GetAsset()))
+		{
+			InspectBlueprint(Blueprint);
+		}
+		else
+		{
+			++LoadFailures;
+		}
+	}
+
+	for (int32 Index = 0; Index < WorldLimit; ++Index)
+	{
+		UWorld* World = Cast<UWorld>(WorldAssets[Index].GetAsset());
+		if (!World || !World->PersistentLevel)
+		{
+			++LoadFailures;
+			continue;
+		}
+		// Passing true avoids creating a Level Script Blueprint during a read-only search.
+		InspectBlueprint(World->PersistentLevel->GetLevelScriptBlueprint(true));
+	}
+
+	Log.Info(FText::FromString(FString::Printf(
+		TEXT("Target %s: inspected %d Blueprint graph consumers, matched %d nodes. Candidates: %d Blueprints, %d maps; limits: %d Blueprints, %d maps."),
+		*TargetAsset.GetObjectPathString(), ConsumersInspected, MatchingNodes,
+		BlueprintAssets.Num(), WorldAssets.Num(), MaxBlueprintAssetsPerSearch, MaxWorldAssetsPerSearch)));
+
+	if (SkippedByLimit > 0 || LoadFailures > 0)
+	{
+		Log.Warning(FText::FromString(FString::Printf(
+			TEXT("PARTIAL SEARCH: skipped %d candidate assets due to scan limits; failed to load %d. A zero-match result does not mean the asset is unused."),
+			SkippedByLimit, LoadFailures)));
+		Log.Notify(FText::FromString(TEXT("Blueprint usage search incomplete; see Message Log.")));
+		return;
+	}
+	Log.Info(FText::FromString(TEXT("All eligible /Game candidates were inspected. Results are limited to supported graph references, not all possible asset usages.")));
+	Log.Notify(FText::FromString(TEXT("Blueprint graph reference search finished.")));
+}

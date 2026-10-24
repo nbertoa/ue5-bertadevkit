@@ -124,7 +124,7 @@ void FBertaContentBrowserMenu::Register()
 			{
 				if (Assets.Num() == 1)
 				{
-					FToolMenuEntry UsageEntry = FToolMenuEntry::InitMenuEntry(TEXT("BertaFindBlueprintUsages"), LOCTEXT("FindBlueprintUsages", "Find Blueprint Usages"), LOCTEXT("FindBlueprintUsagesTooltip", "Find exact graph nodes in project Blueprints that reference this asset. Read-only."), FSlateIcon(), FUIAction(FExecuteAction::CreateLambda([Asset = Assets[0]](){ FBertaBlueprintUsageFinder::FindUsages(Asset); })));
+					FToolMenuEntry UsageEntry = FToolMenuEntry::InitMenuEntry(TEXT("BertaFindBlueprintUsages"), LOCTEXT("FindBlueprintUsages", "Find Blueprint Usages"), LOCTEXT("FindBlueprintUsagesTooltip", "Search /Game Blueprint and Level Script graph references. Bounded scan; results may be partial. Read-only."), FSlateIcon(), FUIAction(FExecuteAction::CreateLambda([Asset = Assets[0]](){ FBertaBlueprintUsageFinder::FindUsages(Asset); })));
 					UsageEntry.Owner = FToolMenuOwner(BertaContentBrowserOwnerName); Section.AddEntry(UsageEntry);
 				}
 				AddAssetNamingSubMenu(Section, Assets, LOCTEXT("SelectedAssets", "the selected project asset(s)"));
