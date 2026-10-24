@@ -203,6 +203,32 @@ Select exactly two UGC camera data assets in Content Browser, choose **Compare U
 
 It descends into reflected structs and instanced settings, reports array element/count changes, and compares curve and object references by asset path. Different concrete classes produce a `Class` difference while common UGC base settings are still compared. Curve contents and custom fields defined only by a data-asset subclass are outside its scope. A recursion-limit result is reported as truncated/inconclusive separately from confirmed differences.
 
+
+## Camera Focus + Movement Follow — integración Blueprint del proveedor (UGC 1.92, Sandbox 2026-10-24)
+
+**Alcance:** nota de integración del *plugin comercial UGC*, no funcionalidad nueva de `BertaUltimateGameplayCameraExt`. El usuario **confirmó Camera Focus funcionando en un packaged build** del Sandbox el 24-10-2026; no se inspeccionó el proyecto `.uasset`, ni se confirmó una API de alternancia Focus/Exploración lista para reutilizar. Ver [investigación del Sandbox](https://github.com/nbertoa/rnd-prototyping-engineer/blob/main/research/plugins/ultimate-gameplay-camera-sandbox-integration.md#update--camera-focus-y-yawpitch-follow-packaged-smoke-test-2026-10-24).
+
+### Incompatibilidad y solución reutilizando UGC
+
+El `UGC_FocusCameraModifier` muestra `Trying to focus the camera on a target while yaw/pitch follow modifiers are enabled. This is not allowed.` si `BP_UGCCameraManager` considera activo cualquier Yaw/Pitch Movement Follow. Las capturas de las comprobaciones Blueprint revelan que **no se trata del enabled/disabled del Camera Modifier**:
+
+| Chequeo | Settings efectivas que deben estar desactivadas para Focus |
+| --- | --- |
+| `IsYawMovementFollowEnabled` | `Enable Yaw Movement Follow = false` |
+| `IsPitchMovementFollowEnabled` | `Enable Pitch Movement Follow = false`, `Trigger when Falling = false`, `Trigger on Slopes = false` (OR entre los tres) |
+
+Por ello `Disable Modifier` o `Remove Camera Modifier` y desactivar solo Pitch Enabled **no bastaron en este Sandbox**. **No tocar** `UGC_PitchToArmLengthAndFOVModifier`: no es el mismo que `UGC_PitchFollowModifier`.
+
+En la categoría **Camera Follow** del vendor `BP_UGCCameraManager`, el usuario encontró y capturó la función Blueprint heredable **`ToggleYawAndPitchFollow`**. Sus entradas son `Enable Pitch Movement Follow`, `Trigger Pitch Follow when Falling`, `Trigger Pitch Follow on Slopes`, `Enable Yaw Movement Follow`. Usa referencias internas a los modifiers y `Set Members in Camera Pitch/Yaw Follow Settings`. A pesar del nombre, **asigna** esos flags: no invierte automáticamente el estado ni guarda un snapshot. Para suspender los follows antes de Focus, proporcionar los cuatro `false`. Para restaurarlos, el proyecto consumidor debe haber guardado sus valores previos y devolverlos **sin asumir que eran todos true**.
+
+`BP_FocusTargetMethod_Test1` es un ejemplo de selección por `Actor Tag = FocusTest1` y no constituye un sistema general de lock-on. Para un modo reusable Exploración → Focus → Exploración queda **pendiente** definir/validar una rutina Blueprint en el manager hijo que capture flags, suspenda una vez, habilite Focus, desactive Focus y restaure los flags, con gestión de reentrada y cambio de Camera Data. No hay una implementación probada de `SetCameraMode` o input R3. Los presets Medium/Near/Far continúan siendo un concepto aparte del modo de cámara.
+
+### Viabilidad de BertaDevKit C++ y límites
+
+Informe de inspección local aportado por el usuario/Codex: en **UGC 1.92 + UE 5.8** existen structs `FCameraYawFollowSettings` y `FCameraPitchFollowSettings` en `Camera/Data/UGC_CameraData.h`, pero `UUGC_CameraModifier` no ofrece getters/setters **C++ tipados de las settings efectivas de los modifiers derivados de Blueprint**. El manager nativo permite localizar modifiers, obtener/alterar Camera Data, pero `SetYawMovementFollowSettings`, `SetPitchMovementFollowSettings`, `IsYawMovementFollowEnabled` e `IsPitchMovementFollowEnabled` son funciones de `BP_UGCCameraManager`. `OnCameraDataStackChanged` es un `BlueprintNativeEvent`, no un delegate multicast suscribible para el componente proyectado. Codex **detuvo** el desarrollo de un componente/bridge nuevo por este límite; **sin cambios de código, build o tests de la feature**. No se debe anunciar que `BertaUltimateGameplayCameraExt` ya provee una API de suspensión/restauración.
+
+**Regla de ingeniería:** preferir la función Blueprint del proveedor desde un manager hijo del proyecto antes de replicarla en C++ o introducir un bridge frágil. La prueba de **Focus empaquetado pasó según el usuario**, pero no valida todavía la transición Focus ON/OFF, restauración, cambio de presets bajo Focus ni la colisión predictiva en packaged.
+
 ## Verification scope
 
 This is an optional commercial integration. The default seven-plugin host build and documentation workflow do not compile or exercise it. Compile it separately with the licensed UGC dependency installed and the extension explicitly enabled. Editor, Blueprint, console, and camera-transition behavior require a separately authorized Unreal session; see [Development](../development/index.md).
